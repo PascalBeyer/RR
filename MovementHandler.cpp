@@ -1,6 +1,5 @@
 #include "MovementHandler.h"
 
-#include "2DGeometry.h"
 
 #define epsilon 0.01f
 #define dt_ (1.0f/30.0f)
@@ -444,7 +443,8 @@ void TileMapCollisionMovement(v2 *pos, float radius, v2 by, v2 currentGoal, Tile
 							}
 						}
 					}
-
+					Die;
+#if 0
 					Shape::Circle upperLeft = Shape::Circle(radius, V2(x, y));
 					Shape::Circle upperRight = Shape::Circle(radius, V2((x + 1), y));
 					Shape::Circle lowerLeft = Shape::Circle(radius, V2(x, (y + 1)));
@@ -478,6 +478,8 @@ void TileMapCollisionMovement(v2 *pos, float radius, v2 by, v2 currentGoal, Tile
 						tMin = circleTime;
 						wallNormal = Normalize(circleNormal);
 					}
+#endif // 0
+					
 				}
 			}
 		}

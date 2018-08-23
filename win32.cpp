@@ -1,9 +1,11 @@
+
 #include <Windows.h>
+#include <gl/gl.h>
 #include <dsound.h>
 
 #define WGLPROC(a) a = (a##_ *)wglGetProcAddress(#a);
 
-#include "win32.h"
+
 #include "Game.h"
 #include "File.h"
 #include "Debug.h"
@@ -517,35 +519,15 @@ static wglChoosePixelFormatARB_ *wglChoosePixelFormatARB;
 static wgl_create_context_attribs_ARB *wglCreateContextAttribsARB;
 static glTexImage2DMultisample_ *glTexImage2DMultisample;
 
-
-static glCreateShader_ *glCreateShader;
-static glShaderSource_ *glShaderSource;
-static glCompileShader_ *glCompileShader;
-static glLinkProgram_ *glLinkProgram;
-static glCreateProgram_ *glCreateProgram;
-static glAttachShader_ *glAttachShader;
-static glValidateProgram_ *glValidateProgram;
-static glGetProgramInfoLog_ *glGetProgramInfoLog;
-static glGetProgramiv_ *glGetProgramiv;
-static glGetShaderInfoLog_ *glGetShaderInfoLog;
-static glUniformMatrix4fv_ *glUniformMatrix4fv;
-static glUniform4fv_ *glUniform4fv;
-static glUniform1iv_ *glUniform1iv;
-static glGetUniformLocation_ *glGetUniformLocation;
-static glUseProgram_ *glUseProgram;
-static glVertexAttribPointer_ *glVertexAttribPointer;
-static glEnableVertexAttribArray_ *glEnableVertexAttribArray;
-static glDisableVertexAttribArray_ *glDisableVertexAttribArray;
-static glGetAttribLocation_ *glGetAttribLocation;
-
 int win32OpenGLAttribs[] =
 {
 	WGL_CONTEXT_MAJOR_VERSION_ARB, 3,
-	WGL_CONTEXT_MINOR_VERSION_ARB, 0,
+	WGL_CONTEXT_MINOR_VERSION_ARB, 2,
 	WGL_CONTEXT_FLAGS_ARB, 0
 	| WGL_CONTEXT_DEBUG_BIT_ARB
 	,
-	WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB,
+	//WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB,
+	WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
 	0,
 };
 
@@ -636,6 +618,7 @@ static void win32LoadWglExtensions()
 
 static void win32InitOpenGL(HWND window)
 {
+
 	win32LoadWglExtensions();
 	HDC windowDC = GetDC(window);
 	win32SetPixelFormat(windowDC);
@@ -663,13 +646,17 @@ static void win32InitOpenGL(HWND window)
 			wglSwapIntervalEXT(20);
 		}
 
+		WGLPROC(glBufferData);
+		WGLPROC(glBindBuffer);
+		WGLPROC(glGenBuffers);
+		WGLPROC(glBindVertexArray);
+		WGLPROC(glGenVertexArrays);
 		WGLPROC(glCreateShader);
 		WGLPROC(glShaderSource);
 		WGLPROC(glCompileShader);
 		WGLPROC(glLinkProgram);
 		WGLPROC(glCreateProgram);
 		WGLPROC(glAttachShader);
-		//WGLPROC(glValidateProgram);
 		WGLPROC(glValidateProgram);
 		WGLPROC(glGetProgramInfoLog);
 		WGLPROC(glGetProgramiv);
@@ -683,32 +670,20 @@ static void win32InitOpenGL(HWND window)
 		WGLPROC(glEnableVertexAttribArray);
 		WGLPROC(glDisableVertexAttribArray);
 		WGLPROC(glGetAttribLocation);
+		WGLPROC(glGenFramebuffers);
+		WGLPROC(glBindFramebuffer);
+		WGLPROC(glVertexAttrib3f);
+		WGLPROC(glCheckFramebufferStatus);
+		WGLPROC(glFramebufferTexture);
+		WGLPROC(glFramebufferTexture2D);
+		WGLPROC(glBlitFramebuffer);
+		WGLPROC(glDebugMessageCallback);
+		WGLPROC(glActiveTexture);
+		WGLPROC(glUniform1i);
+		WGLPROC(glBindAttribLocation);
 
 
-		GLFunctions incoming = 
-		{
-			glCreateShader,
-			glShaderSource,
-			glCompileShader,
-			glLinkProgram,
-			glCreateProgram,
-			glAttachShader,
-			glValidateProgram,
-			glGetProgramInfoLog,
-			glGetProgramiv,
-			glGetShaderInfoLog,
-			glUniformMatrix4fv,
-			glUniform4fv,
-			glUniform1iv,
-			glGetUniformLocation,
-			glUseProgram,
-			glVertexAttribPointer,
-			glEnableVertexAttribArray,
-			glDisableVertexAttribArray,
-			glGetAttribLocation,
-		};
-
-		OpenGLInit(context, &incoming);		
+		OpenGLInit(context);
 	}
 
 	ReleaseDC(window, windowDC);
@@ -858,8 +833,8 @@ int CALLBACK WinMain(
 	constantArena = InitArena(gameMemory, MegaBytes(500));
 	void *frameMem = VirtualAlloc(0, MegaBytes(500), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 	frameArena = InitArena(frameMem, MegaBytes(500));
-	void *workingMemory = VirtualAlloc(0, MegaBytes(100), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-	workingArena = InitArena(workingMemory, MegaBytes(100));
+	void *workingMemory = VirtualAlloc(0, MegaBytes(500), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+	workingArena = InitArena(workingMemory, MegaBytes(500));
 
 
 	initializeImageBuffer(&globalInfo, &globalImageBuffer, windowWidth, windowHeight);
@@ -881,22 +856,21 @@ int CALLBACK WinMain(
 			
 			GLuint whiteTextureID = (GLuint)OpenGLDownLoadImage(1, 1, whitePixels);
 
-			InitWhiteOpenGL(whiteTextureID);
-
 			AllocateGPUTexture = OpenGLDownLoadImage;
 
-			u32 vertexBufferSize = MegaBytes(4);
-			void* vertexBuffer = VirtualAlloc(0, vertexBufferSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-			u32 pushBufferSize = MegaBytes(4);
+			//todo move the allocation stuff into the game?
+
+			u32 pushBufferSize = KiloBytes(4);
 			void* pushBuffer = VirtualAlloc(0, pushBufferSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 			RenderCommands renderCommands = {};
+			renderCommands.focalLength = 1.0f;
 			renderCommands.maxBufferSize = pushBufferSize;
 			renderCommands.pushBufferSize = 0;
-			renderCommands.vertexArray = (ColoredVertex *)vertexBuffer;
-			renderCommands.MaxVertexCount = vertexBufferSize / sizeof(ColoredVertex);
 			renderCommands.pushBufferBase = (u8 *)pushBuffer;
+
 			renderCommands.height = globalImageBuffer.height;
 			renderCommands.width = globalImageBuffer.width;
+			renderCommands.aspectRatio = (f32) globalImageBuffer.width / (f32) globalImageBuffer.height;
 
 			RECT windowRect;
 			/*
@@ -925,7 +899,7 @@ int CALLBACK WinMain(
 			}
 			f32 gameUpdateHz = (float)(monitorRefreshHz);
 			f32 targetSecondsPerFrame = 1.0f / (f32)gameUpdateHz;
-			globalMouseInput.expectedTimePerFrame = targetSecondsPerFrame;
+			
 			LARGE_INTEGER timeCounter;
 			QueryPerformanceCounter(&timeCounter);
 
@@ -939,10 +913,8 @@ int CALLBACK WinMain(
 			debugButtons = new PushArray<Button>(MAX_DEBUG_BUTTON_COUNT);
 
 #endif
-			Input input;
-			UpdateInput(&input, &globalMouseInput, &globalKeybordInput);		
 		
-			AnimationCreatorInit(&input);
+			AnimationCreatorInit();
 
 			gameState = InitGame(windowWidth, windowHeight, &workHandler);
 			while (running)
@@ -978,20 +950,22 @@ int CALLBACK WinMain(
 					soundOutput.soundIsValid = true;
 				}
 				soundOutput.sampleAmount = bytesToWrite / soundOutput.bytesPerSample;
-				
-				UpdateInput(&input, &globalMouseInput, &globalKeybordInput);
+				Input input;
+				UpdateInput(&input, globalMouseInput, globalKeybordInput, windowWidth, windowHeight);
 
-				//GameUpdateAndRender(&gameState, &renderCommands, &input, &soundOutput);
+				gameState.time += targetSecondsPerFrame; 
+				//todo: think about where this should live? maybe input and it becomes:		 state + input -> state
+
+				GameUpdateAndRender(&gameState, &renderCommands, &input, &soundOutput);
 				
 				//AnimationCreatorUpdateAndRender(&renderCommands, &input);
 
-				LightingMain(&renderCommands, &workHandler, &input);
+				//LightingMain(&renderCommands, &workHandler, &input);
 				
 #if Internal
 				HandleDebugCycleCount();
 #endif				
 				
-
 				if (soundOutput.soundIsValid)
 				{
 					win32FillSoundBuffer(&soundOutput, byteToLock, bytesToWrite, samples);
@@ -1014,12 +988,11 @@ int CALLBACK WinMain(
 				RenderGroup *rg = &renderGroup;
 				f32 deltaTime = win32GetSecondsElapsed(timeCounter, endCounter);
 				String s = CreateString(frameArena, deltaTime);
-				v3 camPos = V3(0, 0, 0);
-				float screenWidth = gameState.player->screen->width;
-				float screenHeight = gameState.player->screen->height;
-				v3 screenCenterOffset = V3(-screenWidth * 0.4f, -screenHeight * 0.4f, 1.1f);				
-				PushOrthogonalTransform(rg, (float)windowWidth, (float)windowHeight);
-				PushDebugString(rg, screenCenterOffset, s, 20);
+
+				float screenWidth = (f32)renderCommands.width;
+				float screenHeight = (f32)renderCommands.height;
+				PushOrthogonalTransform(rg);
+				PushDebugString(rg, V2(0.1f, 0.1f), s, 20);
 
 				gameState.debugUI->buttons = debugButtons->pushArray;
 				gameState.debugUI->amountOfButtons = debugButtons->size;
@@ -1029,12 +1002,11 @@ int CALLBACK WinMain(
 				{
 					Button currentButton = debugButtons->Get(i);
 
-					PushButton(rg, currentButton.pos + p12(screenCenterOffset), currentButton.width, currentButton.height, currentButton.text, currentButton.currentColor);
+					//PushButton(rg, currentButton.pos + p12(screenCenterOffset), currentButton.width, currentButton.height, currentButton.text, currentButton.currentColor);
 				}
 #endif
 
 				OpenGlRenderGroupToOutput(&renderCommands);
-
 
 				for (unsigned int i = 0; i < globalKeybordInput.amountOfKeys; i++)
 				{

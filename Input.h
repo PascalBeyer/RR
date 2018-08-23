@@ -2,20 +2,32 @@
 #define RR_INPUT
 
 #include "buffers.h"
-#include "Vector2.h"
 
 struct Input
 {
-	MouseInput *mouse;
-	KeybordInput *keybord;
+	MouseInput mouse;
+	KeybordInput keybord;
 	v2 mousePos;
 	v2 mouseDelta;
 	v2 oldMousePos;
+	v2 mouseZeroToOne;
 };
 
-void UpdateInput(Input *input, MouseInput *mouseInput, KeybordInput *keybord);
+static void UpdateInput(Input *input, MouseInput mouseInput, KeybordInput keybordInput, int windowWidth, int windowHeight)
+{
+	v2 mousePos = V2((float)mouseInput.x, (float)mouseInput.y);
+	input->oldMousePos = input->mousePos;
+	input->mouseDelta = mousePos - input->mousePos;
+	input->keybord = keybordInput;
+	input->mouse = mouseInput;
+	input->mousePos = mousePos;
+	input->mouseZeroToOne = V2((float)mouseInput.x / (float)windowWidth, 1.0f - (float)mouseInput.y / (float) windowHeight);
 
-char GetPressedChar(Input* input);
+}
 
+static char GetPressedChar(Input *input)
+{
+	Die;
+}
 
 #endif

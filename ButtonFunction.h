@@ -1,7 +1,7 @@
 #ifndef RR_BUTTONFUNCTIONS
 #define RR_BUTTONFUNCTIONS
 
-#include "Vector2.h"
+#include "BasicTypes.h"
 
 static void ButtonEventStub(void *data)
 {

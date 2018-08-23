@@ -2,7 +2,6 @@
 #define RR_KDTREE
 
 #define MAX_KD_TREE_DEPTH 20
-#include "Vector3.h"
 #include "World.h"
 
 
@@ -11,13 +10,19 @@ struct IrradianceSample
 	v3 pos;
 	f32 quadR;
 	v3 color;
-	u32 triangleIndex;
+	//u32 triangleIndex;
+};
+
+struct IrradianceSampleArray
+{
+	IrradianceSample *entries; //pointer type of hardcopy every time?
+	u32 amount;
 };
 
 struct IrradianceCache
 {
-	IrradianceSample *entries;
-	Arena *irradianceArena;
+	IrradianceSampleArray *triangleSamples; 
+	u32 maxEntriesPerTriangle;
 };
 
 static IrradianceSample CreateIrradianceSample(v3 pos, v3 color, f32 r)
@@ -36,18 +41,6 @@ struct LightingTriangle
 	v3 d2;
 	v3 normal;
 	v3 color;
-	//f32 reflection
-
-	IrradianceSample **entries;
-	u32 maxEntries;
-	u32 amount;
-
-	//todo :should we precalc these?
-	f32 lenD1Sq;	//Dot(taD1, taD1);
-	f32 lenD2Sq;	//Dot(taD2, taD2);
-	f32 d12;		//Dot(taD1, taD2);
-	f32 denomInv;	//(1.0f / (lenD1Sq * lenD2Sq - d12 * d12));
-	u32 index;
 };
 
 //save planePos?
@@ -97,15 +90,12 @@ static LightingTriangle CreateLightingTriangleFromThreePoints(v3 p1, v3 p2, v3 p
 	ret.d1 = (p2 - p1);
 	ret.d2 = (p3 - p1);
 	ret.normal = Normalize(CrossProduct(ret.d1, ret.d2));
-	ret.lenD1Sq = Dot(ret.d1, ret.d1);
-	ret.lenD2Sq = Dot(ret.d2, ret.d2);
-	ret.d12 = Dot(ret.d1, ret.d2);
-	ret.denomInv = 1.0f / (ret.lenD1Sq * ret.lenD2Sq - ret.d12 * ret.d12);	
-	ret.amount = 0;
-	ret.maxEntries = 200;
-	ret.entries = PushArray(arena, IrradianceSample *, ret.maxEntries);	
+	//ret.lenD1Sq = Dot(ret.d1, ret.d1);
+	//ret.lenD2Sq = Dot(ret.d2, ret.d2);
+	//ret.d12 = Dot(ret.d1, ret.d2);
+	//ret.denomInv = 1.0f / (ret.lenD1Sq * ret.lenD2Sq - ret.d12 * ret.d12);	
+	//ret.index = debugTriangleIndex++;
 
-	ret.index = debugTriangleIndex++;
 	ret.color = color;
 	
 	return ret;
@@ -118,22 +108,10 @@ static LightingTriangle Create3PointTriangle(v3 p1, v3 p2, v3 p3)
 	ret.d1 = (p2 - p1);
 	ret.d2 = (p3 - p1);
 	ret.normal = Normalize(CrossProduct(ret.d1, ret.d2));
-	ret.lenD1Sq = Dot(ret.d1, ret.d1);
-	ret.lenD2Sq = Dot(ret.d2, ret.d2);
-	ret.d12 = Dot(ret.d1, ret.d2);
-	ret.denomInv = 1.0f / (ret.lenD1Sq * ret.lenD2Sq - ret.d12 * ret.d12);
-	ret.amount = 0;
-	ret.maxEntries = 0;
-	return ret;
-}
-
-static LightingTriangle CreateLightingTriangleFromThreePoints(v3 p1, v3 p2, v3 p3, v3 n, v3 color, Arena *arena)
-{
-	LightingTriangle ret;
-
-	ret = CreateLightingTriangleFromThreePoints(p1, p2, p3, color, arena);
-	ret.normal = n;
-
+	//ret.lenD1Sq = Dot(ret.d1, ret.d1);
+	//ret.lenD2Sq = Dot(ret.d2, ret.d2);
+	//ret.d12 = Dot(ret.d1, ret.d2);
+	//ret.denomInv = 1.0f / (ret.lenD1Sq * ret.lenD2Sq - ret.d12 * ret.d12);
 	return ret;
 }
 
@@ -431,8 +409,6 @@ static void BuildNeighboorLinks(KdNode *root, Arena *tempArena)
 	Clear(tempArena);
 }
 
-LightingTriangle invalidUnhittableTriangle = { };
-
 static KdNode *BuildKdNode(LightingTriangle **triangles, u32 triangleAmount, Arena *arena, Arena *transientArena, u32 depth, KdNode *parent, AABB aabb)
 {
 	KdNode *node = PushStruct(arena, KdNode);
@@ -453,9 +429,8 @@ static KdNode *BuildKdNode(LightingTriangle **triangles, u32 triangleAmount, Are
 		}
 		else
 		{
-			node->amountOfTriangles = 1;
-			node->triangles = PushStruct(arena, LightingTriangle *);
-			node->triangles[0] = &invalidUnhittableTriangle;
+			node->amountOfTriangles = 0;
+			node->triangles = NULL;
 			return node;
 		}		
 	}
@@ -472,6 +447,9 @@ static KdNode *BuildKdNode(LightingTriangle **triangles, u32 triangleAmount, Are
 
 	u32 negativeAmount = 0;
 	u32 positiveAmount = 0;
+
+	u8 *saveArena = transientArena->current;
+
 	LightingTriangle** negativeTriangle = PushArray(transientArena, LightingTriangle*, triangleAmount);
 	LightingTriangle** positiveTriangle = PushArray(transientArena, LightingTriangle*, triangleAmount);
 	for (u32 i = 0; i < triangleAmount; i++)
@@ -489,6 +467,8 @@ static KdNode *BuildKdNode(LightingTriangle **triangles, u32 triangleAmount, Are
 	node->positive = BuildKdNode(positiveTriangle, positiveAmount, arena, transientArena, depth + 1, node, positiveBound);
 	node->negative = BuildKdNode(negativeTriangle, negativeAmount, arena, transientArena, depth + 1, node, negativeBound);
 	
+	transientArena->current = saveArena;
+
 	return node;
 }
 

@@ -4,7 +4,6 @@
 #include "Bitmap.h"
 #include "Screen.h"
 #include "buffers.h"
-#include "2DGeometry.h"
 #include <vector>
 
 class Entity

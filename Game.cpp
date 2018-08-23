@@ -4,6 +4,8 @@
 #include "Random.h"
 #include "Debug.h"
 #include "World.h"
+#include "KdTree.h"
+#include "Color.h"
 
 GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHandler)
 {
@@ -32,19 +34,36 @@ GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHandler)
 	*ret.soundMixer = SoundMixer(ret.assetHandler);
 	//soundMixer.PlaySound({ Asset_Map }, 0);
 	
+	AABB stoneaabb = { V3(0, 0, -4), V3(1, 1, -2) };
+	Triangle *t = PushArray(constantArena, Triangle, 0);
+	u32 amountOfTriangles = 0;
+
+	s32 skyRadius = 40;
+	amountOfTriangles += CreateSkyBoxAndPush({ V3(-skyRadius, -skyRadius, -skyRadius), V3(skyRadius, skyRadius, skyRadius) }, RGBAfromHEX(0x87CEEB), constantArena).amount;
+	amountOfTriangles += CreateStoneAndPush(stoneaabb, 5.0f, constantArena, 0).amount;
 	
-	ret.particals = new Partical[100];
+	AABB groundaabb = {V3(-20, -20, -0.25f), V3(20, 20, 0)};
+	amountOfTriangles += GenerateAndPushTriangleFloor(groundaabb, constantArena).amount;
 
-	for (u32 partIt = 0; partIt < 100; partIt++)
-	{
-		Partical *partical = ret.particals + partIt;
-		partical->Color = V4(1, 0, 1, 0);
-		partical->dColor = V4(-0.5f, 0, 0, 0);
-		partical->vel = V2(1, 1);
-		partical->pos = V2(15, 10);
-	}
+	//PushTriangleToArenaIntendedNormal(constantArena, V3(0, -10, 0), V3(10, 10, 0), V3(-10, 10, 0), 0xFFFFFFFF, V3(0, 0, -1));
+	//amountOfTriangles += 1;
 
+	World *world = PushZeroStruct(constantArena, World);
+	ret.world = world;
+	world->lightSource = V3(20, 0, -20);
+	world->triangles.arr = t;
+	world->triangles.amount = amountOfTriangles;
+	world->camera.pos = V3(0, 0, -2.5f);
+	world->camera.basis = v3StdBasis;
 
+	world->debugCamera.pos = V3(0, 0, -10);
+	world->debugCamera.basis = v3StdBasis;
+
+	//InitLighting(world);
+
+	ret.screen = PushStruct(constantArena, Screen);
+	*ret.screen = CreateScreen((f32)screenWidth, (f32)screenHeight, (float)ret.tileMap->width, (float)ret.tileMap->height, 10, 1);
+	
 	ret.entities = new EntitySelection();
 	ret.units = new UnitSelection();
 	
@@ -67,18 +86,10 @@ GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHandler)
 	ret.units->PushBack(unit4);
 	
 	ret.player->entitySelection.PushBack(unit2);
-	HandleRightClick(*ret.player, ret.entities, V2(45, 30), *ret.tileMap);
+	HandleRightClick(ret.player, ret.entities, V2(45, 30), *ret.tileMap);
 
 	ret.player->entitySelection.PushBack(unit3);	
-	HandleRightClick(*ret.player, ret.entities, V2(25, 25), *ret.tileMap);
-
-#if WriteMode
-	
-#else
-	
-	
-#endif // WriteMode
-
+	HandleRightClick(ret.player, ret.entities, V2(25, 25), *ret.tileMap);
 
 	ret.debugUI = new UI();
 
@@ -92,54 +103,60 @@ void GameUpdateAndRender(GameState *gameState, RenderCommands *renderCommands, I
 	Player *player = gameState->player;
 	EntitySelection *entities = gameState->entities;
 	UnitSelection *units = gameState->units;
-	Screen *screen = player->screen;
+	Screen *screen = gameState->screen;
 
 	BEGIN_TIMED_BLOCK(GameUpdateAndRender);
 	u16 tileSize = tileMap->tileSize;
-	
+
 	//Update(*gameState->player, input, *tileMap, gameState->entities);
-	gameState->time += input->mouse->expectedTimePerFrame;
-	
+
 	RenderGroup renderGroup = InitRenderGroup(gameState->assetHandler, renderCommands);
 	RenderGroup *rg = &renderGroup;
-
-	f32 aspectRatio = (f32)screen->pixelWidth / (f32)screen->pixelHeight;
-
-	Camera *cam = &screen->cam;
-
 	ClearPushBuffer(rg);
 
+	f32 aspectRatio = (f32)renderCommands->width / (f32)renderCommands->height;
+	f32 width = (f32)renderCommands->width;
+	f32 height = (f32)renderCommands->height;
+	f32 focalLength = renderCommands->focalLength;
+
+	World *world = gameState->world;
+
+	static bool debugCam = false;
+
+
+	if (input->keybord.z.pressedThisFrame)
+	{
+
+		if (input->keybord.shift.isDown)
+		{
+			world->debugCamera = world->camera;
+		}
+		else
+		{
+			debugCam = !debugCam;
+		}
+	}
+
+	Camera *cam = debugCam ? &world->debugCamera : &world->camera;
+
+
 	UpdateCamGodMode(input, cam);
-	PushProjectivTransform(rg, cam->pos, cam->basis, aspectRatio, screen->focalLength);
-
-
-#if 0
-
-	DEBUG_ON_OFF(debugCamera, true)
-	{
-	}
-	else
-	{
-		PushProjectivTransform(rg, screen->cam.pos, screen->cam.basis, aspectRatio, screen->focalLength);
-	}
-
-#endif // 0
-
+	PushProjectivTransform(rg, cam->pos, cam->basis);
 	PushClear(rg, V4(1.0f, 0.1f, 0.1f, 0.1f));
 
-	MoveUnits(units, *tileMap);
+	//MoveUnits(units, *tileMap);
+	float screenWidth = (f32)renderCommands->width;
+	float screenHeight = (f32)renderCommands->height;
 
-	v3 screenHeightVector = { 0, screen->height, 0};
-	v3 screenWidthVector = {screen->width, 0, 0};
+	v3 screenHeightVector = { 0, screenHeight, 0 };
+	v3 screenWidthVector = { screenWidth, 0, 0 };
 
-	v3 screenPos = screen->cam.pos;
-	float screenWidth = screen->width;
-	float screenHeight = screen->height;
+	v3 screenPos = cam->pos;
 
-	v2 screenUL = screen->ScreenToInGame(V2());
-	v2 screenUR = screen->ScreenToInGame(V2(screen->pixelWidth, 0.0f));
-	v2 screenBL = screen->ScreenToInGame(V2(0.0f, screen->pixelHeight));
-	v2 screenBR = screen->ScreenToInGame(V2(screen->pixelWidth, screen->pixelHeight));
+	v2 screenUL = ScreenZeroToOneToInGame(*cam, V2(), aspectRatio, focalLength);
+	v2 screenUR = ScreenZeroToOneToInGame(*cam, V2(width, 0.0f), aspectRatio, focalLength);
+	v2 screenBL = ScreenZeroToOneToInGame(*cam, V2(0.0f, height), aspectRatio, focalLength);
+	v2 screenBR = ScreenZeroToOneToInGame(*cam, V2(width, height), aspectRatio, focalLength);
 
 	float minScreenX = Min(Min(screenUL.x, screenUR.x), Min(screenBL.x, screenBR.x));
 	float minScreenY = Min(Min(screenUL.y, screenUR.y), Min(screenBL.y, screenBR.y));
@@ -170,12 +187,12 @@ void GameUpdateAndRender(GameState *gameState, RenderCommands *renderCommands, I
 			//renderGroup.PushAsset(v3::Inclusion12(tile.pos), { Asset_TileMapTiles }, tile.type, v3StdBasis);
 			//renderGroup.PushAsset(v3(x, y, randomSamples[(x*y + x + y) % 1000] - 0.01f), { Asset_Building }, 0, Scale(v3StdBasis, 1));
 			renderGroup.PushCuboid(V3(x, y, -tile.height + 1), { {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, tile.height} }, V4(1.0f, 0.9f, 0.9f, 0.9f));
-			
+
 		}
 	}
 	*/
-	
-	v4 allColorsOfTheRainbow [] =
+
+	v4 allColorsOfTheRainbow[] =
 	{
 		V4(1, 1, 1, 1), //white = 0
 		V4(1, 1, 1, 0), //yellow = 1
@@ -184,8 +201,7 @@ void GameUpdateAndRender(GameState *gameState, RenderCommands *renderCommands, I
 		V4(1, 0, 1, 1), //cyan = 4
 		V4(1, 0, 0, 1), //blue = 5
 		V4(1, 0, 1, 0), //green = 6
-		V4(1, 0, 0, 0), // black  = 7
-
+		V4(1, 0, 0, 0), //black  = 7
 
 		V4(1, 1, 1, 0.5f),
 		V4(1, 1, 0, 0.5f),
@@ -196,26 +212,76 @@ void GameUpdateAndRender(GameState *gameState, RenderCommands *renderCommands, I
 		V4(1, 0.5f, 0.5f, 0.5f)
 
 	};
-	for (u32 iter = 0; iter < 1; iter++)
+
+
+	static KdNode *selectedLeaf;
+	static v2 selectedPoint;
+#if 0
+	if (input->mouse.leftButtonPressedThisFrame)
 	{
-		AABB aabb = { V3((f32)(iter * 20) - 4.0f, -4, 0), V3(iter * 20 + 4, 4, 8) };
-
-		TriangleArray tArray = CreateStoneAndPush(aabb, 5.0f, frameArena, iter);
-		Triangle *t = tArray.arr;
-		u32 amountOfTrianglesInStrone = tArray.amount;
-		for (u32 triI = 0; triI < amountOfTrianglesInStrone; triI++)
+		v2 clickedPoint = ScreenZeroToOneToInGame(*cam, input->mouseZeroToOne, aspectRatio, focalLength);
+		KdNode* clickedLeaf = GetLeaf(world->kdTree, i12(clickedPoint));
+		if (selectedLeaf && selectedLeaf != clickedLeaf)
 		{
-			f32 shadeOfGray = (aabb.maxDim.x - t[triI].p2.x) / (aabb.maxDim.x - aabb.minDim.x);
-			PushTriangle(rg, t[triI].p1, t[triI].p2, t[triI].p3, shadeOfGray * V3(1, 1, 1));
+			LightingTriangle **selectedTs = selectedLeaf->triangles;
+			for (u32 i = 0; i < selectedLeaf->amountOfTriangles; i++)
+			{
+				selectedTs[i]->color = 0.5f * (selectedTs[i]->normal + V3(1, 1, 1));
+			}
+
+			LightingTriangle **clickedTs = clickedLeaf->triangles;
+			for (u32 i = 0; i < clickedLeaf->amountOfTriangles; i++)
+			{
+				clickedTs[i]->color = V3(0, 0, 0);
+			}
+		}
+		selectedLeaf = clickedLeaf;
+		selectedPoint = clickedPoint;
+
+	}
+	if (selectedLeaf)
+	{
+		PushAABBOutLine(rg, selectedLeaf->aabb.minDim, selectedLeaf->aabb.maxDim);
+		PushDebugPointCuboid(rg, i12(selectedPoint));
+	}
+#endif
+
+	static bool viewLighting = false;
+	if (input->keybord.l.pressedThisFrame || input->keybord.o.pressedThisFrame)
+	{
+		viewLighting = !viewLighting;
+	}
+	if (viewLighting)
+	{
+		if (input->keybord.o.pressedThisFrame)
+		{
+			PushLightingSolution(rg, gameState->world);
+		}
+		else
+		{
+			PushLightingImage(rg);
 		}
 
-		for (u32 i = 0; i < 8; i++)
+	}
+	else
+	{
+		Triangle *t = world->triangles.arr;
+		for (u32 triI = 0; triI < world->triangles.amount; triI++)
 		{
-			PushCuboid(rg, AABBCorner(aabb, i), 0.1f * v3StdBasis, allColorsOfTheRainbow[i]);
+			PushTriangle(rg, t[triI].cv1, t[triI].cv2, t[triI].cv3);
 		}
+#if 0
+		for (u32 triI = 0; triI < 40; triI++)
+		{
+			Triangle sd = t[triI];
+			v3 pos = 0.3333f * (sd.p1 + sd.p2 + sd.p3);
+			//PushCuboid(rg, pos, 0.3f * v3StdBasis, V4(1, 1, 0, 0));
+			PushLine(rg, pos, pos + sd.normal);
+		}
+#endif
 	}
 
-
+	//PushUnit(rg, V3(0, 0, 0), 0, Asset_Unit, 1.0f);
 #if 0
 	for (u32 i = 0; i < entities->amountSelected; i++)
 	{
@@ -244,7 +310,7 @@ void GameUpdateAndRender(GameState *gameState, RenderCommands *renderCommands, I
 			{
 				//renderGroup.PushRectangle(Shape::Rectangle(unitPtr->pos, 0.1f, 0.1f, v4(1.0f, 0.5f, 0, 0.5f)), 0.0f);
 			}
-				
+
 		}
 
 		Building *buildingPtr;
@@ -253,7 +319,7 @@ void GameUpdateAndRender(GameState *gameState, RenderCommands *renderCommands, I
 		{
 			buildingPtr->Update(tileSize, entities);
 			renderGroup.PushBuilding(i12(buildingPtr->GetPos()), Asset_Building, buildingPtr->GetSize());
-			
+
 		}
 	}
 #endif
@@ -261,33 +327,47 @@ void GameUpdateAndRender(GameState *gameState, RenderCommands *renderCommands, I
 
 	float unitBoxSize = 0.2f;
 
-	v3 camV1 = screen->cam.basis.d1;
-	v3 camV2 = screen->cam.basis.d2; 
-	v3 camV3 = screen->cam.basis.d3;
+	cam = &world->camera;
+
+	v3 camV1 = cam->basis.d1;
+	v3 camV2 = cam->basis.d2;
+	v3 camV3 = cam->basis.d3;
+
 
 	DEBUG_ON_OFF(DrawCamera, false)
 	{
-
 		float camBoxSize = 0.4f;
-		PushCuboid(rg, screen->cam.pos - camBoxSize * V3(0.5f, 0.5f, 0.0f), Scale(screen->cam.basis, camBoxSize), V4(1, 0, 1, 0));
+		PushCuboid(rg, cam->pos - camBoxSize * V3(0.5f, 0.5f, 0.0f), Scale(cam->basis, camBoxSize), V4(1, 0, 1, 0));
 
-		v3 camPos = screen->cam.pos;
+		v3 camPos = cam->pos;
 
-		v3 camRectUL = screen->cam.pos + screen->cam.basis.d3 * screen->focalLength * 2.5f -0.5f * (screenWidth * screen->cam.basis.d1 + screenHeight * screen->cam.basis.d2);
-		PushRectangle(rg, camRectUL, screen->cam.basis.d1 * screenWidth, screen->cam.basis.d2 * screenHeight, V4(0.5f, 1.0f, 0.0f, 0.0f));
-	
-		PushQuadrilateral(rg, V3(screen->ScreenToInGame(V2()), 0), V3(screen->ScreenToInGame(V2(screen->pixelWidth, 0.0f)), 0), V3(screen->ScreenToInGame(V2(0.0f, screen->pixelHeight)), 0), V3(screen->ScreenToInGame(V2(screen->pixelWidth, screen->pixelHeight)), 0), V4(0.5f, 0.0f, 1.0f, 0.0f));
+		m4x4 proj = Projection(aspectRatio, focalLength) * CameraTransform(camV1, camV2, camV3, camPos);
+		m4x4 inv = InvOrId(proj);
+		m4x4 id = proj * inv;
+		v3 p1 = inv * V3(-1, -1, -1);
+		v3 p2 = inv * V3(1, -1, -1);
+		v3 p3 = inv * V3(-1, 1, -1);
+		v3 p4 = inv * V3(1, 1, -1);
+		PushQuadrilateral(rg, p1, p2, p3, p4, V4(0.5f, 1.0f, 0.0f, 0.0f));
 
-		v2 adjustedMarkingPos = player->markingRect.pos - 0.5f *player->markingRect.dim;
-		v2 markingRectV1 = { player->markingRect.dim.x, 0 };
-		v2 markingRectV2 = { 0, player->markingRect.dim.y };
-		PushQuadrilateral(rg, V3(screen->ScreenToInGame(adjustedMarkingPos), 0), V3(screen->ScreenToInGame(adjustedMarkingPos + markingRectV1), 0), V3(screen->ScreenToInGame(adjustedMarkingPos + markingRectV2), 0), V3(screen->ScreenToInGame(adjustedMarkingPos + markingRectV1 +markingRectV2), 0), V4(0.8f, 0.0f, 1.0f, 0.0f));
+		v3 pp1 = i12(ScreenZeroToOneToInGame(*cam, V2(), aspectRatio, focalLength));
+		v3 pp2 = i12(ScreenZeroToOneToInGame(*cam, V2(1.0f, 0.0f), aspectRatio, focalLength));
+		v3 pp3 = i12(ScreenZeroToOneToInGame(*cam, V2(0.0f, 1.0f), aspectRatio, focalLength));
+		v3 pp4 = i12(ScreenZeroToOneToInGame(*cam, V2(1.0f, 1.0f), aspectRatio, focalLength));
+		PushQuadrilateral(rg, pp1, pp2, pp3, pp4, V4(0.5f, 0.0f, 1.0f, 0.0f));
 
+		v2 markingRectDim = player->markingRect.max - player->markingRect.min;
+		v2 adjustedMarkingPos = player->markingRect.min - 0.5f * markingRectDim;
+		v2 markingRectV1 = { markingRectDim.x, 0 };
+		v2 markingRectV2 = { 0, markingRectDim.y };
+		//Die; // project marking pos here
 	}
 
-	PushOrthogonalTransform(rg, (float)screen->pixelWidth, (float)screen->pixelHeight);
+	PushOrthogonalTransform(rg);
 	//PushRectangle(rg, player->markingRect, 0.0f); todo : redo this.
 
+	Bitmap *bitmap = rg->assetHandler->GetAsset({ Asset_Unit })->sprites[0];
+	PushTexturedRect(rg, V2(), 400, 400, *bitmap);
 
 	gameState->soundMixer->ToOutput(soundBuffer);
 

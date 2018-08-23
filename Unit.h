@@ -1,7 +1,6 @@
 #ifndef RR_UNIT
 #define RR_UNIT
 
-#include "Vector2.h"
 #include "Entity.h"
 
 class Unit : public Entity

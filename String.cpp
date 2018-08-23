@@ -4,9 +4,9 @@
 String CopyString(Arena *arena, String str)
 {
 	String ret;
-	ret.string = PushArray(arena, char, str.size);
-	ret.size = str.size;
-	for (u32 i = 0; i < str.size; i++)
+	ret.string = PushArray(arena, char, str.length);
+	ret.length = str.length;
+	for (u32 i = 0; i < str.length; i++)
 	{
 		ret.string[i] = str.string[i];
 	}
@@ -18,7 +18,7 @@ String CreateString(char *string, u32 size)
 {
 	String ret;
 	ret.string = string;
-	ret.size = size;
+	ret.length = size;
 	return ret;
 }
 
@@ -49,15 +49,15 @@ String CreateString(Arena *arena, char *nullTerminatedString)
 
 String Append(Arena *arena, String a, String b)
 {
-	u32 size = a.size + b.size;
-	char *newString = PushArray(arena, char, a.size + b.size);
-	for (u32 i = 0; i < a.size; i++)
+	u32 size = a.length + b.length;
+	char *newString = PushArray(arena, char, a.length + b.length);
+	for (u32 i = 0; i < a.length; i++)
 	{
 		newString[i] = a.string[i];
 	}
-	for (u32 i = 0; i < b.size; i++)
+	for (u32 i = 0; i < b.length; i++)
 	{
-		newString[a.size + i] = b.string[i];
+		newString[a.length + i] = b.string[i];
 	}
 	return CreateString(newString, size);
 }
@@ -82,13 +82,13 @@ String CreateString(Arena *arena, int integer)
 	{
 		index++;
 		ret.string = PushArray(arena, char, counter + 1);
-		ret.size = counter + 1;
+		ret.length = counter + 1;
 		ret.string[0] = '-';
 	}
 	else
 	{
 		ret.string = PushArray(arena, char, counter);
-		ret.size = counter;
+		ret.length = counter;
 	}
 	while (index != counter)
 	{
@@ -194,7 +194,7 @@ String CreateString(Arena *arena, char character)
 	String ret;
 	ret.string = PushStruct(arena, char);
 	ret.string[0] = character;
-	ret.size = 1;
+	ret.length = 1;
 	return ret;
 }
 
@@ -212,11 +212,11 @@ String CreateString(Arena *arena, bool val)
 
 char* ToZeroTerminated(Arena *arena, String string)
 {
-	char *ret = PushArray(arena, char, string.size);
-	for (u32 i = 0; i < string.size; i++)
+	char *ret = PushArray(arena, char, string.length);
+	for (u32 i = 0; i < string.length; i++)
 	{
 		ret[i] = string.string[i];
 	}
-	ret[string.size] = '\0';
+	ret[string.length] = '\0';
 	return ret;
 }

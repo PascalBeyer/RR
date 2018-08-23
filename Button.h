@@ -3,8 +3,6 @@
 
 #include "ButtonFunction.h"
 #include "String.h"
-#include "Vector2.h"
-#include "Vector4.h"
 class Button
 {
 public:

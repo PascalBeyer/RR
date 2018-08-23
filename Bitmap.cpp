@@ -3,15 +3,6 @@
 #include "Intrinsics.h"
 #include "File.h"
 
-
-
-void *AllocateGPUTextureStub(u32 width, u32 height, u32 *pixels)
-{
-	return NULL;
-}
-
-//void *(*AllocateGPUTexture)(u32 width, u32 height, u32 *pixels) = &AllocateGPUTextureStub;
-
 Bitmap CreateBitmap(u32* pixels, u32 width, u32 height)
 {
 	Bitmap ret;

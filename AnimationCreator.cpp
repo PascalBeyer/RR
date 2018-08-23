@@ -109,7 +109,7 @@ char *buttonTexts[Button_ButtonCount]
 };
 
 
-void AnimationCreatorInit(Input *input)
+void AnimationCreatorInit()
 {
 	assetHandler = new AssetHandler();
 	animationName = String();
@@ -189,7 +189,7 @@ bool RenderAnimationFrame(AnimationFrameList *animationFrame, float time, Render
 
 		for (AnimationElementList *aeit = lastFrame->elements; aeit; aeit = aeit->next)
 		{
-			PushTexturedQuadrilateral(rg, i12(aeit->p1), i12(aeit->p2), i12(aeit->p3), i12(aeit->p4), V4(1.0f, 1.0f, 1.0f, 1.0f), { aeit->assetId }, aeit->assetIndex);
+			PushTexturedQuad(rg, i12(aeit->p1), i12(aeit->p2), i12(aeit->p3), i12(aeit->p4), { aeit->assetId }, aeit->assetIndex);
 		}
 
 		PushCenteredRectangle(rg, lastFrame->pos, POSBUTTONSIZE, POSBUTTONSIZE, V4(1.0f, 1.0f, 0.0f, 0.0f));
@@ -207,7 +207,7 @@ bool RenderAnimationFrame(AnimationFrameList *animationFrame, float time, Render
 			{
 				Quad q = LarpQuad(aeit->p1, aeit->p2, aeit->p3, aeit->p4, afit->t, nextaeit->p1, nextaeit->p2, nextaeit->p3, nextaeit->p4, afit->next->t, time);
 
-				PushTexturedQuadrilateral(rg, i12(q.p1), i12(q.p2), i12(q.p3), i12(q.p4), V4(1.0f, 1.0f, 1.0f, 1.0f), { aeit->assetId }, aeit->assetIndex);
+				PushTexturedQuad(rg, i12(q.p1), i12(q.p2), i12(q.p3), i12(q.p4), { aeit->assetId }, aeit->assetIndex);
 			}
 
 			PushCenteredRectangle(rg, afit->pos, POSBUTTONSIZE, POSBUTTONSIZE, V4(1.0f, 1.0f, 0.0f, 0.0f));
@@ -886,13 +886,14 @@ void DrawButtons(RenderGroup *rg)
 	for (u32 i = buttonArray.size - 1; i != -1; i--)
 	{
 		ButtonAnimationCreator but = buttonArray.base[i];
-		PushButton(rg, but.pos, but.width, but.height, CreateString(buttonTexts[but.id]), but.color);
+		//PushButton(rg, but.pos, but.width, but.height, CreateString(buttonTexts[but.id]), but.color);
+		Die;
 	}
 }
 #if 0
 void AnimationCreatorHandleInput(Input *input, AnimationFrameList **currentFrame, float animationLength, v2 playLinePos, float playLineWidth, float playLineHeight, float *playLinePlayPosition, float playLineScrollBarWidth, float playLineScrollBarHeight,  RenderGroup *rg)
 {
-	if (input->mouse->leftButtonPressedThisFrame)
+	if (input->mouse.leftButtonPressedThisFrame)
 	{
 		//UI
 		if (mode == AnimationCreator_SaveNLoad) // this should be more of a differant _window_,  but there is no support
@@ -1151,7 +1152,7 @@ void AnimationCreatorHandleInput(Input *input, AnimationFrameList **currentFrame
 		}break;
 		}
 	}
-	else if (input->mouse->leftButtonDown) //drag Button Input
+	else if (input->mouse.leftButtonDown) //drag Button Input
 	{
 
 		float playCursorWidth = 20.0f;
@@ -1437,7 +1438,7 @@ void AnimationCreatorUpdateAndRender(RenderCommands *renderComands, Input *input
 	RenderGroup renderGroup = InitRenderGroup(assetHandler, renderComands);
 	RenderGroup *rg = &renderGroup;
 	ClearPushBuffer(rg);
-	PushOrthogonalTransform(rg, 1280, 720);
+	PushOrthogonalTransform(rg);
 	PushClear(rg, V4(1.0f, 0.4f, 0.4f, 0.4f));	
 	
 	float animationLength = GetAnimationLength(currentAnimation);
@@ -1459,7 +1460,8 @@ void AnimationCreatorUpdateAndRender(RenderCommands *renderComands, Input *input
 	PushAnimationCreatorButtons();
 	SortButtonsByPrority();
 
-	if (input->mouse->leftButtonPressedThisFrame)
+
+		if (input->mouse.leftButtonPressedThisFrame)
 	{
 		ButtonEnum triggeredButton = GetButtonTriggeredOnClick(input->mousePos);
 
@@ -1473,7 +1475,7 @@ void AnimationCreatorUpdateAndRender(RenderCommands *renderComands, Input *input
 		}
 		
 	}
-	else if (input->mouse->leftButtonDown)
+	else if (input->mouse.leftButtonDown)
 	{
 		ButtonEnum triggeredButton = GetButtonTriggeredOnClick(input->oldMousePos);
 		if (IsValid(triggeredButton))
@@ -1513,7 +1515,7 @@ void AnimationCreatorUpdateAndRender(RenderCommands *renderComands, Input *input
 
 		}
 
-		time += input->mouse->expectedTimePerFrame;
+		time += input->mouse.expectedTimePerFrame;
 		if (!currentAnimation)
 		{
 			time = 0;

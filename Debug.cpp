@@ -1,5 +1,5 @@
 #include "Debug.h"
-
+#include "Math.h"
 
 
 u32 GetDebugCounterIndex(char *fileName, int lineNumber, char *function, float camZ)
@@ -41,9 +41,9 @@ v2 debugPlaneOffset()
 
 void UpdateDebugCamera(Input *input, float camZ)
 {
-	if (input->keybord->u.isDown)
+	if (input->keybord.u.isDown)
 	{
-		if (input->keybord->u.pressedThisFrame)
+		if (input->keybord.u.pressedThisFrame)
 		{
 			debugLastMousePos = input->mousePos;
 		}
@@ -53,9 +53,9 @@ void UpdateDebugCamera(Input *input, float camZ)
 		mouseZRot += mouseDelta.x * rotSpeed;
 		mouseXRot += mouseDelta.y * rotSpeed;
 	}
-	if (input->keybord->d.isDown)
+	if (input->keybord.d.isDown)
 	{
-		if (input->keybord->d.pressedThisFrame)
+		if (input->keybord.d.pressedThisFrame)
 		{
 			debugLastMousePos = input->mousePos;
 		}
@@ -64,9 +64,9 @@ void UpdateDebugCamera(Input *input, float camZ)
 		float zoomSpeed = 0.05f;
 		camPlaneOffset += mouseDelta * zoomSpeed;
 	}
-	if (input->keybord->s.isDown)
+	if (input->keybord.s.isDown)
 	{
-		if (input->keybord->s.pressedThisFrame)
+		if (input->keybord.s.pressedThisFrame)
 		{
 			debugLastMousePos = input->mousePos;
 		}

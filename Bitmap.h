@@ -1,12 +1,9 @@
 #ifndef RR_BITMAP
 #define RR_BITMAP
 
-#define PreMultipliedAlpha 1
-
 #include "BasicTypes.h"
-#include "Screen.h"
 #include "buffers.h"
-#include "Vector2.h"
+
 
 #pragma pack(push,1)
 struct BitmapFileHeader

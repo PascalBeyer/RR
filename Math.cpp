@@ -1,5 +1,5 @@
 #include "Math.h"
-#include "SIMD.h"
+
 int Round(float f)
 {
 	return (int)(f - 1.0f / 2.0f);

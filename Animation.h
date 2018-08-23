@@ -1,7 +1,7 @@
 #ifndef RR_ANIMATION
 #define RR_ANIMATION
 
-#include "Vector2.h"
+
 #include "String.h"
 
 struct AnimationElementList

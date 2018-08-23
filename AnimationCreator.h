@@ -6,7 +6,7 @@
 #include "File.h"
 #include "Animation.h"
 
-void AnimationCreatorInit(Input *input);
+void AnimationCreatorInit();
 void AnimationCreatorUpdateAndRender(RenderCommands *renderComamds, Input *Input);
 
 

@@ -4,7 +4,6 @@
 #include "buffers.h"
 #include "Input.h"
 #include "BasicTypes.h"
-#include "Vector2.h"
 #include "Arena.h"
 
 enum

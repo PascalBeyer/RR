@@ -1,7 +1,6 @@
 #ifndef RR_MATRIX
 #define RR_MATRIX
 
-#include "Vector3.h"
 
 struct m4x4
 {
@@ -28,14 +27,16 @@ static m4x4 operator*(m4x4 A, m4x4 B)
 
 static v3 Transform(m4x4 A, v3 P, float Pw)
 {
+	v3 r;
 
-	v3 R;
+	r.x = P.x*A.a[0][0] + P.y*A.a[0][1] + P.z*A.a[0][2] + Pw*A.a[0][3];
+	r.y = P.x*A.a[1][0] + P.y*A.a[1][1] + P.z*A.a[1][2] + Pw*A.a[1][3];
+	r.z = P.x*A.a[2][0] + P.y*A.a[2][1] + P.z*A.a[2][2] + Pw*A.a[2][3];
+	f32 w = P.x*A.a[3][0] + P.y*A.a[3][1] + P.z*A.a[3][2] + Pw*A.a[3][3];
 
-	R.x = P.x*A.a[0][0] + P.y*A.a[0][1] + P.z*A.a[0][2] + Pw*A.a[0][3];
-	R.y = P.x*A.a[1][0] + P.y*A.a[1][1] + P.z*A.a[1][2] + Pw*A.a[1][3];
-	R.z = P.x*A.a[2][0] + P.y*A.a[2][1] + P.z*A.a[2][2] + Pw*A.a[2][3];
+	r /= w;
 
-	return(R);
+	return r;
 }
 
 static v3 operator*(m4x4 A, v3 P)
@@ -110,10 +111,12 @@ static m4x4 ZRotation(float Angle)
 
 	m4x4 R =
 	{
-		{ { c,-s, 0, 0 },
+		{ 
+		{ c,-s, 0, 0 },
 		{ s, c, 0, 0 },
 		{ 0, 0, 1, 0 },
-		{ 0, 0, 0, 1 } },
+		{ 0, 0, 0, 1 } 
+		},
 	};
 
 	return(R);
@@ -148,10 +151,11 @@ static m4x4 Projection(float aspectWidthOverHeight, float focalLength)
 
 	m4x4 R =
 	{
-		{ { a * c, 0,		0,		0 },
-		{ 0,	-b * c, 0,		0 },
-		{ 0,	0,		d,		e },
-		{ 0,	0,    1.0f,		0 }
+		{ 
+		{ a * c,	 0,			0,			0 },
+		{ 0,		-b * c,		0,			0 },
+		{ 0,		0,			d,			e },
+		{ 0,		0,			1.0f,		0 }
 		}
 	};
 
@@ -222,7 +226,8 @@ static m4x4 Orthogonal(float width, float height)
 			{ 2.0f / width, 0.0f, 0.0f, 0.0f },
 			{ 0.0f, -2.0f / height, 0.0f, 0.0f },
 			{ 0.0f, 0.0f, 0.0f, -1.0f }, //we are in a -1 to +1 cube, so -1 is the exact screen position
-			{ 0.0f, 0.0f, 0.0f, 1.0f } }
+			{ 0.0f, 0.0f, 0.0f, 1.0f } 
+		}
 	};
 
 	return(R);

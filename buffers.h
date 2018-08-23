@@ -39,20 +39,30 @@
 #define Assert(Expression) if(!(Expression)) {*(int *)0 = 0;}
 #define Die Assert(false)
 
+struct ColoredVertex
+{
+	v3 pos;
+	u32 color;
+};
 
-struct ColoredVertex;
+struct TexturedVertex
+{
+	v3 pos;
+	v2 uv;
+	u32 color;
+};
+
 struct RenderCommands
 {
 	u32 maxBufferSize;
 	u32 pushBufferSize;
 	u8 *pushBufferBase;
-	float inGameWidth;
+
 	u32 width;
 	u32 height;
+	f32 focalLength;
+	f32 aspectRatio;
 
-	u32 MaxVertexCount;
-	u32 vertexCount;
-	ColoredVertex *vertexArray;
 };
 
 struct ImageBuffer
@@ -70,12 +80,27 @@ struct Key
 	bool pressedThisFrame;
 };
 
+enum KeyEnum
+{
+	Key_a, Key_b, Key_c, Key_d, Key_e,
+	Key_f, Key_g, Key_h, Key_i, Key_j,
+	Key_k, Key_l, Key_m, Key_n, Key_o,
+	Key_p, Key_q, Key_r, Key_s, Key_t,
+	Key_u, Key_v, Key_w, Key_x, Key_y,
+	Key_z,
+	Key_space,
+	Key_shift,
+
+	Key_count
+};
+
+
 struct KeybordInput
 {
 	static const unsigned int amountOfKeys = 28;
 	union
 	{
-		Key input[amountOfKeys];
+		Key input[Key_count];
 		struct
 		{
 			Key a; Key b; Key c; Key d; Key e;
@@ -99,8 +124,6 @@ struct MouseInput
 	bool rightButtonDown;
 	bool leftButtonPressedThisFrame;
 	bool rightButtonPressedThisFrame;
-	f32 expectedTimePerFrame;
-
 };
 
 struct SoundBuffer

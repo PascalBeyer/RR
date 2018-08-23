@@ -6,7 +6,7 @@
 struct String
 {
 	char *string;
-	u32 size;
+	u32 length;
 	char operator[](u32 i)
 	{
 		return string[i];

@@ -3,7 +3,7 @@
 
 #include "buffers.h"
 #include "Math.h"
-#include "Vector3.h"
+
 
 typedef __m128 f32Wide;
 typedef __m128i u32Wide;

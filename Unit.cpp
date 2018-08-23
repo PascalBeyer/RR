@@ -1,5 +1,4 @@
 #include "Unit.h"
-#include "2DGeometry.h"
 
 
 Unit::Unit()

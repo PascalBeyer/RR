@@ -1,8 +1,5 @@
 #ifndef RR_LINEARALGEBRA
 #define RR_LINEARALGEBRA
-#include "Vector2.h"
-#include "Vector3.h"
-#include "Math.h"
 #include "Matrix.h"
 
 struct Vector2Basis

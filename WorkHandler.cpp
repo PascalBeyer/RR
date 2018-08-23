@@ -1,8 +1,6 @@
 #include "WorkHandler.h"
 
 
-
-
 u32 ICEStub (u32 volatile *oldValue, u32 newValue, u32 expectedOldValue)
 {
 	return 0;

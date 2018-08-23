@@ -1155,6 +1155,11 @@ static u32 xorshift32(RandomSeries *series)
 	return x32;
 }
 
+static u32 RandomU32(RandomSeries *series)
+{
+	return xorshift32(series);
+}
+
 static f32 RandomPercent(RandomSeries *series)
 {
 	return (float)xorshift32(series) / (float)MAXU32;
