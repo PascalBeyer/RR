@@ -1,7 +1,6 @@
 #ifndef  RR_RANDOM
 #define RR_RANDOM
-#include "BasicTypes.h"
-#include "Math.h"
+
 
 struct RandomSeries
 {

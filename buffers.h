@@ -21,6 +21,8 @@
 #endif // 
 #endif
 
+#include "BasicTypes.h"
+
 
 #if COMPILER_MSVC
 #include <intrin.h>
@@ -29,8 +31,7 @@
 #define END_TIMED_BLOCK(ID)
 #endif
 
-#define Internal 1
-#include "BasicTypes.h"
+#define RR_Internal 1
 
 #define ArrayCount(a) (sizeof(a)/sizeof(*a))
 #define MegaBytes(a) (1024 * KiloBytes(a))
@@ -38,6 +39,7 @@
 #define OffsetOf(type, Member) (umm)&(((type *)0)->Member)
 #define Assert(Expression) if(!(Expression)) {*(int *)0 = 0;}
 #define Die Assert(false)
+
 
 struct ColoredVertex
 {

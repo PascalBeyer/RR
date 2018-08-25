@@ -1,7 +1,6 @@
 #ifndef RR_ANIMATION
 #define RR_ANIMATION
 
-
 #include "String.h"
 
 struct AnimationElementList
@@ -24,7 +23,21 @@ struct AnimationFrameList
 };
 
 AnimationFrameList *LoadAnimation(String name);
-void DeleteFirstAnimationFrame(AnimationFrameList *list);
+
+static void DeleteFirstAnimationFrame(AnimationFrameList *list)
+{
+	if (!list) return;
+	AnimationFrameList *saveCur = list;
+	list = list->next;
+	for (AnimationElementList *it = saveCur->elements; it;)
+	{
+		AnimationElementList *saveIt = it;
+		it = it->next;
+
+		delete(saveIt);
+	}
+	delete(saveCur);
+}
 
 
 #endif

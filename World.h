@@ -2,11 +2,7 @@
 #define RR_WORLD
 
 #include "buffers.h"
-#include "Input.h"
-#include "Math.h"
-#include "Arena.h"
 #include "LinearAlgebra.h"
-#include "Random.h"
 #include "Color.h"
 
 struct AABB
@@ -19,7 +15,17 @@ struct AABB
 struct Camera
 {
 	v3 pos;
-	Vector3Basis basis;
+	union
+	{
+		Vector3Basis basis;
+
+		struct 
+		{
+			v3 b1;
+			v3 b2;
+			v3 b3;
+		};
+	};
 };
 
 

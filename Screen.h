@@ -1,7 +1,7 @@
 #ifndef RR_SCREEN
 #define RR_SCREEN
 
-#include "buffers.h"
+#include "Matrix.h"
 #include "World.h"
 
 struct Screen

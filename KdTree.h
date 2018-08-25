@@ -2,8 +2,11 @@
 #define RR_KDTREE
 
 #define MAX_KD_TREE_DEPTH 20
-#include "World.h"
 
+#include "World.h"
+#include "buffers.h"
+#include "Arena.h"
+#include "Math.h"
 
 struct IrradianceSample
 {

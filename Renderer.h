@@ -1,16 +1,10 @@
 #ifndef RR_RENDERER
 #define RR_RENDERER
 
-#include "String.h"
+#include "World.h"
+#include "Matrix.h"
 #include "AssetHandler.h"
-#include "Math.h"
-#include "LinearAlgebra.h"
-#include "WorkHandler.h"
-
-#include "Math.h"
-#include "Intrinsics.h"
-#include "Fonts.h"
-#include "Debug.h"
+#include "buffers.h"
 
 enum RenderGroupEntryType
 {
@@ -18,9 +12,24 @@ enum RenderGroupEntryType
 	RenderGroup_EntryLines,
 	RenderGroup_EntryTriangles,
 	RenderGroup_EntryClear,
+};
 
-	RenderGroup_EntryUpdateTexture,
-	RenderGroup_EntryTransform
+enum RenderSetUpFlags
+{
+	Setup_Ivalid = 0x0,
+	Setup_Projective = 0x1,
+	Setup_Orthogonal = 0x2,
+	Setup_ZeroToOne = 0x3,
+	Setup_ShadowMapping = 0x4,
+	
+};
+
+struct RenderSetup
+{
+	m4x4 transform;
+	v3 lightPos;
+	v3 cameraPos; 
+	u32 flag;
 };
 
 
@@ -28,13 +37,9 @@ enum RenderGroupEntryType
 struct RenderGroupEntryHeader
 {
 	RenderGroupEntryType type;
+	RenderSetup setup;
 };
 
-struct EntryTransform
-{
-	RenderGroupEntryHeader header;
-	m4x4 m;
-};
 
 struct EntryColoredVertices
 {
@@ -72,6 +77,8 @@ struct RenderGroup
 	EntryColoredVertices *currentLines;
 	EntryTexturedQuads *currentQuads;
 	
+	RenderSetup setup;
+
 	RenderCommands *commands;
 	AssetHandler *assetHandler;
 };
@@ -104,20 +111,13 @@ static RenderGroupEntryHeader *PushRenderEntry_(RenderGroup *rg, u32 size, Rende
 		{
 			result = (RenderGroupEntryHeader *)(commands->pushBufferBase + commands->pushBufferSize);
 			result->type = type;
+			result->setup = rg->setup;
 			commands->pushBufferSize += size;
 		}
 	}
-
-	if (type == RenderGroup_EntryTransform)
+	else
 	{
-		rg->currentLines = NULL;
-		rg->currentTriangles = NULL;
-		rg->currentQuads = NULL;
-	}
-
-	if (type == RenderGroup_EntryUpdateTexture)
-	{
-		rg->currentQuads = NULL;
+		Die;
 	}
 
 	return result;
@@ -128,29 +128,49 @@ static void ClearPushBuffer(RenderGroup *rg)
 	rg->commands->pushBufferSize = 0;
 }
 
-static void PushProjectivTransform(RenderGroup *rg, v3 cameraPos, Vector3Basis cameraBasis)
+static void PushRenderSetUp(RenderGroup *rg, Camera camera, v3 lightPos, u32 flag)
 {
-	EntryTransform *transform = PushRenderEntry(EntryTransform);
+	RenderCommands *commands = rg->commands;
 
-	if (transform)
+	RenderSetup ret;
+	
+	switch (flag & 0x3)
 	{
-		RenderCommands *commands = rg->commands;
+	case Setup_Projective:
+	{
 		m4x4 proj = Projection(commands->aspectRatio, commands->focalLength);
-		m4x4 cam = CameraTransform(cameraBasis.d1, cameraBasis.d2, cameraBasis.d3, cameraPos);
-		transform->m = proj * cam;
-	}
-}
+		m4x4 cameraTransform = CameraTransform(camera.basis.d1, camera.basis.d2, camera.basis.d3, camera.pos);
+		ret.transform = proj * cameraTransform;
 
-static void PushOrthogonalTransform(RenderGroup *rg)
-{
-	EntryTransform *transform = PushRenderEntry(EntryTransform);
-	if (transform)
+	}break;
+	case Setup_Orthogonal:
 	{
-		RenderCommands *commands = rg->commands;
 		m4x4 ortho = Orthogonal((f32)commands->width, (f32)commands->height);
 
-		transform->m = Translate(ortho, V3(-1.0f, 1.0f, 0.0f));
+		ret.transform = Translate(ortho, V3(-1.0f, 1.0f, 0.0f));
+
+	}break;
+	case Setup_ZeroToOne:
+	{
+		m4x4 ortho = Orthogonal(1.0f, 1.0f);
+
+		ret.transform = Translate(ortho, V3(-1.0f, 1.0f, 0.0f));
+
+	}break;
+	default:
+		Assert(!"Unhandled");
+		break;
 	}
+
+	rg->currentLines = NULL;
+	rg->currentTriangles = NULL;
+	rg->currentQuads = NULL;
+	
+	ret.cameraPos = camera.pos;
+	ret.lightPos = lightPos;
+	ret.flag = flag;
+
+	rg->setup = ret;
 }
 
 struct TexturedQuad
@@ -393,14 +413,7 @@ static void PushAABBOutLine(RenderGroup *rg, v3 minDim, v3 maxDim)
 	PushLine(rg, p[4], p[7]);
 
 }
-static void PushUpdateTexture(RenderGroup *rg, Bitmap bitmap)
-{
-	EntryUpdateTexture *result = PushRenderEntry(EntryUpdateTexture);
-	if (result)
-	{
-		result->bitmap = bitmap;
-	}
-}
+
 static void PushClear(RenderGroup *rg, v4 color)
 {
 	EntryClear *result = PushRenderEntry(EntryClear);
@@ -427,6 +440,17 @@ static void PushRectangle(RenderGroup *rg, v2 pos, v2 vec1, v2 vec2, v4 color)
 	PushQuadrilateral(rg, i12(pos), i12(pos + vec1), i12(pos + vec2), i12(pos + vec1 + vec2), color);
 }
 
+static void PushRectangle(RenderGroup *rg, v2 min, v2 max, v4 color)
+{
+	v2 p1 = min;
+	v2 p2 = V2(max.x, min.y);
+	v2 p3 = V2(min.x, max.y);
+	v2 p4 = max;
+
+	PushQuadrilateral(rg, i12(p1), i12(p2), i12(p3), i12(p4), color);
+}
+
+
 static void PushRectangle(RenderGroup *rg, v2 pos, f32 width, f32 height, v4 color)
 {
 	v2 vec1 = V2(width, 0.0f);
@@ -448,7 +472,7 @@ static void PushCenteredRectangle(RenderGroup *rg, v2 pos, float width, float he
 	PushQuadrilateral(rg, p1, p2, p3, p4, color);
 }
 
-static void PushTexturedQuad(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, Bitmap bitmap, v4 color = V4(1, 1, 1, 1))
+static void PushTexturedQuad(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, Bitmap bitmap, v4 color, bool inverted, v2 minUV, v2 maxUV)
 {
 	if (!rg->currentQuads)
 	{
@@ -470,10 +494,21 @@ static void PushTexturedQuad(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, Bitmap
 	mem.verts[2].pos = p3;
 	mem.verts[3].pos = p4;
 
-	mem.verts[0].uv = V2(0, 1);
-	mem.verts[1].uv = V2(1, 1);
-	mem.verts[2].uv = V2(0, 0);
-	mem.verts[3].uv = V2(1, 0);
+	if (inverted)
+	{
+		mem.verts[0].uv = V2(minUV.x, minUV.y); // 0 0 
+		mem.verts[1].uv = V2(maxUV.x, minUV.y); // 1 0
+		mem.verts[2].uv = V2(minUV.x, maxUV.y); // 0 1
+		mem.verts[3].uv = V2(maxUV.x, maxUV.y); // 1 1
+	}
+	else
+	{
+		mem.verts[0].uv = V2(minUV.x, maxUV.y); // 0 1
+		mem.verts[1].uv = V2(maxUV.x, maxUV.y); // 1 1
+		mem.verts[2].uv = V2(minUV.x, minUV.y); // 0 0
+		mem.verts[3].uv = V2(maxUV.x, minUV.y); // 1 0
+
+	}
 	
 	mem.verts[0].color = Pack4x8(color);
 	mem.verts[1].color = Pack4x8(color);
@@ -483,18 +518,39 @@ static void PushTexturedQuad(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, Bitmap
 	*mem.bitmap = bitmap;
 }
 
+static void PushTexturedQuad(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, Bitmap bitmap, v4 color)
+{
+	PushTexturedQuad(rg, p1, p2, p3, p4, bitmap, color, false, V2(), V2(1, 1));
+}
+
 static void PushTexturedQuad(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, AssetId assetId, u32 assetIndex, v4 color = V4(1, 1, 1, 1))
 {
 	Bitmap bitmap = *rg->assetHandler->GetAsset(assetId)->sprites[assetIndex];
-	PushTexturedQuad(rg, p1, p2, p3, p4, bitmap, color);
+	PushTexturedQuad(rg, p1, p2, p3, p4, bitmap, color, false, V2(), V2(1, 1));
 }
 
-static void PushTexturedRect(RenderGroup *rg, v2 p1, f32 width, f32 height, Bitmap bitmap, v4 color = V4(1, 1, 1, 1))
+static void PushTexturedRect(RenderGroup *rg, v2 p1, f32 width, f32 height, Bitmap bitmap, v4 color, bool inverted, v2 minUV, v2 maxUV)
 {
 	v2 p2 = p1 + V2(width, 0);
 	v2 p3 = p1 + V2(0, height);
 	v2 p4 = p1 + V2(width, height);
-	PushTexturedQuad(rg, i12(p1), i12(p2), i12(p3), i12(p4), bitmap, color);
+	PushTexturedQuad(rg, i12(p1), i12(p2), i12(p3), i12(p4), bitmap, color, inverted, minUV, maxUV);
+}
+
+static void PushTexturedRect(RenderGroup *rg, v2 p1, f32 width, f32 height, Bitmap bitmap)
+{
+	v2 p2 = p1 + V2(width, 0);
+	v2 p3 = p1 + V2(0, height);
+	v2 p4 = p1 + V2(width, height);
+	PushTexturedQuad(rg, i12(p1), i12(p2), i12(p3), i12(p4), bitmap, V4(1, 1, 1, 1), false, V2(), V2(1, 1));
+}
+
+static void PushTexturedRect(RenderGroup *rg, v2 p1, f32 width, f32 height, Bitmap bitmap, bool inverted)
+{
+	v2 p2 = p1 + V2(width, 0);
+	v2 p3 = p1 + V2(0, height);
+	v2 p4 = p1 + V2(width, height);
+	PushTexturedQuad(rg, i12(p1), i12(p2), i12(p3), i12(p4), bitmap, V4(1, 1, 1, 1), inverted, V2(), V2(1, 1));
 }
 
 static void PushTexturedRect(RenderGroup *rg, v2 p1_, f32 width, f32 height, AssetId id, u32 assetIndex = 0, v4 color = V4(1, 1, 1, 1))
@@ -506,24 +562,37 @@ static void PushTexturedRect(RenderGroup *rg, v2 p1_, f32 width, f32 height, Ass
 	Bitmap bitmap = *rg->assetHandler->GetAsset(id)->sprites[assetIndex];
 	PushTexturedQuad(rg, p1, p2, p3, p4, bitmap, color);
 }
+
+
 static void PushBitmap(RenderGroup *rg, v2 pos, Bitmap bitmap, v4 color = V4(1, 1, 1, 1))
 {
-	PushTexturedRect(rg, pos, (f32)bitmap.width, (f32)bitmap.height, bitmap, color);
+	PushTexturedRect(rg, pos, (f32)bitmap.width, (f32)bitmap.height, bitmap, color, false, V2(0, 0), V2(1, 1));
 }
 
-static void PushDebugString(RenderGroup *rg, v2 pos, char* string, u32 stringLength, u32 size)
+static void PushString(RenderGroup *rg, v2 pos, unsigned char* string, u32 stringLength, u32 size, Font font, v4 color = V4(1, 1, 1, 1))
 {
-	v2 writePos = pos;
-	float fSize = (float)size;
+	f32 x = pos.x;
+	float fScale = (f32)size / (f32)font.charHeight;
+
+	Assert(font.amountOfChars);
 
 	for (u32 i = 0; i < stringLength; i++)
 	{
-		FontEnum charId = GetCharIndex(string[i]);
-		if (charId < Font_InvalideID)
+		if (string[i] < font.amountOfChars)
 		{
-			PushTexturedRect(rg, writePos, (float)size, (float)size, { Asset_Font }, charId);
-			float actualFloatWidth = FontGetActualFloatWidth(charId, (float)size);
-			writePos += V2(actualFloatWidth, 0);
+			CharData data = font.charData[string[i]];
+
+			f32 scaledWidth = fScale * (f32)data.width;
+			f32 scaledHeight = fScale * (f32)data.height;
+
+			f32 y = pos.y + (f32)size - scaledHeight;
+
+			v2 writePos = V2(x, y);
+
+			PushTexturedRect(rg, writePos, scaledWidth, scaledHeight, font.bitmap, color, true, data.minUV, data.maxUV);
+			float actualFloatWidth = data.xAdvance * fScale;
+			x += actualFloatWidth;
+
 		}
 		else
 		{
@@ -532,9 +601,9 @@ static void PushDebugString(RenderGroup *rg, v2 pos, char* string, u32 stringLen
 	}
 }
 
-static void PushDebugString(RenderGroup *rg, v2 pos, String string, u32 size)
+static void PushString(RenderGroup *rg, v2 pos, String string, u32 size, Font font)
 {
-	PushDebugString(rg, pos, string.string, string.length, size);
+	PushString(rg, pos, string.string, string.length, size, font);
 }
 static void PushUnit(RenderGroup *rg, v3 pos, u32 facingDirection, u32 assetId, float radius)
 {

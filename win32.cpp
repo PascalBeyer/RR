@@ -1,17 +1,21 @@
 
-#include <Windows.h>
-#include <gl/gl.h>
-#include <dsound.h>
+
+
+#undef CreateFile
+#undef PlaySound
 
 #define WGLPROC(a) a = (a##_ *)wglGetProcAddress(#a);
 
-
 #include "Game.h"
-#include "File.h"
-#include "Debug.h"
-#include "OpenGL.h"
-#include "WorkHandler.h"
 #include "AnimationCreator.h"
+
+#include <Windows.h>
+#include <gl/gl.h>
+#include <dsound.h>
+#undef CreateFile
+#undef PlaySound
+
+#include "OpenGL.h"
 
 struct windowDimension
 {
@@ -37,24 +41,31 @@ static GLuint globalTextureHandle;
 static OpenGLInfo openGLInfo;
 
 DebugCycleCounter debugCounters[DebugCycleCounter_Count];
-PushArray<Button> *debugButtons = NULL;
+
+//todo : make these allocate into arenas
 u32 (*AllocateGPUTexture)(u32 width, u32 height, u32 *pixels);
+void (*UpdateGPUTexture)(Bitmap bitmap);
+bool(*WriteEntireFile)(char *fileName, File file);
+File(*LoadFile)(char *fileName);
+void(*FreeFile)(File file);
+
+
 Arena *constantArena;
 Arena *frameArena;
 Arena *workingArena;
 
-static void freeFile(File *file)
+static void freeFile(File file)
 {
-	void *memory = file->GetMemory();
+	void *memory = file.memory;
 	if (memory)
 	{
 		VirtualFree(memory, 0, MEM_RELEASE);
 	}
 }
 
-static File *readEntireFile(char * fileName)
+static File loadEntireFile(char *fileName) //zero terminated
 {
-	void * memory = 0;
+	void *memory = 0;
 	unsigned int size = 0;
 	
 	HANDLE fileHandle = CreateFileA(fileName, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -82,14 +93,16 @@ static File *readEntireFile(char * fileName)
 		}
 		CloseHandle(fileHandle);
 	}
-	File* result = new File(memory, size);
+	File result;
+	result.fileSize = size;
+	result.memory = memory;
 	return result;
 }
 
-static bool writeEntireFile(char * fileName, File *file)
+static bool writeEntireFile(char * fileName, File file) //zero terminated
 {
-	void * memory = file->GetMemory();
-	unsigned int size = file->GetSize();
+	void * memory = file.memory;
+	unsigned int size = file.fileSize;
 
 	bool result = false;
 
@@ -813,6 +826,9 @@ int CALLBACK WinMain(
 #endif
 	workHandler.Initiate(&InterlockedCompareExchange, &WakeThreads, &InterlockedIncrement, threadCount);
 
+	LoadFile = &loadEntireFile;
+	FreeFile = &freeFile;
+	WriteEntireFile = &writeEntireFile;
 
 	WNDCLASSA windowClass = {};
 	windowClass.style = CS_HREDRAW | CS_VREDRAW;
@@ -825,8 +841,6 @@ int CALLBACK WinMain(
 	LARGE_INTEGER perfCountFrequencyResult;
 	QueryPerformanceFrequency(&perfCountFrequencyResult);
 	globalPerformanceCountFrequency = perfCountFrequencyResult.QuadPart;
-
-	File::Initialize(&readEntireFile, &freeFile, &writeEntireFile);
 
 	int windowWidth = 1280, windowHeight = 720;
 	void *gameMemory = VirtualAlloc(0, MegaBytes(500), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
@@ -857,7 +871,7 @@ int CALLBACK WinMain(
 			GLuint whiteTextureID = (GLuint)OpenGLDownLoadImage(1, 1, whitePixels);
 
 			AllocateGPUTexture = OpenGLDownLoadImage;
-
+			UpdateGPUTexture = OpenGLUpdateBitmap;
 			//todo move the allocation stuff into the game?
 
 			u32 pushBufferSize = KiloBytes(4);
@@ -910,11 +924,10 @@ int CALLBACK WinMain(
 				debugCounters[counterIndex].hit = 0;
 			}
 
-			debugButtons = new PushArray<Button>(MAX_DEBUG_BUTTON_COUNT);
 
 #endif
 		
-			AnimationCreatorInit();
+			//AnimationCreatorInit();
 
 			gameState = InitGame(windowWidth, windowHeight, &workHandler);
 			while (running)
@@ -951,10 +964,7 @@ int CALLBACK WinMain(
 				}
 				soundOutput.sampleAmount = bytesToWrite / soundOutput.bytesPerSample;
 				Input input;
-				UpdateInput(&input, globalMouseInput, globalKeybordInput, windowWidth, windowHeight);
-
-				gameState.time += targetSecondsPerFrame; 
-				//todo: think about where this should live? maybe input and it becomes:		 state + input -> state
+				UpdateInput(&input, globalMouseInput, globalKeybordInput, windowWidth, windowHeight, targetSecondsPerFrame);
 
 				GameUpdateAndRender(&gameState, &renderCommands, &input, &soundOutput);
 				
@@ -991,19 +1001,10 @@ int CALLBACK WinMain(
 
 				float screenWidth = (f32)renderCommands.width;
 				float screenHeight = (f32)renderCommands.height;
-				PushOrthogonalTransform(rg);
-				PushDebugString(rg, V2(0.1f, 0.1f), s, 20);
 
-				gameState.debugUI->buttons = debugButtons->pushArray;
-				gameState.debugUI->amountOfButtons = debugButtons->size;
-				gameState.debugUI->Update(&input);
+				PushRenderSetUp(rg, {}, V3(), Setup_Orthogonal);
+				PushString(rg, V2(20.1f, 10.1f), s, 20, gameState.font);
 				
-				for (u32 i = 0; i < debugButtons->size; i++)
-				{
-					Button currentButton = debugButtons->Get(i);
-
-					//PushButton(rg, currentButton.pos + p12(screenCenterOffset), currentButton.width, currentButton.height, currentButton.text, currentButton.currentColor);
-				}
 #endif
 
 				OpenGlRenderGroupToOutput(&renderCommands);

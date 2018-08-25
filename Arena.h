@@ -1,7 +1,7 @@
 #ifndef RR_Arena
 #define RR_Arena
-#include "buffers.h"
 
+#include "BasicTypes.h"
 
 struct Arena
 {
@@ -20,11 +20,39 @@ extern Arena *workingArena;
 #define PushZeroArray(arena, type, size) (type *)PushZeroStruct_(arena, size * sizeof(type))
 
 
-u8 *PushStruct_(Arena *arena, u32 sizeOfStruct);
-u8 *PushZeroStruct_(Arena *arena, u32 sizeOfStruct);
-void Clear(Arena *arena);
-Arena *InitArena(void *memory, u32 capacity);
+static u8 *PushStruct_(Arena *arena, u32 sizeOfType)
+{
+	Assert(arena->current - arena->base + sizeOfType < arena->capacity);
+	u8* ret = arena->current;
+	arena->current += sizeOfType;
+	return ret;
+}
+static u8 *PushZeroStruct_(Arena *arena, u32 sizeOfType)
+{
+	Assert(arena->current - arena->base + sizeOfType < arena->capacity);
+	u8* ret = arena->current;
+	for (u8*it = ret; (it - ret) < sizeOfType; it++)
+	{
+		*it = 0;
+	}
+	arena->current += sizeOfType;
+	return ret;
+}
 
+static void Clear(Arena *arena)
+{
+	arena->current = arena->base;
+}
 
+static Arena *InitArena(void *memory, u32 capacity)
+{
+	u8 *it = (u8 *)memory;
+	Arena *ret = (Arena *)memory;
+	ret->base = it + sizeof(Arena);
+	ret->capacity = capacity;
+	ret->current = ret->base;
+
+	return ret;
+}
 #endif // !RR_Arena
 

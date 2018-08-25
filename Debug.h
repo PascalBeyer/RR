@@ -1,18 +1,12 @@
 #ifndef RR_DEBUG
 #define RR_DEBUG
 
-#include "BasicTypes.h"
-#include "PushArray.h"
-#include "Button.h"
-#include "ButtonFunction.h"
-#include "Input.h"
 
 #define BEGIN_TIMED_BLOCK(ID) u64 startCycleCount##ID = __rdtsc();
 #define BEGIN_TIMED_BLOCK_COUNTED(ID) u64 startCycleCountCounted##ID = __rdtsc();
 #define END_TIMED_BLOCK(ID) debugCounters[DebugCycleCounter_##ID].cycleCount += __rdtsc() - startCycleCount##ID; ++debugCounters[DebugCycleCounter_##ID].hit;
 #define END_TIMED_BLOCK_COUNTED(ID, count) debugCounters[DebugCycleCounter_##ID].cycleCount += (__rdtsc() - startCycleCountCounted##ID) ; debugCounters[DebugCycleCounter_##ID].hit += count;
 
-#define WriteMode 0
 #define DEBUG_MODE 1
 
 #if 0
@@ -43,7 +37,6 @@
 	}\
 	if(arg)
 
-//static PushArray<bool> onOffBools = PushArray<bool>(1000);
 
 struct timed_block
 {
@@ -74,13 +67,6 @@ enum
 };
 
 
-void UpdateDebugCamera(Input *input, float camZ);
-void DebugZeroCamera();
-float debugXRot();
-float debugZRot();
-float debugZOffset();
-v2 debugPlaneOffset();
-
 typedef struct DebugCycleCounter
 {
 	u64 cycleCount;
@@ -89,8 +75,12 @@ typedef struct DebugCycleCounter
 
 extern DebugCycleCounter debugCounters[DebugCycleCounter_Count];
 #define MAX_DEBUG_BUTTON_COUNT 100
-extern PushArray<Button> *debugButtons;
 
+
+u32 GetDebugCounterIndex(char *fileName, int lineNumber, char *function, float camZ)
+{
+	return 0;
+}
 
 
 #endif

@@ -1,9 +1,6 @@
 #ifndef RR_SIMD
 #define RR_SIMD
 
-#include "buffers.h"
-#include "Math.h"
-
 
 typedef __m128 f32Wide;
 typedef __m128i u32Wide;

@@ -1,7 +1,6 @@
 #include "AnimationCreator.h"
 
-#include "Arena.h"
-
+#if 0
 enum
 {
 	AnimationCreator_Play,
@@ -403,7 +402,7 @@ void SaveAnimation(AnimationFrameList *animation, String name)
 
 	u8 *memory = new u8[sizeOfAnimation];
 
-	File file = File(memory, sizeOfAnimation);
+	File file = CreateFile(memory, sizeOfAnimation);
 
 	u8 *it = memory;
 
@@ -449,17 +448,17 @@ void SaveAnimation(AnimationFrameList *animation, String name)
 			it += sizeof(float);
 		}
 	}
-	file.Write(ToZeroTerminated(workingArena, name));
-	file.Free();
+	WriteEntireFile(ToZeroTerminated(workingArena, name), file);
+	FreeFile(file);
 }
 
 AnimationFrameList *LoadAnimation(String name)
 {
 	String inp = name;
 
-	File file = File(ToZeroTerminated(workingArena, name));
+	File file = LoadFile(ToZeroTerminated(workingArena, name));
 
-	u8 *it = (u8 *)file.GetMemory();
+	u8 *it = (u8 *)file.memory;
 
 	u32 amountOfAnimationFrames = *(u32 *)it;
 	it += sizeof(u32);
@@ -515,7 +514,7 @@ AnimationFrameList *LoadAnimation(String name)
 			it += sizeof(float);
 		}
 	}
-	file.Free();
+	FreeFile(file);
 	return ret;
 }
 
@@ -1710,3 +1709,4 @@ void AnimationCreatorUpdateAndRender(RenderCommands *renderComands, Input *input
 
 
 }
+#endif

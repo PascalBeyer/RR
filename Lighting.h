@@ -1,18 +1,6 @@
 #ifndef RR_Lighting
 #define RR_Lighting
 
-#include "Renderer.h"
-#include "Input.h"
-#include "input.h"
-#include "Debug.h"
-#include "LinearAlgebra.h"
-#include "Bitmap.h"
-#include "Random.h"
-#include "Arena.h"
-#include "SIMD.h"
-#include "KdTree.h"
-
-
 //todo: optimize kd-tree build
 //		gpu stuff
 //		gradients
@@ -48,11 +36,11 @@ static u32 Area(ClipRect clipRect)
 
 
 //Globals
-static const u32 imageSizeFactor = 80; // 80 = 1280 by 720 (actual size)
-static const u32 imageWidth = imageSizeFactor * 16;
-static const u32 imageHeight = imageSizeFactor * 9;
-static Bitmap bitmap;
-static u32 image[imageWidth][imageHeight];
+static const u32 globalLightingImageSizeFactor = 80; // 80 = 1280 by 720 (actual size)
+static const u32 globalLightingImageWidth = globalLightingImageSizeFactor * 16;
+static const u32 globalLightingImageHeight = globalLightingImageSizeFactor * 9;
+static Bitmap globalLightingBitmap;
+static u32 image[globalLightingImageWidth][globalLightingImageHeight];
 
 static u32 iteration = 0;
 
@@ -1477,14 +1465,14 @@ static RayCastResult CastRaysCache(Bitmap bitmap, ClipRect clipRect, World world
 	//RandomSeries entropy = { 123 };
 	v3 lightSource = world.lightSource;
 
-	f32 aspectRatio = ((float)imageWidth / (float)imageHeight);
+	f32 aspectRatio = ((float)globalLightingImageWidth / (float)globalLightingImageHeight);
 
 	v3 camP = (camera.pos);
 	v3 camB1 = (camera.basis.d1);
 	v3 camB2 = (camera.basis.d2);
 	v3 camB3 = (camera.basis.d3);
 
-	m4x4 proj = Projection(((float)imageWidth / (float)imageHeight), 1.0f) * CameraTransform(camera.basis.d1, camera.basis.d2, camera.basis.d3, camera.pos);
+	m4x4 proj = Projection(((float)globalLightingImageWidth / (float)globalLightingImageHeight), 1.0f) * CameraTransform(camera.basis.d1, camera.basis.d2, camera.basis.d3, camera.pos);
 	m4x4 inv = InvOrId(proj);
 	m4x4 id = proj * inv;
 	v3 p1 = inv * V3(-1, -1, -1);
@@ -1509,8 +1497,8 @@ static RayCastResult CastRaysCache(Bitmap bitmap, ClipRect clipRect, World world
 			f32 xAdj = (f32)w;// + RandomPercent(&entropy);
 			f32 yAdj = (f32)h;// + RandomPercent(&entropy);
 
-			v3 xOff = (xAdj / (f32)imageWidth) * xVec;
-			v3 yOff = (yAdj / (f32)imageHeight) * yVec;
+			v3 xOff = (xAdj / (f32)globalLightingImageWidth) * xVec;
+			v3 yOff = (yAdj / (f32)globalLightingImageHeight) * yVec;
 
 			v3 rayDUN = cameraPlaneUL + xOff + yOff - camP;
 			v3 xyD = FastNormalize(rayDUN); //biased?
@@ -1592,14 +1580,14 @@ static RayCastResult CastRaysCacheWide(Bitmap bitmap, ClipRect clipRect, World w
 
 	v3Wide lightSource = Load(world.lightSource);
 
-	f32Wide aspectRatio = Load((float)imageWidth / (float)imageHeight);
+	f32Wide aspectRatio = Load((float)globalLightingImageWidth / (float)globalLightingImageHeight);
 
 	v3Wide camP = Load(camera.pos);
 	v3Wide camB1 = Load(camera.basis.d1);
 	v3Wide camB2 = Load(camera.basis.d2);
 	v3Wide camB3 = Load(camera.basis.d3);
 
-	m4x4 proj = Projection(((float)imageWidth / (float)imageHeight), 1.0f) * CameraTransform(camera.basis.d1, camera.basis.d2, camera.basis.d3, camera.pos);
+	m4x4 proj = Projection(((float)globalLightingImageWidth / (float)globalLightingImageHeight), 1.0f) * CameraTransform(camera.basis.d1, camera.basis.d2, camera.basis.d3, camera.pos);
 	m4x4 inv = InvOrId(proj);
 	m4x4 id = proj * inv;
 	v3 p1 = inv * V3(-1, -1, -1);
@@ -1625,8 +1613,8 @@ static RayCastResult CastRaysCacheWide(Bitmap bitmap, ClipRect clipRect, World w
 			f32Wide xAdj = wWide + RandomPercentWide(&entropy);
 			f32Wide yAdj = hWide + RandomPercentWide(&entropy);
 
-			v3Wide xOff = (xAdj / (f32)imageWidth) * xVec;
-			v3Wide yOff = (yAdj / (f32)imageHeight) * yVec;
+			v3Wide xOff = (xAdj / (f32)globalLightingImageWidth) * xVec;
+			v3Wide yOff = (yAdj / (f32)globalLightingImageHeight) * yVec;
 
 			v3Wide rayDUN = cameraPlaneUL + xOff + yOff - camP;
 			v3Wide xyD = FastNormalize(rayDUN); //biased?
@@ -1824,7 +1812,7 @@ static void InitLighting(World *world)
 	//bitmap.height = imageHeight;
 	//bitmap.width = imageWidth;
 	//bitmap.pixels = image[0];
-	bitmap = CreateBitmap(image[0], imageWidth, imageHeight);
+	globalLightingBitmap = CreateBitmap(image[0], globalLightingImageWidth, globalLightingImageHeight);
 
 	TriangleArray t = world->triangles;
 	u32 amountOfTriangles = t.amount;
@@ -1851,9 +1839,9 @@ static bool lightingInitialized = false;
 
 static void PushLightingImage(RenderGroup *rg)
 {
-	PushOrthogonalTransform(rg);
-	PushUpdateTexture(rg, bitmap);
-	PushBitmap(rg, V2(), bitmap);
+	PushRenderSetUp(rg, {}, V3(), Setup_Orthogonal);
+	UpdateGPUTexture(globalLightingBitmap);
+	PushBitmap(rg, V2(), globalLightingBitmap);
 }
 
 
@@ -1867,15 +1855,15 @@ static void PushLightingSolution(RenderGroup *rg, World *world)
 	ClipRect wholeScreen;
 	wholeScreen.xMin = 0;
 	wholeScreen.yMin = 0;
-	wholeScreen.xMax = imageWidth;
-	wholeScreen.yMax = imageHeight;
+	wholeScreen.xMax = globalLightingImageWidth;
+	wholeScreen.yMax = globalLightingImageHeight;
 
-	CastRaysCache(bitmap, wholeScreen, *world);
+	CastRaysCache(globalLightingBitmap, wholeScreen, *world);
 	//CastRaysCacheWide(bitmap, wholeScreen, *world);
 
-	PushOrthogonalTransform(rg);
-	PushUpdateTexture(rg, bitmap);
-	PushBitmap(rg, V2(), bitmap);
+	PushRenderSetUp(rg, {}, V3(), Setup_Orthogonal);
+	UpdateGPUTexture(globalLightingBitmap);
+	PushBitmap(rg, V2(), globalLightingBitmap);
 }
 
 #if 0

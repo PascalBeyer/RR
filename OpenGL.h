@@ -1,9 +1,6 @@
 #ifndef RR_OPENGL
 #define RR_OPENGL
 
-#include "Math.h"
-#include "Renderer.h"
-
 #define GL_ARRAY_BUFFER                   0x8892
 
 #define GL_CLAMP_TO_EDGE                  0x812F
@@ -542,7 +539,7 @@ void SetUpBasicProgram()
 	{
 		float visibility = 1.0f;
 		vec3 shadowCoord2 = shadowCoord.xyz / shadowCoord.w;
-		vec3 shadowCoord3 = 0.5f * shadowCoord2 + vec3(0.5);
+		vec3 shadowCoord3 = shadowCoord2;
 		
 		float distanceLightNearestGeometry = texture2D(depthTexture, shadowCoord3.xy).r;
 
@@ -661,9 +658,11 @@ static void OpenGLDebugCallback(GLenum source, GLenum type, GLuint id, GLenum se
 	}
 }
 
-static void BeginUseProgram(OpenGLProgram prog, bool textured = false)
+static void BeginUseProgram(OpenGLProgram prog, RenderSetup setup, bool textured = false)
 {
 	glUseProgram(prog.program);
+
+	glUniformMatrix4fv(prog.transform, 1, GL_TRUE, setup.transform.a[0]);
 
 	glEnableVertexAttribArray(prog.vertP);
 	glEnableVertexAttribArray(prog.vertC);
@@ -790,14 +789,38 @@ void OpenGLInit(HGLRC modernContext)
 	Assert(glGetError() == GL_NO_ERROR);
 }
 
+u32 HeaderSize(RenderGroupEntryHeader *header)
+{
+	switch (header->type)
+	{
+	case RenderGroup_EntryClear:
+	{
+		return sizeof(EntryClear);
+	}break;
+	case RenderGroup_EntryLines:
+	{
+		return sizeof(EntryColoredVertices);
+	}break;
+	case RenderGroup_EntryTexturedQuads:
+	{
+		return sizeof(EntryTexturedQuads);
+	}break;
+	case RenderGroup_EntryTriangles:
+	{
+		return sizeof(EntryColoredVertices);
+	}break;
+	default:
+	{
+		Die;
+		return 1;
+	}break;
+	}
+}
+
 void RenderIntoShadowMap(RenderCommands *rg)
 {
 	glDisable(GL_CULL_FACE);
 	//glCullFace(GL_FRONT);
-
-	glUseProgram(shadow.program);
-	glUniformMatrix4fv(shadow.transform, 1, GL_TRUE, &shadowMat.a[0][0]);
-	glUseProgram(0);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, renderFrameBuffer);
 	
@@ -809,34 +832,30 @@ void RenderIntoShadowMap(RenderCommands *rg)
 	{
 
 		RenderGroupEntryHeader *header = (RenderGroupEntryHeader *)(rg->pushBufferBase + pBufferIt);
+		RenderSetup setup = header->setup;
+		if (!(setup.flag & Setup_ShadowMapping))
+		{
+			pBufferIt += HeaderSize(header);
+			continue;
+		}
+
 		switch (header->type)
 		{
-		case RenderGroup_EntryTransform:
-		{
-			EntryTransform *transformHeader = (EntryTransform *)header;
-			
-			GLuint error = glGetError();
-			Assert(!error);
-
-			pBufferIt += sizeof(*transformHeader);
-		}break;
 		case RenderGroup_EntryTriangles:
 		{
 			EntryColoredVertices *trianglesHeader = (EntryColoredVertices *)header;
+			
+			BeginUseProgram(shadow, trianglesHeader->header.setup);
 
-			BeginUseProgram(shadow);
+			glUniformMatrix4fv(shadow.transform, 1, GL_TRUE, &shadowMat.a[0][0]);
 
 			glBufferData(GL_ARRAY_BUFFER, trianglesHeader->vertexCount * sizeof(ColoredVertex), trianglesHeader->data, GL_STREAM_COPY);
 			glDrawArrays(GL_TRIANGLES, 0, trianglesHeader->vertexCount);
 
 			EndUseProgram(shadow);
-
+			
+			
 			pBufferIt += sizeof(*trianglesHeader);
-		}break;
-		case RenderGroup_EntryUpdateTexture:
-		{
-			EntryUpdateTexture *updateHeader = (EntryUpdateTexture *)header;
-			pBufferIt += sizeof(*updateHeader);
 		}break;
 		case RenderGroup_EntryTexturedQuads:
 		{
@@ -894,9 +913,18 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg)
 			{ 0.0f, 0.0f, 0.0f, 1.0f }
 		}
 	};
-	m4x4 biasedShadowMat = /*biasMatrix * */ shadowMat;
+	m4x4 zero =
+	{
+		{
+			{ 0.0f, 0.0f, 0.0f, 0.0f },
+			{ 0.0f, 0.0f, 0.0f, 0.0f },
+			{ 0.0f, 0.0f, 0.0f, 0.0f },
+			{ 0.0f, 0.0f, 0.0f, 0.0f }
+		}
+	};
+	m4x4 biasedShadowMat = biasMatrix *  shadowMat;
 
-	glUniformMatrix4fv(basicShadowTransform, 1, GL_TRUE, &biasedShadowMat.a[0][0]);
+	
 
 	
 	glUseProgram(0);
@@ -920,48 +948,20 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg)
 	//glCullFace(GL_BACK);
 	//glDisable(GL_CULL_FACE);
 
-#if 1
 	for (u32 pBufferIt = 0; pBufferIt < rg->pushBufferSize;)
 	{
 
 		RenderGroupEntryHeader *header = (RenderGroupEntryHeader *)(rg->pushBufferBase + pBufferIt);
+		RenderSetup setup = header->setup;
+
 		switch (header->type)
 		{
-		//todo move this into BeginUseProgram
-		case RenderGroup_EntryTransform:
-		{
-			EntryTransform *transformHeader = (EntryTransform *)header;
-			
-			projectionMat = transformHeader->m;
-
-			glUseProgram(zBias.program);
-			glUniformMatrix4fv(zBias.transform, 1, GL_TRUE, projectionMat.a[0]);
-			GLint texInt = 0;
-			glUniform1iv(zBias.sampler, 1, &texInt);
-
-			glUseProgram(basic.program);
-			glUniformMatrix4fv(basic.transform, 1, GL_TRUE, projectionMat.a[0]);
-			//glUniformMatrix4fv(basicTransformID, 1, GL_TRUE, shadowMat.a[0]);
-			glUseProgram(0);
-
-			GLuint error = glGetError();
-			Assert(!error);
-
-			pBufferIt += sizeof(*transformHeader);
-		}break;
-		//todo: make this do the game
-		case RenderGroup_EntryUpdateTexture:
-		{
-			EntryUpdateTexture *updateHeader = (EntryUpdateTexture *)header;
-			OpenGLUpdateBitmap(updateHeader->bitmap);
-			pBufferIt += sizeof(*updateHeader);
-		}break;
 		case RenderGroup_EntryTexturedQuads:
 		{
 			EntryTexturedQuads *quadHeader = (EntryTexturedQuads *)header;
 			Bitmap *bitmaps = quadHeader->quadBitmaps;
 
-			BeginUseProgram(zBias, true);
+			BeginUseProgram(zBias, quadHeader->header.setup, true);
 			glBufferData(GL_ARRAY_BUFFER, quadHeader->vertexCount * sizeof(TexturedVertex), quadHeader->data, GL_STREAM_DRAW);
 
 			for (u32 vertIndex = 0; vertIndex < quadHeader->vertexCount; vertIndex += 4)
@@ -980,7 +980,17 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg)
 		{
 			EntryColoredVertices *trianglesHeader = (EntryColoredVertices *)header;
 
-			BeginUseProgram(basic);
+			BeginUseProgram(basic, trianglesHeader->header.setup);
+
+			if (setup.flag & Setup_ShadowMapping)
+			{
+				glUniformMatrix4fv(basicShadowTransform, 1, GL_TRUE, &biasedShadowMat.a[0][0]);
+			}
+			else
+			{
+				glUniformMatrix4fv(basicShadowTransform, 1, GL_TRUE, &zero.a[0][0]);
+			}
+				
 
 			glBufferData(GL_ARRAY_BUFFER, trianglesHeader->vertexCount * sizeof(ColoredVertex), trianglesHeader->data, GL_STREAM_COPY);
 			glDrawArrays(GL_TRIANGLES, 0, trianglesHeader->vertexCount);
@@ -1002,7 +1012,7 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg)
 		{
 			EntryColoredVertices *lineHeader = (EntryColoredVertices*)header;
 
-			BeginUseProgram(basic);
+			BeginUseProgram(basic, lineHeader->header.setup);
 			glBufferData(GL_ARRAY_BUFFER, lineHeader->vertexCount * sizeof(ColoredVertex), lineHeader->data, GL_STREAM_COPY);
 			glDrawArrays(GL_LINES, 0, lineHeader->vertexCount);
 			EndUseProgram(basic);
@@ -1018,30 +1028,6 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg)
 		}break;
 		}
 	}
-#endif
-	//glUseProgram(basicZBiasProgram);
-	//glBindTexture(GL_TEXTURE_2D, renderTexture);
-	//u32 size = rg->height;
-	//OpenGLRect3D(V3(0, 0, 0), V3(0, rg->height, 0), V3(rg->width, 0, 0), V3(rg->width, rg->height, 0), V4(1, 1, 1, 1), V4(1, 1, 1, 1), V4(1,1,1, 1), V4(1, 1, 1, 1)) ;
-	//
-	//glUseProgram(0);
-
-	err12or = glGetError();
-	Assert(!err12or);
-	//glTexImage2DMultisample();
-#if 0
-	u32 size = rg->height;
-	glBindFramebuffer(GL_READ_FRAMEBUFFER, renderFrameBuffer);
-	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-
-	glBlitFramebuffer(0, 0, size, size, 0, 0, size, size, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
-
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-
-	err12or = glGetError();
-	Assert(!err12or);
-#endif
 
 	//flush
 	rg->pushBufferSize = 0;

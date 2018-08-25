@@ -1,9 +1,6 @@
 #ifndef RR_COLOR
 #define RR_COLOR
 
-#include "BasicTypes.h"
-
-
 static u32 ColorspaceToggle(u32 color)
 
 {

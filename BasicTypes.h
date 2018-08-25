@@ -220,6 +220,14 @@ static v2& operator/=(v2 &a, float f)
 	return a;
 }
 
+static v2 operator*(v2 a, v2 b)
+{
+	v2 ret;
+	ret.x = a.x * b.x;
+	ret.y = a.y * b.y;
+	return ret;
+}
+
 static bool operator==(v2 a, v2 b)
 {
 	return (

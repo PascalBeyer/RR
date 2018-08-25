@@ -3,13 +3,20 @@
 
 #define PI 3.14159265359f
 
-#include "buffers.h"
 #include <math.h>
+
+#include "BasicTypes.h"
 
 struct Interval
 {
 	f32 min;
 	f32 max;
+};
+
+struct integerPoint
+{
+	int x;
+	int y;
 };
 
 static Interval InvertedInfinityInterval()
@@ -21,13 +28,11 @@ static Interval InvertedInfinityInterval()
 }
 
 
-struct integerPoint
-{
-	int x;
-	int y;
-};
 
-int Round(float f);
+static int Round(float f)
+{
+	return (int)(f - 0.5f);
+}
 
 static float Max(float a, float b)
 {
@@ -42,6 +47,15 @@ static float Min(float a, float b)
 static f32 Clamp(f32 val, f32 min, f32 max)
 {
 	return Min(Max(val, min), max);
+}
+
+static float MapRangeToRangeCapped(float f, float minIn, float maxIn, float minOut, float maxOut)
+{
+	if (maxIn == minIn)
+	{
+		return 0.0f;
+	}
+	return (maxOut - minOut) / (maxIn - minIn) * (Clamp(f, minIn, maxIn) - minIn) + minOut;
 }
 
 static float Cos(float a)
@@ -98,11 +112,6 @@ static u32 Max(u32 u1, u32 u2)
 {
 	return (u32)_mm_cvtsi128_si32(_mm_max_epi32(_mm_set1_epi32(u1), _mm_set1_epi32(u2)));
 }
-
-float MapRangeToRangeCapped(float f, float minIn, float maxIn, float minOut, float maxOut);
-float CapToRange(float in, float capMin, float capMax);
-
-
 
 static float Norm(v2 a)
 {

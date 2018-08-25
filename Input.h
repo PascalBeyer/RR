@@ -1,7 +1,6 @@
 #ifndef RR_INPUT
 #define RR_INPUT
 
-#include "buffers.h"
 
 struct Input
 {
@@ -11,9 +10,11 @@ struct Input
 	v2 mouseDelta;
 	v2 oldMousePos;
 	v2 mouseZeroToOne;
+
+	f32 secondsPerFrame;
 };
 
-static void UpdateInput(Input *input, MouseInput mouseInput, KeybordInput keybordInput, int windowWidth, int windowHeight)
+static void UpdateInput(Input *input, MouseInput mouseInput, KeybordInput keybordInput, int windowWidth, int windowHeight, f32 targetSecondsPerFrame)
 {
 	v2 mousePos = V2((float)mouseInput.x, (float)mouseInput.y);
 	input->oldMousePos = input->mousePos;
@@ -22,7 +23,7 @@ static void UpdateInput(Input *input, MouseInput mouseInput, KeybordInput keybor
 	input->mouse = mouseInput;
 	input->mousePos = mousePos;
 	input->mouseZeroToOne = V2((float)mouseInput.x / (float)windowWidth, 1.0f - (float)mouseInput.y / (float) windowHeight);
-
+	input->secondsPerFrame = targetSecondsPerFrame;
 }
 
 static char GetPressedChar(Input *input)

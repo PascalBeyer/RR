@@ -28,11 +28,6 @@
 #define IStoreInt(a, b) _mm_storeu_si128((__m128i *)a, b)
 #define IRootF(a) _mm_sqrt_ps(a)
 
-
-
-#include "BasicTypes.h"
-#include <math.h>
-
 static float SquareRoot(float f)
 {
 	return sqrtf(f);
