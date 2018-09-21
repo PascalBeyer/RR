@@ -19,6 +19,7 @@ extern Arena *workingArena;
 #define PushArray(arena, type, size) (type *)PushStruct_(arena, size * sizeof(type))
 #define PushZeroArray(arena, type, size) (type *)PushZeroStruct_(arena, size * sizeof(type))
 
+//todo : make push array respect the array things i am doing?
 
 static u8 *PushStruct_(Arena *arena, u32 sizeOfType)
 {
@@ -54,5 +55,20 @@ static Arena *InitArena(void *memory, u32 capacity)
 
 	return ret;
 }
+
+
+//todo  make own memcpy, fast one at that
+#if 0
+static void memcpy(void *source, void *dest, u32 numberOfBytes)
+{
+	u8 *destu8 = (u8 *)dest;
+	u8 *sourceu8 = (u8 *)source;
+
+	for (u32 i = 0; i < numberOfBytes; i++)
+	{
+		*destu8++ = *sourceu8++;
+	}
+}
+#endif
 #endif // !RR_Arena
 

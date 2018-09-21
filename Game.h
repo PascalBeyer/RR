@@ -1,6 +1,9 @@
 #ifndef RR_GAME
 #define RR_GAME
 
+
+
+
 #include "BasicTypes.h"
 
 #include "buffers.h"
@@ -24,6 +27,7 @@
 #include "Fonts.h"
 #include "World.h"
 
+#include "ConsoleHeader.h"
 #include "Screen.h"
 #include "Animation.h"
 #include "Button.h"
@@ -32,7 +36,6 @@
 
 #include "AssetHandler.h"
 
-#include "UI.h"
 #include "Debug.h"
 #include "SoundMixer.h"
 #include "Renderer.h"
@@ -47,6 +50,7 @@
 
 #include "MovementHandler.h"
 
+#include "ConsoleCommands.h"
 #include "Console.h"
 
 struct Partical
@@ -72,12 +76,68 @@ struct GameState
 	
 	Font font;
 
-	Console console;
-
-	UI *debugUI;
+	DEBUGKeyTracker keyTracker;
 };
 
 #define pi32 3.14159265359f
+
+//todo : get a whole debug thing working
+static bool viewLighting = false;
+
+static void UpdateDEBUGKeyTracker(DEBUGKeyTracker *tracker, KeyStateMessage message)
+{
+	switch (message.key)
+	{
+	case Key_a:
+	{
+		tracker->aDown = message.flag & KeyState_Down;
+	}break;
+	case Key_s:
+	{
+		tracker->sDown = message.flag & KeyState_Down;
+	}break;
+	case Key_d:
+	{
+		tracker->dDown = message.flag & KeyState_Down;
+	}break;
+	case Key_w:
+	{
+		tracker->wDown = message.flag & KeyState_Down;
+	}break;
+	case Key_space:
+	{
+		tracker->spaceDown = message.flag & KeyState_Down;
+	}break;
+	}
+}
+
+static void HandleInput(GameState *gameState, Input input)
+{
+	KeyMessageBuffer buffer = input.buffer;
+	for (u32 i = 0; i < buffer.amountOfMessages; i++)
+	{
+		KeyStateMessage message = buffer.messages[i];
+		ConsoleHandleKeyMessage(message, &input);
+
+		if (ConsoleOpen())
+		{
+			continue;
+		}
+		
+		UpdateDEBUGKeyTracker(&gameState->keyTracker, message);
+
+		if (message.key == Key_l && message.flag == KeyState_PressedThisFrame)
+		{
+			viewLighting = !viewLighting;
+		}
+		if (message.key == Key_o && message.flag == KeyState_PressedThisFrame)
+		{
+			viewLighting = !viewLighting;
+			CalculateLightingSolution(gameState->world);
+		}
+	}
+
+}
 
 static GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHandler)
 {
@@ -90,12 +150,10 @@ static GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHa
 	int tileMapWidth = 250;
 
 	//tileMap = TileMap("map.tm");
-
-	ret.console.history = PushArray(constantArena, String, 300);
-	ret.console.historyMaxLength = 300;
-
 	ret.font = LoadFont("consola.ttf");
 
+	InitConsole(ret.font);
+	
 	ret.tileMap = PushStruct(constantArena, TileMap);
 	*ret.tileMap = InitTileMap(tileMapWidth, tileMapHeight, newTileSize, constantArena);
 	ret.player = PushStruct(constantArena, Player);
@@ -166,12 +224,10 @@ static GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHa
 	ret.player->entitySelection.PushBack(unit3);
 	HandleRightClick(ret.player, ret.entities, V2(25, 25), *ret.tileMap);
 
-	ret.debugUI = new UI();
-
 	return ret;
 }
 
-static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderCommands, Input *input, SoundBuffer *soundBuffer)
+static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderCommands, Input input, SoundBuffer *soundBuffer)
 {
 	TileMap *tileMap = gameState->tileMap;
 	Player *player = gameState->player;
@@ -179,10 +235,11 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 	UnitSelection *units = gameState->units;
 	Screen *screen = gameState->screen;
 
-	BEGIN_TIMED_BLOCK(GameUpdateAndRender);
 	u16 tileSize = tileMap->tileSize;
 
 	//Update(*gameState->player, input, *tileMap, gameState->entities);
+
+	HandleInput(gameState, input);
 
 	RenderGroup renderGroup = InitRenderGroup(gameState->assetHandler, renderCommands);
 	RenderGroup *rg = &renderGroup;
@@ -197,7 +254,7 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 
 	static bool debugCam = false;
 
-
+#if 0
 	if (input->keybord.z.pressedThisFrame)
 	{
 
@@ -210,11 +267,13 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 			debugCam = !debugCam;
 		}
 	}
+#endif 
 
 	Camera *cam = debugCam ? &world->debugCamera : &world->camera;
 
-	UpdateCamGodMode(input, cam);
-	PushRenderSetUp(rg, *cam, world->lightSource, (Setup_Projective | Setup_ShadowMapping));
+	UpdateCamGodMode(&input, &gameState->world->camera, gameState->keyTracker);
+
+	PushRenderSetup(rg, *cam, world->lightSource, (Setup_Projective | Setup_ShadowMapping));
 
 	PushClear(rg, V4(1.0f, 0.1f, 0.1f, 0.1f));
 
@@ -320,22 +379,10 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 	}
 #endif
 
-	static bool viewLighting = false;
-	if (input->keybord.l.pressedThisFrame || input->keybord.o.pressedThisFrame)
-	{
-		viewLighting = !viewLighting;
-	}
+	
 	if (viewLighting)
 	{
-		if (input->keybord.o.pressedThisFrame)
-		{
-			PushLightingSolution(rg, gameState->world);
-		}
-		else
-		{
-			PushLightingImage(rg);
-		}
-
+		PushLightingImage(rg);	
 	}
 	else
 	{
@@ -437,15 +484,18 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 		//Die; // project marking pos here
 	}
 #endif
-
-	PushRenderSetUp(rg, *cam, world->lightSource, Setup_ZeroToOne);
 	//PushRectangle(rg, player->markingRect, 0.0f); todo : redo this.
 
-	UpdateConsole(&gameState->console, input);
-	DrawConsole(rg, gameState->console);
+	PushRenderSetup(rg, *cam, world->lightSource, Setup_ZeroToOne);
+
+	//PushTexturedRect(rg, V2(0.1f, 0.1f), 0.5f, 0.5f, gameState->font.bitmap);
+	//PushString(rg, V2(0.1f, 0.5f), CreateString("asd"), 0.1f, gameState->font);
+
+	
+	UpdateConsole(input);
+	DrawConsole(rg);
 
 	gameState->soundMixer->ToOutput(soundBuffer);
 
-	END_TIMED_BLOCK(GameUpdateAndRender)
 }
 #endif

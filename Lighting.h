@@ -1839,13 +1839,13 @@ static bool lightingInitialized = false;
 
 static void PushLightingImage(RenderGroup *rg)
 {
-	PushRenderSetUp(rg, {}, V3(), Setup_Orthogonal);
+	PushRenderSetup(rg, {}, V3(), Setup_Orthogonal);
 	UpdateGPUTexture(globalLightingBitmap);
 	PushBitmap(rg, V2(), globalLightingBitmap);
 }
 
 
-static void PushLightingSolution(RenderGroup *rg, World *world)
+static void CalculateLightingSolution(World *world)
 {
 	if (!lightingInitialized)
 	{
@@ -1861,9 +1861,6 @@ static void PushLightingSolution(RenderGroup *rg, World *world)
 	CastRaysCache(globalLightingBitmap, wholeScreen, *world);
 	//CastRaysCacheWide(bitmap, wholeScreen, *world);
 
-	PushRenderSetUp(rg, {}, V3(), Setup_Orthogonal);
-	UpdateGPUTexture(globalLightingBitmap);
-	PushBitmap(rg, V2(), globalLightingBitmap);
 }
 
 #if 0

@@ -1,6 +1,8 @@
 #ifndef RR_UNIT
 #define RR_UNIT
 
+#include <vector>
+
 class Unit : public Entity
 {
 public:

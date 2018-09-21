@@ -36,6 +36,7 @@ static Font CreateFontFromSTB(u32 width, u32 height, u8 *pixels, u32 amountOfCha
 		for (u32 w = 0; w < width; w++)
 		{
 			u8 source = *inp++;
+			//u32 color = 0xFFFFFFFF;
 			u32 color = source << 24 | source << 16 | source << 8 | source << 0;
 			*out++ = color;
 		}
@@ -70,19 +71,43 @@ static Font LoadFont(char *fileName)
 
 	File file = LoadFile(fileName);
 
-	u32 width = 512;
-	u32 height = 512;
+	u32 width = 1024;
+	u32 height = 1024;
 	u8 *pixels = PushArray(workingArena, u8, width * height);
 	
 	u32 amountOfChars = 255;
-	f32 charHeight = 32.0f;
-	stbtt_bakedchar *charData = PushArray(workingArena, stbtt_bakedchar, amountOfChars);// you allocate this, it's num_chars long
-	stbtt_BakeFontBitmap((u8 *)file.memory, 0, charHeight, pixels, 512, 512, 0, amountOfChars, charData);
+	f32 charHeight = 64.0f;
+	stbtt_bakedchar *charData = PushArray(workingArena, stbtt_bakedchar, amountOfChars);
+	stbtt_BakeFontBitmap((u8 *)file.memory, 0, charHeight, pixels, width, height, 0, amountOfChars, charData );
 
 	FreeFile(file);
 
 	return CreateFontFromSTB(width, height, pixels, amountOfChars, charHeight, charData);
 }
 
+static f32 GetActualStringLength(String string, f32 fontSize, Font font)
+{
+	f32 ret = 0.0f;
+	float fScale = fontSize / (f32)font.charHeight;
+
+	for (u32 i = 0; i < string.length; i++)
+	{
+		if (string[i] < font.amountOfChars)
+		{
+			CharData data = font.charData[string[i]];
+
+			f32 scaledWidth = fScale * (f32)data.width;
+			float actualFloatWidth = data.xAdvance * fScale;
+			ret += actualFloatWidth;
+
+		}
+		else
+		{
+			Assert(!"Not handled font symbol");
+		}
+	}
+
+	return ret;
+}
 
 #endif

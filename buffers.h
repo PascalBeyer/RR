@@ -76,58 +76,6 @@ struct ImageBuffer
 	int bytesPerPixel;
 };
 
-struct Key
-{
-	bool isDown;
-	bool pressedThisFrame;
-};
-
-enum KeyEnum
-{
-	Key_a, Key_b, Key_c, Key_d, Key_e,
-	Key_f, Key_g, Key_h, Key_i, Key_j,
-	Key_k, Key_l, Key_m, Key_n, Key_o,
-	Key_p, Key_q, Key_r, Key_s, Key_t,
-	Key_u, Key_v, Key_w, Key_x, Key_y,
-	Key_z,
-	Key_space,
-	Key_shift,
-
-	Key_count
-};
-
-
-struct KeybordInput
-{
-	static const unsigned int amountOfKeys = 28;
-	union
-	{
-		Key input[Key_count];
-		struct
-		{
-			Key a; Key b; Key c; Key d; Key e;
-			Key f; Key g; Key h; Key i; Key j; 
-			Key k; Key l; Key m; Key n; Key o;
-			Key p; Key q; Key r; Key s; Key t;
-			Key u; Key v; Key w; Key x; Key y;
-			Key z;
-			Key space;
-			Key shift;
-		};
-		
-	};
-};
-
-struct MouseInput
-{
-	long x;
-	long y;
-	bool leftButtonDown;
-	bool rightButtonDown;
-	bool leftButtonPressedThisFrame;
-	bool rightButtonPressedThisFrame;
-};
-
 struct SoundBuffer
 {
 	s16 toneVolume;

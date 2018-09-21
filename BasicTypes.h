@@ -9,6 +9,23 @@
 #define F32MIN MINF32
 #define MAXU32 ((u32)-1)
 
+#define DefineArray(type)		\
+struct type##Array				\
+{								\
+	type *data;					\
+	u32 amount;					\
+	type& operator[](u32 i)		\
+	{							\
+		return data[i];			\
+	}							\
+}; 
+
+//todo :not sure where to put all this. if it gets enought maybe own file?
+#define ArrayAdd(arena, arr, item) arena->current += sizeof(item); arr.data[arr.amount++] = item;
+
+#define For(arr) for(auto it = arr.data; it < arr.data + arr.amount; it++)
+//#define For(arr) for(u32 it = 0; it < arr.amount; it++)
+
 #include <stdint.h>
 
 typedef uint8_t u8;
@@ -19,7 +36,7 @@ typedef int8_t s8;
 typedef int16_t s16;
 typedef int32_t	s32;
 typedef int64_t	s64;
-typedef s32 bool32;
+typedef s32 b32;
 typedef float f32;
 typedef double f64;
 typedef uintptr_t uintptr;
@@ -87,7 +104,7 @@ static v2 V2()
 	ret.y = 0;
 	return ret;
 }
-
+#if 0
 static v2 V2(int i)
 {
 	v2 ret;
@@ -109,6 +126,7 @@ static v2 V2(float f)
 	ret.y = f;
 	return ret;
 }
+#endif
 
 static v2 V2(float x, float y)
 {

@@ -219,7 +219,7 @@ void Update(Player *player, Input *input, TileMap tileMap, EntitySelection *enti
 {
 	Die;
 	//UpdateMarkingRect(&player->markingRect, &player->entitySelection, input, entities);
-	if (input->mouse.rightButtonPressedThisFrame)
+//	if (input->mouse.rightButtonPressedThisFrame)
 	{
 		//HandleRightClick(player, entities, ScreenToInGame(cam, input->mousePos, ), tileMap);
 	}

@@ -128,7 +128,7 @@ static void ClearPushBuffer(RenderGroup *rg)
 	rg->commands->pushBufferSize = 0;
 }
 
-static void PushRenderSetUp(RenderGroup *rg, Camera camera, v3 lightPos, u32 flag)
+static void PushRenderSetup(RenderGroup *rg, Camera camera, v3 lightPos, u32 flag)
 {
 	RenderCommands *commands = rg->commands;
 
@@ -181,7 +181,7 @@ struct TexturedQuad
 
 static TexturedQuad GetTexturedQuadMemory(RenderGroup *rg)
 {
-	if (rg->currentQuads->vertexCount + 4 < rg->currentQuads->maxAmount)
+	if (rg->currentQuads->vertexCount + 4 <= rg->currentQuads->maxAmount)
 	{
 		Bitmap *bitmap = rg->currentQuads->quadBitmaps + (rg->currentQuads->vertexCount >> 2);
 		TexturedVertex *verts = rg->currentQuads->data + rg->currentQuads->vertexCount;
@@ -193,9 +193,17 @@ static TexturedQuad GetTexturedQuadMemory(RenderGroup *rg)
 	}
 	else
 	{
-		//todo: allocate new array, send the old one off
-		Die;
-		return {};
+		EntryTexturedQuads *quads = PushRenderEntry(EntryTexturedQuads);
+		quads->maxAmount = 1000;
+		quads->data = PushArray(frameArena, TexturedVertex, quads->maxAmount);
+		quads->vertexCount = 0;
+
+		rg->currentQuads = quads;
+
+		u32 bitmapAmount = quads->maxAmount / 4;
+		rg->currentQuads->quadBitmaps = PushArray(frameArena, Bitmap, bitmapAmount);
+
+		return GetTexturedQuadMemory(rg);
 	}
 }
 
@@ -569,10 +577,10 @@ static void PushBitmap(RenderGroup *rg, v2 pos, Bitmap bitmap, v4 color = V4(1, 
 	PushTexturedRect(rg, pos, (f32)bitmap.width, (f32)bitmap.height, bitmap, color, false, V2(0, 0), V2(1, 1));
 }
 
-static void PushString(RenderGroup *rg, v2 pos, unsigned char* string, u32 stringLength, u32 size, Font font, v4 color = V4(1, 1, 1, 1))
+static void PushString(RenderGroup *rg, v2 pos, unsigned char* string, u32 stringLength, f32 size, Font font, v4 color = V4(1, 1, 1, 1))
 {
 	f32 x = pos.x;
-	float fScale = (f32)size / (f32)font.charHeight;
+	float fScale = size / (f32)font.charHeight;
 
 	Assert(font.amountOfChars);
 
@@ -588,7 +596,7 @@ static void PushString(RenderGroup *rg, v2 pos, unsigned char* string, u32 strin
 			f32 y = pos.y + (f32)size - scaledHeight;
 
 			v2 writePos = V2(x, y);
-
+			
 			PushTexturedRect(rg, writePos, scaledWidth, scaledHeight, font.bitmap, color, true, data.minUV, data.maxUV);
 			float actualFloatWidth = data.xAdvance * fScale;
 			x += actualFloatWidth;
@@ -600,10 +608,14 @@ static void PushString(RenderGroup *rg, v2 pos, unsigned char* string, u32 strin
 		}
 	}
 }
-
-static void PushString(RenderGroup *rg, v2 pos, String string, u32 size, Font font)
+static void PushString(RenderGroup *rg, v2 pos, const char* string, f32 size, Font font, v4 color = V4(1, 1, 1, 1))
 {
-	PushString(rg, pos, string.string, string.length, size, font);
+	PushString(rg, pos, (unsigned char *)string, ArrayCount(string), size, font, color);
+}
+
+static void PushString(RenderGroup *rg, v2 pos, String string, f32 size, Font font, v4 color = V4(1, 1, 1, 1))
+{
+	PushString(rg, pos, string.data, string.length, size, font, color);
 }
 static void PushUnit(RenderGroup *rg, v3 pos, u32 facingDirection, u32 assetId, float radius)
 {

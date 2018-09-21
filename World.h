@@ -214,20 +214,23 @@ static RockCorner CreateRockCorner(v3 p, u32 colorSeed)
 	return ret;
 }
 
-static void UpdateCamFocus(Input *input, v3 focusPoint, Camera *camera, f32 aspectRatio)
+static void UpdateCamFocus(Input *input, v3 focusPoint, Camera *camera, f32 aspectRatio, DEBUGKeyTracker tracker)
 {
 	f32 mouseXRot = 0.0f;
 	f32 mouseZRot = 0.0f;
 	f32 camZoffSet = 0.0f;
 
-	if (input->keybord.u.isDown)
+	Die;
+	//todo : you know
+	if (tracker.aDown)
 	{
 		v2 mouseDelta = input->mouseDelta;
 		float rotSpeed = 0.001f * 3.141592f;
 		mouseZRot += mouseDelta.x * rotSpeed;
 		mouseXRot += mouseDelta.y * rotSpeed;
 	}
-	if (input->keybord.s.isDown)
+
+	if (tracker.sDown)
 	{
 		v2 mouseDelta = input->mouseDelta;
 		float zoomSpeed = 0.008f;
@@ -242,32 +245,34 @@ static void UpdateCamFocus(Input *input, v3 focusPoint, Camera *camera, f32 aspe
 	camera->basis = TransformBasis(camera->basis, rot);
 }
 
-static void UpdateCamGodMode(Input *input, Camera *cam)
+static void UpdateCamGodMode(Input *input, Camera *cam, DEBUGKeyTracker tracker)
 {
-	f32 moveSpeed = 1.0f;
-	if (input->keybord.shift.isDown)
+	f32 moveSpeed = 0.5f;
+#if 0
+	if (input->keybord[Key_shift].flag & KeyState_Down)
 	{
 		moveSpeed = 0.25f;
 	}
+#endif
 
-	if (input->keybord.w.isDown)
+	if (tracker.wDown)
 	{
 		cam->pos += cam->basis.d3 * moveSpeed;
 	}
-	if (input->keybord.s.isDown)
+	if (tracker.sDown)
 	{
 		cam->pos -= cam->basis.d3 * moveSpeed;
 	}
-	if (input->keybord.d.isDown)
+	if (tracker.dDown)
 	{
 		cam->pos += cam->basis.d1 * moveSpeed;
 	}
-	if (input->keybord.a.isDown)
+	if (tracker.aDown)
 	{
 		cam->pos -= cam->basis.d1 * moveSpeed;
 	}
 
-	if (input->keybord.space.isDown)
+	if (tracker.spaceDown)
 	{
 		float rotSpeed = 0.001f * 3.141592f;
 		m4x4 rot = XRotation(-rotSpeed * input->mouseDelta.y) * YRotation(rotSpeed * input->mouseDelta.x);
@@ -275,13 +280,10 @@ static void UpdateCamGodMode(Input *input, Camera *cam)
 		m4x4 cameraMat = CamBasisToMat(cam->basis);
 		m4x4 invCamMat = InvOrId(cameraMat);
 
-		m4x4 hopefullyId = cameraMat * invCamMat;
-
-		Vector3Basis basisTest1 = TransformBasis(v3StdBasis, cameraMat);
-		Vector3Basis basisTest2 = TransformBasis(cam->basis, invCamMat);
-
 		cam->basis = TransformBasis(cam->basis, cameraMat * rot * invCamMat);
 	}
+
+	
 }
 
 

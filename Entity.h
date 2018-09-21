@@ -1,6 +1,5 @@
 #ifndef RR_ENTITY
 #define RR_ENTITY
-#include <vector>
 
 class Entity
 {
@@ -13,7 +12,7 @@ public:
 	v2 GetBitmapPos();
 	float GetSize();
 
-	virtual void Update(std::vector<Entity*> *entitys);
+	//virtual void Update(std::vector<Entity*> *entitys);
 	virtual void Render(ImageBuffer *imageBuffer, Screen *screen);
 	float radius;
 	v2 pos;
@@ -49,9 +48,6 @@ float Entity::GetSize()
 	return radius;
 }
 
-void Entity::Update(std::vector<Entity*> *entitys)
-{
-}
 void Entity::Render(ImageBuffer *imageBuffer, Screen *screen)
 {
 	//sprite->Render(imageBuffer, screen);

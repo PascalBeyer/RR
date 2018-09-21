@@ -28,7 +28,6 @@ static Interval InvertedInfinityInterval()
 }
 
 
-
 static int Round(float f)
 {
 	return (int)(f - 0.5f);
@@ -92,6 +91,10 @@ static float Abs(float a)
 {
 	return (a > 0) * a - (a < 0) * a;
 }
+static u32 Abs(s32 a)
+{
+	return (a > 0) * a - (a < 0) * a;
+}
 static u32 AbsDiff(u32 a, u32 b)
 {
 	if (a > b)
@@ -103,6 +106,18 @@ static u32 AbsDiff(u32 a, u32 b)
 		return (b - a);
 	}
 }
+static f32 Dist(f32 a, f32 b)
+{
+	if (a > b)
+	{
+		return (a - b);
+	}
+	else
+	{
+		return (b - a);
+	}
+}
+
 static u32 Min(u32 u1, u32 u2)
 {
 	return (u32)_mm_cvtsi128_si32(_mm_min_epi32(_mm_set1_epi32(u1), _mm_set1_epi32(u2)));
@@ -111,6 +126,15 @@ static u32 Min(u32 u1, u32 u2)
 static u32 Max(u32 u1, u32 u2)
 {
 	return (u32)_mm_cvtsi128_si32(_mm_max_epi32(_mm_set1_epi32(u1), _mm_set1_epi32(u2)));
+}
+static s32 Max(s32 u1, s32 u2)
+{
+	return _mm_cvtsi128_si32(_mm_max_epi32(_mm_set1_epi32(u1), _mm_set1_epi32(u2)));
+}
+
+static u32 SaveSubstract(u32 from, u32 b)
+{
+	return (from > b) ? (from - b) : 0;
 }
 
 static float Norm(v2 a)

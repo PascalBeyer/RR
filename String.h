@@ -1,34 +1,53 @@
 #ifndef RR_STRING
 #define RR_STRING
 
+//todo : remove this
+#include <string.h>
+
+typedef unsigned char Char;
+
 struct String
 {
-	unsigned char *string;
+	Char *data;
 	u32 length;
-	char operator[](u32 i)
+	Char& operator[](u32 i)
 	{
-		return string[i];
+		return data[i];
 	}
 };
 
+DefineArray(String);
 
+static void CopyStringToString(String inp, String *out)
+{
+	memcpy(out->data, inp.data, inp.length * sizeof(Char));
+	out->length = inp.length;
+}
 
 static String CopyString(Arena *arena, String str)
 {
 	String ret;
-	ret.string = PushArray(arena, unsigned char, str.length);
+	ret.data = PushArray(arena, Char, str.length);
 	ret.length = str.length;
 	for (u32 i = 0; i < str.length; i++)
 	{
-		ret.string[i] = str.string[i];
+		ret.data[i] = str.data[i];
 	}
+	return ret;
+}
+
+static String CreateString(Char *string, u32 size)
+{
+	String ret;
+	ret.data = string;
+	ret.length = size;
 	return ret;
 }
 
 static String CreateString(char *string, u32 size)
 {
 	String ret;
-	ret.string = (unsigned char *)string;
+	ret.data = (Char *)string;
 	ret.length = size;
 	return ret;
 }
@@ -45,12 +64,17 @@ static u32 NullTerminatedStringLength(const char* c)
 
 static String CreateString(Arena *arena, char *string, u32 size)
 {
-	return CopyString(arena, CreateString(string, size));
+	return CopyString(arena, CreateString((Char *)string, size));
 }
 
 static String CreateString(char *nullTerminatedString)
 {
-	return CreateString(nullTerminatedString, NullTerminatedStringLength(nullTerminatedString));
+	return CreateString((Char *)nullTerminatedString, NullTerminatedStringLength(nullTerminatedString));
+}
+
+static String CreateString(Char *nullTerminatedString)
+{
+	return CreateString(nullTerminatedString, NullTerminatedStringLength((char *)nullTerminatedString));
 }
 
 static String CreateString(Arena *arena, char *nullTerminatedString)
@@ -61,14 +85,14 @@ static String CreateString(Arena *arena, char *nullTerminatedString)
 static String Append(Arena *arena, String a, String b)
 {
 	u32 size = a.length + b.length;
-	char *newString = PushArray(arena, char, a.length + b.length);
+	Char *newString = PushArray(arena, Char, a.length + b.length);
 	for (u32 i = 0; i < a.length; i++)
 	{
-		newString[i] = a.string[i];
+		newString[i] = a.data[i];
 	}
 	for (u32 i = 0; i < b.length; i++)
 	{
-		newString[a.length + i] = b.string[i];
+		newString[a.length + i] = b.data[i];
 	}
 	return CreateString(newString, size);
 }
@@ -92,13 +116,13 @@ static String CreateString(Arena *arena, int integer)
 	if (integer < 0)
 	{
 		index++;
-		ret.string = PushArray(arena, unsigned char, counter + 1);
+		ret.data = PushArray(arena, unsigned char, counter + 1);
 		ret.length = counter + 1;
-		ret.string[0] = '-';
+		ret.data[0] = '-';
 	}
 	else
 	{
-		ret.string = PushArray(arena, unsigned char, counter);
+		ret.data = PushArray(arena, unsigned char, counter);
 		ret.length = counter;
 	}
 	while (index != counter)
@@ -109,43 +133,43 @@ static String CreateString(Arena *arena, int integer)
 		{
 		case 0:
 		{
-			ret.string[index] = '0';
+			ret.data[index] = '0';
 		}break;
 		case 1:
 		{
-			ret.string[index] = '1';
+			ret.data[index] = '1';
 		}break;
 		case 2:
 		{
-			ret.string[index] = '2';
+			ret.data[index] = '2';
 		}break;
 		case 3:
 		{
-			ret.string[index] = '3';
+			ret.data[index] = '3';
 		}break;
 		case 4:
 		{
-			ret.string[index] = '4';
+			ret.data[index] = '4';
 		}break;
 		case 5:
 		{
-			ret.string[index] = '5';
+			ret.data[index] = '5';
 		}break;
 		case 6:
 		{
-			ret.string[index] = '6';
+			ret.data[index] = '6';
 		}break;
 		case 7:
 		{
-			ret.string[index] = '7';
+			ret.data[index] = '7';
 		}break;
 		case 8:
 		{
-			ret.string[index] = '8';
+			ret.data[index] = '8';
 		}break;
 		case 9:
 		{
-			ret.string[index] = '9';
+			ret.data[index] = '9';
 		}break;
 		}
 		index++;
@@ -203,10 +227,21 @@ static String CreateString(Arena *arena, u32 integer)
 static String CreateString(Arena *arena, char character)
 {
 	String ret;
-	ret.string = PushStruct(arena, unsigned char);
-	ret.string[0] = character;
+	ret.data = PushStruct(arena, unsigned char);
+	ret.data[0] = character;
 	ret.length = 1;
 	return ret;
+}
+
+static bool operator==(String a, String b)
+{
+	if (a.length != b.length) return false;
+
+	for (u32 i = 0; i < a.length; i++)
+	{
+		if (a[i] != b[i]) return false;
+	}
+	return true;
 }
 
 static String CreateString(Arena *arena, bool val)
@@ -221,12 +256,12 @@ static String CreateString(Arena *arena, bool val)
 	}
 }
 
-static char* ToZeroTerminated(Arena *arena, String string)
+static char* ToNullTerminated(Arena *arena, String string)
 {
 	char *ret = PushArray(arena, char, string.length);
 	for (u32 i = 0; i < string.length; i++)
 	{
-		ret[i] = string.string[i];
+		ret[i] = string.data[i];
 	}
 	ret[string.length] = '\0';
 	return ret;

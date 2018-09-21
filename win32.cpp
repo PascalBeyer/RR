@@ -1,6 +1,3 @@
-
-
-
 #undef CreateFile
 #undef PlaySound
 
@@ -12,9 +9,12 @@
 #include <Windows.h>
 #include <gl/gl.h>
 #include <dsound.h>
+
 #undef CreateFile
 #undef PlaySound
 
+//todo remove this (own sprintf)
+#include <stdio.h>
 #include "OpenGL.h"
 
 struct windowDimension
@@ -27,11 +27,12 @@ struct windowDimension
 #define DIRECT_SOUND_CREATE(name) HRESULT WINAPI name(LPCGUID pcGuidDevice, LPDIRECTSOUND *ppDS, LPUNKNOWN pUnkOuter)
 typedef DIRECT_SOUND_CREATE(direct_sound_create);
 
+
+// todo: remove all globals?
 static bool running;
 static ImageBuffer globalImageBuffer;
 static LPDIRECTSOUNDBUFFER globalSoundBuffer;
 static MouseInput globalMouseInput;
-static KeybordInput globalKeybordInput;
 static BITMAPINFO globalInfo;
 static GameState gameState;
 static WorkHandler workHandler;
@@ -39,8 +40,7 @@ static s64 globalPerformanceCountFrequency;
 static HANDLE semaphoreHandle;
 static GLuint globalTextureHandle;
 static OpenGLInfo openGLInfo;
-
-DebugCycleCounter debugCounters[DebugCycleCounter_Count];
+static HWND window;
 
 //todo : make these allocate into arenas
 u32 (*AllocateGPUTexture)(u32 width, u32 height, u32 *pixels);
@@ -240,11 +240,7 @@ static void displayImageBuffer(BITMAPINFO *info, HDC deviceContext, int windowWi
 
 	//OpenGLDisplayImageBuffer(info, deviceContext, windowWidth, windowHeight, buffer);
 
-	BEGIN_TIMED_BLOCK(SwitchBuffers);
-
 	SwapBuffers(deviceContext);
-
-	END_TIMED_BLOCK(SwitchBuffers);
 
 #endif
 }
@@ -375,6 +371,7 @@ inline f32 win32GetSecondsElapsed(LARGE_INTEGER start, LARGE_INTEGER end)
 	return (((f32)end.QuadPart - (f32)start.QuadPart) / (f32)globalPerformanceCountFrequency);
 }
 
+#if 0
 static void HandleDebugCycleCount()
 {
 	for (int counterIndex = 0; counterIndex < DebugCycleCounter_Count; counterIndex++)
@@ -393,7 +390,7 @@ static void HandleDebugCycleCount()
 		
 	}
 }
-
+#endif
 
 LRESULT CALLBACK win32MainWindowCallback(
 	HWND window,
@@ -448,18 +445,6 @@ struct ThreadInfo
 	u32 threadIndex;
 	HANDLE semaphoreHandle;
 };
-
-static void PushString(HANDLE semiphoreHandle, char *string)
-{
-	WorkQueueEntry * entry = entries + entryCount;
-	entry->stringToPrint = string;
-
-	WRITEBARRIER
-
-	entryCount++;
-	ReleaseSemaphore(semiphoreHandle, 1, 0);
-
-}
 
 static bool work(int threadIndex)
 {
@@ -607,9 +592,9 @@ static void win32LoadWglExtensions()
 
 	if (RegisterClassA(&windowClass))
 	{
-		HWND window = CreateWindowExA(0, windowClass.lpszClassName, "WGLLOADER", CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, 0, 0, 0, 0, windowClass.hInstance, 0);
+		HWND helperWindow = CreateWindowExA(0, windowClass.lpszClassName, "WGLLOADER", CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, 0, 0, 0, 0, windowClass.hInstance, 0);
 
-		HDC windowDC = GetDC(window);		
+		HDC windowDC = GetDC(helperWindow);
 		win32SetPixelFormat(windowDC);
 		HGLRC contextRC = wglCreateContext(windowDC);
 		if (wglMakeCurrent(windowDC, contextRC))
@@ -623,8 +608,8 @@ static void win32LoadWglExtensions()
 		}
 		wglMakeCurrent(0, 0);
 		wglDeleteContext(contextRC);
-		ReleaseDC(window, windowDC);
-		DestroyWindow(window);
+		ReleaseDC(helperWindow, windowDC);
+		DestroyWindow(helperWindow);
 			
 	}
 }
@@ -713,32 +698,102 @@ if (vkCode == VK_CODE) \
 	} \
 } 
 
-static void HandleWindowsMassages()
+static String OSGetClipBoard()
 {
+	String ret;
+	if(OpenClipboard(NULL))
+	{
+		HANDLE handle = GetClipboardData(CF_TEXT);
+		char *inp = (char *)GlobalLock(handle);
+		String inpS = CreateString(inp);
+		ret = CopyString(frameArena, inpS);
+		GlobalUnlock(handle);
+		CloseClipboard();
+	}
+	return ret;
+}
+
+static void OSSetClipBoard(String string)
+{
+	if (OpenClipboard(window))
+	{
+		EmptyClipboard();
+
+		HGLOBAL clipbuffer = GlobalAlloc(GMEM_SHARE, string.length + 1);
+		char* buffer = (char *)GlobalLock(clipbuffer);
+		memcpy(buffer, ToNullTerminated(frameArena, string), sizeof(char) * (string.length + 1));
+
+		GlobalUnlock(clipbuffer);
+
+		HANDLE ret = SetClipboardData(CF_TEXT, buffer);
+		CloseClipboard();
+	}
+	
+}
+
+static void DispatchKeyMessage(KeyMessageBuffer *buffer, KeyStateMessage keyMessage)
+{
+	if (buffer->amountOfMessages + 1 < buffer->maxAmountOfMessages)
+	{
+		buffer->messages[buffer->amountOfMessages++] = keyMessage;
+	}
+	else
+	{
+		ConsoleOutputString("to many keyboard messages", HistoryEntry_Error);
+	}
+}
+
+static void HandleWindowsMassages(KeyMessageBuffer *buffer) //todo make this buffer allocate on the frame arena? could just be the first thing that happens ont that
+{
+	buffer->amountOfMessages = 0;
 	MSG message;
 	while (PeekMessageA(&message, 0, 0, 0, PM_REMOVE))
 	{
 
 		switch (message.message)
 		{
-
 		case WM_LBUTTONDOWN:
 		{
-			globalMouseInput.leftButtonDown = true;
-			globalMouseInput.leftButtonPressedThisFrame = true;
+			KeyStateMessage keyMessage;
+			keyMessage.flag = KeyState_Down | KeyState_PressedThisFrame;
+			keyMessage.key = Key_leftMouse;
+			DispatchKeyMessage(buffer, keyMessage);
 		}break;
-		case WM_LBUTTONUP:
+		case WM_LBUTTONUP: 
 		{
-			globalMouseInput.leftButtonDown = false;
+			KeyStateMessage keyMessage;
+			keyMessage.flag = KeyState_Up | KeyState_ReleasedThisFrame;
+			keyMessage.key = Key_leftMouse;
+			DispatchKeyMessage(buffer, keyMessage);
 		}break;
 		case WM_RBUTTONDOWN:
 		{
-			globalMouseInput.rightButtonDown = true;
-			globalMouseInput.rightButtonPressedThisFrame = true;
+			KeyStateMessage keyMessage;
+			keyMessage.flag = KeyState_Down | KeyState_PressedThisFrame;
+			keyMessage.key = Key_rightMouse;
+
+			
+			DispatchKeyMessage(buffer, keyMessage);
 		}break;
 		case WM_RBUTTONUP:
 		{
-			globalMouseInput.rightButtonDown = false;
+			KeyStateMessage keyMessage;
+			keyMessage.flag = KeyState_Up | KeyState_ReleasedThisFrame;
+			keyMessage.key = Key_rightMouse;
+			DispatchKeyMessage(buffer, keyMessage);
+		}break;
+
+		case WM_MOUSEWHEEL:
+		{
+			u32 fwKeys = GET_KEYSTATE_WPARAM(message.wParam);
+			int zDelta = GET_WHEEL_DELTA_WPARAM(message.wParam);
+
+			KeyStateMessage keyMessage;
+			keyMessage.flag = KeyState_PressedThisFrame;
+			keyMessage.key = (zDelta > 0) ? Key_mouseWheelForward : Key_mouseWheelBack;
+
+			DispatchKeyMessage(buffer, keyMessage);
+
 		}break;
 		case WM_MOUSEMOVE:
 		{
@@ -762,35 +817,58 @@ static void HandleWindowsMassages()
 		case WM_KEYDOWN:
 		case WM_SYSKEYDOWN:
 		{
+
+			//todo is making them static actually good?
+			static b32 shiftDown = false;
+			static b32 controlDown = false;
+
 			u64 vkCode = message.wParam;
-			bool32 wasDown = ((message.lParam &(1 << 30)) != 0);
-			bool32 isDown = ((message.lParam &(1 << 31)) == 0);
-			if (wasDown != isDown)
+			u32 repeaded = message.lParam & 0xFF;
+			b32 wasDown = ((message.lParam &(1 << 30)) != 0);
+			b32 isDown = ((message.lParam &(1 << 31)) == 0);
+			
+			KeyStateMessage keyMessage;
+			keyMessage.key = (KeyEnum)vkCode;
+
+			if (vkCode == Key_shift)
 			{
+				shiftDown = isDown;
+			}
+			if (vkCode == Key_control)
+			{
+				controlDown = isDown;
+			}
+			
+			keyMessage.flag = ((shiftDown > 0) * KeyState_ShiftDown) | ((controlDown > 0) * KeyState_ControlDown);
 
-				for (char i = 0; i < 26; i++)
+			if (isDown) //todo could make this better, just oring em together
+			{
+				keyMessage.flag |= KeyState_Down;
+				if (isDown != wasDown)
 				{
-					u32 translatedI = i + 'A';
-					if (vkCode == translatedI)
-					{
-						globalKeybordInput.input[i].isDown = !globalKeybordInput.input[i].isDown;
-
-						if (globalKeybordInput.input[i].isDown)
-						{
-							globalKeybordInput.input[i].pressedThisFrame = true;
-						}
-					}
+					keyMessage.flag |= KeyState_PressedThisFrame;
 				}
-				
-				HANDLEINPUTKEY(VK_SPACE, space);				
-				HANDLEINPUTKEY(VK_SHIFT, shift);
-
-
-				if (vkCode == VK_ESCAPE)
+				if (repeaded)
 				{
-					running = false;
+					keyMessage.flag |= KeyState_Repeaded;
 				}
 			}
+			else
+			{
+				keyMessage.flag |= KeyState_Up;
+				if (isDown != wasDown)
+				{
+					keyMessage.flag |= KeyState_ReleasedThisFrame;
+				}
+			}
+
+			DispatchKeyMessage(buffer, keyMessage);
+
+			if (isDown && vkCode == VK_ESCAPE)
+			{
+				running = false;
+			}
+		
 		}
 		default:
 		{
@@ -842,6 +920,7 @@ int CALLBACK WinMain(
 	QueryPerformanceFrequency(&perfCountFrequencyResult);
 	globalPerformanceCountFrequency = perfCountFrequencyResult.QuadPart;
 
+
 	int windowWidth = 1280, windowHeight = 720;
 	void *gameMemory = VirtualAlloc(0, MegaBytes(500), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 	constantArena = InitArena(gameMemory, MegaBytes(500));
@@ -850,11 +929,17 @@ int CALLBACK WinMain(
 	void *workingMemory = VirtualAlloc(0, MegaBytes(500), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 	workingArena = InitArena(workingMemory, MegaBytes(500));
 
+	const u32 inputBufferSize = 100;
+	KeyStateMessage inputBuffer[inputBufferSize];
+	KeyMessageBuffer keyMessageBuffer;
+	keyMessageBuffer.amountOfMessages = 0;
+	keyMessageBuffer.maxAmountOfMessages = inputBufferSize;
+	keyMessageBuffer.messages = inputBuffer;
 
 	initializeImageBuffer(&globalInfo, &globalImageBuffer, windowWidth, windowHeight);
 	if (RegisterClass(&windowClass))
 	{
-		HWND window = CreateWindowEx(0, windowClass.lpszClassName, "Game Try 1", WS_POPUP|WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, windowWidth, windowHeight, 0, 0, instance, 0);
+		window = CreateWindowEx(0, windowClass.lpszClassName, "Game Try 1", WS_POPUP|WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, windowWidth, windowHeight, 0, 0, instance, 0);
 		if (window)
 		{
 			running = true;
@@ -932,10 +1017,7 @@ int CALLBACK WinMain(
 			gameState = InitGame(windowWidth, windowHeight, &workHandler);
 			while (running)
 			{
-				BEGIN_TIMED_BLOCK(Frame);
-
-
-				HandleWindowsMassages();
+				HandleWindowsMassages(&keyMessageBuffer);
 				
 				GetClientRect(window, &windowRect);
 				
@@ -964,9 +1046,9 @@ int CALLBACK WinMain(
 				}
 				soundOutput.sampleAmount = bytesToWrite / soundOutput.bytesPerSample;
 				Input input;
-				UpdateInput(&input, globalMouseInput, globalKeybordInput, windowWidth, windowHeight, targetSecondsPerFrame);
+				UpdateInput(&input, globalMouseInput, windowWidth, windowHeight, targetSecondsPerFrame, keyMessageBuffer);
 
-				GameUpdateAndRender(&gameState, &renderCommands, &input, &soundOutput);
+				GameUpdateAndRender(&gameState, &renderCommands, input, &soundOutput);
 				
 				//AnimationCreatorUpdateAndRender(&renderCommands, &input);
 
@@ -1002,24 +1084,17 @@ int CALLBACK WinMain(
 				float screenWidth = (f32)renderCommands.width;
 				float screenHeight = (f32)renderCommands.height;
 
-				PushRenderSetUp(rg, {}, V3(), Setup_Orthogonal);
+				PushRenderSetup(rg, {}, V3(), Setup_Orthogonal);
 				PushString(rg, V2(20.1f, 10.1f), s, 20, gameState.font);
 				
 #endif
 
 				OpenGlRenderGroupToOutput(&renderCommands);
-
-				for (unsigned int i = 0; i < globalKeybordInput.amountOfKeys; i++)
-				{
-					globalKeybordInput.input[i].pressedThisFrame = false;
-				}
-				globalMouseInput.leftButtonPressedThisFrame = false;
-				globalMouseInput.rightButtonPressedThisFrame = false;
 				
 				displayImageBuffer(&globalInfo, deviceContext, dim.width, dim.height, &globalImageBuffer);
 
 				Clear(frameArena);
-				END_TIMED_BLOCK(Frame);
+				Clear(workingArena);
 				timeCounter = endCounter;
 			}
 
