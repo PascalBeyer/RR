@@ -33,19 +33,14 @@
 
 #define RR_Internal 1
 
-#define ArrayCount(a) (sizeof(a)/sizeof(*a))
-#define MegaBytes(a) (1024 * KiloBytes(a))
-#define KiloBytes(a) (1024 * (a))
-#define OffsetOf(type, Member) (umm)&(((type *)0)->Member)
-#define Assert(Expression) if(!(Expression)) {*(int *)0 = 0;}
-#define Die Assert(false)
-
 
 struct ColoredVertex
 {
 	v3 pos;
 	u32 color;
 };
+
+DefineArray(ColoredVertex);
 
 struct TexturedVertex
 {

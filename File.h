@@ -15,7 +15,7 @@ static File CreateFile(void *memory, u32 fileSize)
 	return ret;
 }
 
-extern bool (*WriteEntireFile)(char *fileName, File file);
+extern bool (*WriteEntireFile)(char *fileName, File file); // todo make these either allways take arenas or make arena versions at least
 extern File (*LoadFile)(char *fileName);
 extern void (*FreeFile)(File file);
 

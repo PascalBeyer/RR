@@ -1159,6 +1159,14 @@ static u32 RandomU32(RandomSeries *series)
 	return xorshift32(series);
 }
 
+static u32 RandomColorU32(RandomSeries *series)
+{
+	u32 r = xorshift32(series);
+	u32 c = 0xFF000000 | r >> 8;
+
+	return c;
+}
+
 static f32 RandomPercent(RandomSeries *series)
 {
 	return (float)xorshift32(series) / (float)MAXU32;

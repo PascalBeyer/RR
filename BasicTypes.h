@@ -16,15 +16,15 @@ struct type##Array				\
 	u32 amount;					\
 	type& operator[](u32 i)		\
 	{							\
+		Assert(i < amount);		\
 		return data[i];			\
 	}							\
 }; 
 
 //todo :not sure where to put all this. if it gets enought maybe own file?
-#define ArrayAdd(arena, arr, item) arena->current += sizeof(item); arr.data[arr.amount++] = item;
+#define BuildStaticArray(arena, arr, item) arena->current += sizeof(item); arr.data[arr.amount++] = item;
 
 #define For(arr) for(auto it = arr.data; it < arr.data + arr.amount; it++)
-//#define For(arr) for(u32 it = 0; it < arr.amount; it++)
 
 #include <stdint.h>
 
@@ -34,15 +34,19 @@ typedef uint32_t u32;
 typedef uint64_t u64;
 typedef int8_t s8;
 typedef int16_t s16;
-typedef int32_t	s32;
-typedef int64_t	s64;
-typedef s32 b32;
+typedef int32_t	i32;
+typedef int64_t	i64;
+typedef i32 b32;
 typedef float f32;
 typedef double f64;
 typedef uintptr_t uintptr;
 
 typedef uintptr_t umm;
 typedef intptr_t smm;
+
+DefineArray(u32);
+DefineArray(u16);
+
 
 struct v2
 {
@@ -96,6 +100,8 @@ union v4
 		float z;
 	};
 };
+
+DefineArray(v3);
 
 static v2 V2()
 {

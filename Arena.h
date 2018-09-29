@@ -16,8 +16,8 @@ extern Arena *workingArena;
 
 #define PushStruct(arena, type) (type *)PushStruct_(arena, sizeof(type))
 #define PushZeroStruct(arena, type) (type *)PushZeroStruct_(arena, sizeof(type))
-#define PushArray(arena, type, size) (type *)PushStruct_(arena, size * sizeof(type))
-#define PushZeroArray(arena, type, size) (type *)PushZeroStruct_(arena, size * sizeof(type))
+#define PushArray(arena, type, size) (type *)PushStruct_(arena, (size) * sizeof(type))
+#define PushZeroArray(arena, type, size) (type *)PushZeroStruct_(arena, (size) * sizeof(type))
 
 //todo : make push array respect the array things i am doing?
 

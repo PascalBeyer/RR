@@ -2,12 +2,14 @@
 #define RR_GAME
 
 
-
-
 #include "BasicTypes.h"
 
 #include "buffers.h"
 #include "Arena.h"
+#include "String.h"
+
+#include "Debug.h"
+
 #include "WorkHandler.h"
 #include "Math.h"
 #include "Color.h"
@@ -22,7 +24,6 @@
 #include "Intrinsics.h"
 #include "TileMap.h"
 #include "Bitmap.h"
-#include "String.h"
 #include "Sound.h"
 #include "Fonts.h"
 #include "World.h"
@@ -36,7 +37,6 @@
 
 #include "AssetHandler.h"
 
-#include "Debug.h"
 #include "SoundMixer.h"
 #include "Renderer.h"
 #include "Unit.h"
@@ -52,6 +52,8 @@
 
 #include "ConsoleCommands.h"
 #include "Console.h"
+
+#include "DebugBody.h"
 
 struct Partical
 {
@@ -117,10 +119,11 @@ static void HandleInput(GameState *gameState, Input input)
 	for (u32 i = 0; i < buffer.amountOfMessages; i++)
 	{
 		KeyStateMessage message = buffer.messages[i];
+
 		ConsoleHandleKeyMessage(message, &input);
 
-		if (ConsoleOpen())
-		{
+		if (ConsoleActive())
+		{	
 			continue;
 		}
 		
@@ -142,7 +145,6 @@ static void HandleInput(GameState *gameState, Input input)
 static GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHandler)
 {
 	GameState ret = {};
-
 	ret.workHandler = workHandler;
 
 	u16 newTileSize = 50;
@@ -171,20 +173,21 @@ static GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHa
 	Triangle *t = PushArray(constantArena, Triangle, 0);
 	u32 amountOfTriangles = 0;
 
-	s32 skyRadius = 40;
+	i32 skyRadius = 40;
 	amountOfTriangles += CreateSkyBoxAndPush({ V3(-skyRadius, -skyRadius, -skyRadius), V3(skyRadius, skyRadius, skyRadius) }, RGBAfromHEX(0x87CEEB), constantArena).amount;
 	amountOfTriangles += CreateStoneAndPush(stoneaabb, 5.0f, constantArena, 0).amount;
 
 	AABB groundaabb = { V3(-20, -20, -0.25f), V3(20, 20, 0) };
 	amountOfTriangles += GenerateAndPushTriangleFloor(groundaabb, constantArena).amount;
 
+	TriangleMesh mesh = GenerateAndPushTriangleFloorMesh(groundaabb, constantArena);
 	//PushTriangleToArenaIntendedNormal(constantArena, V3(0, -10, 0), V3(10, 10, 0), V3(-10, 10, 0), 0xFFFFFFFF, V3(0, 0, -1));
 	//amountOfTriangles += 1;
 
 	World *world = PushZeroStruct(constantArena, World);
 	ret.world = world;
 	world->lightSource = V3(20, 0, -20);
-	world->triangles.arr = t;
+	world->triangles.data = t;
 	world->triangles.amount = amountOfTriangles;
 	world->camera.pos = V3(0, 0, -2.5f);
 	world->camera.basis = v3StdBasis;
@@ -192,6 +195,7 @@ static GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHa
 	world->debugCamera.pos = V3(0, 0, -10);
 	world->debugCamera.basis = v3StdBasis;
 
+	world->testMesh = mesh;
 	//InitLighting(world);
 
 	ret.screen = PushStruct(constantArena, Screen);
@@ -229,6 +233,9 @@ static GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHa
 
 static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderCommands, Input input, SoundBuffer *soundBuffer)
 {
+	TimedBlock;
+
+
 	TileMap *tileMap = gameState->tileMap;
 	Player *player = gameState->player;
 	EntitySelection *entities = gameState->entities;
@@ -252,7 +259,7 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 
 	World *world = gameState->world;
 
-	static bool debugCam = false;
+	Tweekable(debugCam, b32);
 
 #if 0
 	if (input->keybord.z.pressedThisFrame)
@@ -386,11 +393,14 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 	}
 	else
 	{
-		Triangle *t = world->triangles.arr;
+		/*
+		Triangle *t = world->triangles.data;
 		for (u32 triI = 0; triI < world->triangles.amount; triI++)
 		{
 			PushTriangle(rg, t[triI].cv1, t[triI].cv2, t[triI].cv3);
 		}
+		*/
+		PushTriangleMesh(rg, gameState->world->testMesh);
 #if 0
 		for (u32 triI = 0; triI < 40; triI++)
 		{

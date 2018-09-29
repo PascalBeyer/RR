@@ -223,10 +223,10 @@ static m4x4 Orthogonal(float width, float height)
 	m4x4 R =
 	{
 		{
-			{ 2.0f / width, 0.0f, 0.0f, 0.0f },
-			{ 0.0f, -2.0f / height, 0.0f, 0.0f },
-			{ 0.0f, 0.0f, 0.0f, -1.0f }, //we are in a -1 to +1 cube, so -1 is the exact screen position
-			{ 0.0f, 0.0f, 0.0f, 1.0f } 
+			{ 2.0f / width,			0.0f,			0.0f, 0.0f },
+			{ 0.0f,					-2.0f / height, 0.0f, 0.0f },
+			{ 0.0f,					0.0f,			1.0f, -1.0f }, //we are in a -1 to +1 cube, so -1 is the exact screen position
+			{ 0.0f,					0.0f,			0.0f, 1.0f } 
 		}
 	};
 

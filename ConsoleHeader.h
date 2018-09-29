@@ -18,12 +18,24 @@ struct HistoryEntry
 	String entry;
 	HistoryEntryEnum flag;
 };
+
+struct ConsoleCommand
+{
+	String name;
+	void(*interp)(StringArray args);
+	u32 minArgs;
+	u32 maxArgs;
+};
+
+DefineArray(ConsoleCommand);
+
+
 struct Console
 {
 	f32 fontSize = 0.023f;
 	f32 openness = 0.0f;
 	f32 dt = 1.5f;
-	f32 intendedOpenness = 1.0f;
+	f32 intendedOpenness = 0.0f;
 
 	Font font;
 
@@ -34,7 +46,7 @@ struct Console
 	f32 typeFieldXOffset = 0.015f;
 
 	Char *buffer;
-	u32 bufferSize = 8000;
+	u32 bufferSize = 80000;
 	Arena *arena;
 
 	HistoryEntry *history;
@@ -63,22 +75,17 @@ struct Console
 
 	f32 scrollbarWidth = 0.02f;
 	b32 scrollingScrollbar = false;
+
+	ConsoleCommandArray commands;
 };
 
-struct ConsoleCommand
-{
-	String name;
-	void(*interp)(StringArray args);
-	u32 minArgs;
-	u32 maxArgs;
-};
-
-DefineArray(ConsoleCommand);
 
 static Console console;
 
-void ConsoleOutputString(const char* string, HistoryEntryEnum flag = HistoryEntry_Default);
-void ConsoleOutputString(String string, HistoryEntryEnum flag = HistoryEntry_Default);
+void ConsoleOutput(char* format, ...);
+void ConsoleOutputError(char *format, ...);
+void ConsoleOutputError(String toPrint);
+void ConsoleOutput(String toPrint);
 
 #endif // !RR_ConsoleHeader
 

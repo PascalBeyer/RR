@@ -91,7 +91,7 @@ static float Abs(float a)
 {
 	return (a > 0) * a - (a < 0) * a;
 }
-static u32 Abs(s32 a)
+static u32 Abs(i32 a)
 {
 	return (a > 0) * a - (a < 0) * a;
 }
@@ -127,7 +127,7 @@ static u32 Max(u32 u1, u32 u2)
 {
 	return (u32)_mm_cvtsi128_si32(_mm_max_epi32(_mm_set1_epi32(u1), _mm_set1_epi32(u2)));
 }
-static s32 Max(s32 u1, s32 u2)
+static i32 Max(i32 u1, i32 u2)
 {
 	return _mm_cvtsi128_si32(_mm_max_epi32(_mm_set1_epi32(u1), _mm_set1_epi32(u2)));
 }

@@ -3,6 +3,14 @@
 
 #define WGLPROC(a) a = (a##_ *)wglGetProcAddress(#a);
 
+#define ArrayCount(a) (sizeof(a)/sizeof(*a))
+#define MegaBytes(a) (1024 * KiloBytes(a))
+#define KiloBytes(a) (1024 * (a))
+#define OffsetOf(type, Member) (umm)&(((type *)0)->Member)
+#define Assert(Expression) if(!(Expression)) {*(int *)0 = 0;}
+#define Die Assert(false)
+
+
 #include "Game.h"
 #include "AnimationCreator.h"
 
@@ -30,13 +38,14 @@ typedef DIRECT_SOUND_CREATE(direct_sound_create);
 
 // todo: remove all globals?
 static bool running;
+static bool globalGamePaused;
 static ImageBuffer globalImageBuffer;
 static LPDIRECTSOUNDBUFFER globalSoundBuffer;
 static MouseInput globalMouseInput;
 static BITMAPINFO globalInfo;
 static GameState gameState;
 static WorkHandler workHandler;
-static s64 globalPerformanceCountFrequency;
+static i64 globalPerformanceCountFrequency;
 static HANDLE semaphoreHandle;
 static GLuint globalTextureHandle;
 static OpenGLInfo openGLInfo;
@@ -63,7 +72,7 @@ static void freeFile(File file)
 	}
 }
 
-static File loadEntireFile(char *fileName) //zero terminated
+static File loadEntireFile(char *fileName)
 {
 	void *memory = 0;
 	unsigned int size = 0;
@@ -166,7 +175,7 @@ static windowDimension win32GetWindowDimension(HWND &window)
 	return ret;
 }
 
-static void displayImageBuffer(BITMAPINFO *info, HDC deviceContext, int windowWidth, int windowHeight, ImageBuffer *buffer)
+static void displayImageBuffer(HDC deviceContext)//BITMAPINFO *info, HDC deviceContext, int windowWidth, int windowHeight, ImageBuffer *buffer)
 {
 #if 0
 	StretchDIBits(deviceContext,
@@ -239,6 +248,8 @@ static void displayImageBuffer(BITMAPINFO *info, HDC deviceContext, int windowWi
 	*/
 
 	//OpenGLDisplayImageBuffer(info, deviceContext, windowWidth, windowHeight, buffer);
+
+	TimedBlock;
 
 	SwapBuffers(deviceContext);
 
@@ -371,27 +382,6 @@ inline f32 win32GetSecondsElapsed(LARGE_INTEGER start, LARGE_INTEGER end)
 	return (((f32)end.QuadPart - (f32)start.QuadPart) / (f32)globalPerformanceCountFrequency);
 }
 
-#if 0
-static void HandleDebugCycleCount()
-{
-	for (int counterIndex = 0; counterIndex < DebugCycleCounter_Count; counterIndex++)
-	{
-		
-		DebugCycleCounter *counter = debugCounters + counterIndex;
-
-		if (counter->hit > 0)
-		{
-			char textBuffer[256];
-			_snprintf_s(textBuffer, sizeof(textBuffer), "%d: c: %I64u h: %u c/h: %I64u\n", counterIndex, counter->cycleCount, counter->hit, counter->cycleCount/counter->hit);
-			OutputDebugStringA(textBuffer);
-			counter->cycleCount = 0;
-			counter->hit = 0;
-		}
-		
-	}
-}
-#endif
-
 LRESULT CALLBACK win32MainWindowCallback(
 	HWND window,
 	UINT message,
@@ -437,7 +427,7 @@ struct WorkQueueEntry
 	char *stringToPrint;
 };
 static u32 volatile entryCount;
-static u32 volatile todo;
+static u32 volatile todo; // todo hui ui ui, what is this jank exactly?
 WorkQueueEntry entries[256];
 
 struct ThreadInfo
@@ -706,7 +696,7 @@ static String OSGetClipBoard()
 		HANDLE handle = GetClipboardData(CF_TEXT);
 		char *inp = (char *)GlobalLock(handle);
 		String inpS = CreateString(inp);
-		ret = CopyString(frameArena, inpS);
+		ret = CopyString(inpS);
 		GlobalUnlock(handle);
 		CloseClipboard();
 	}
@@ -739,7 +729,7 @@ static void DispatchKeyMessage(KeyMessageBuffer *buffer, KeyStateMessage keyMess
 	}
 	else
 	{
-		ConsoleOutputString("to many keyboard messages", HistoryEntry_Error);
+		ConsoleOutputError("to many keyboard messages");
 	}
 }
 
@@ -868,7 +858,17 @@ static void HandleWindowsMassages(KeyMessageBuffer *buffer) //todo make this buf
 			{
 				running = false;
 			}
+
+			if (isDown && vkCode == VK_F2)
+			{
+				globalDebugState.paused = !globalDebugState.paused;
+			}
 		
+			if (isDown && vkCode == VK_F3)
+			{
+				globalGamePaused = !globalGamePaused;
+			}
+
 		}
 		default:
 		{
@@ -886,6 +886,7 @@ int CALLBACK WinMain(
 	int showCode
 )
 {
+
 #if 0
 	const u32 threadCount = 3 - 1;
 	ThreadInfo threadInfo[1]; //threadCount
@@ -924,10 +925,15 @@ int CALLBACK WinMain(
 	int windowWidth = 1280, windowHeight = 720;
 	void *gameMemory = VirtualAlloc(0, MegaBytes(500), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 	constantArena = InitArena(gameMemory, MegaBytes(500));
-	void *frameMem = VirtualAlloc(0, MegaBytes(500), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-	frameArena = InitArena(frameMem, MegaBytes(500));
-	void *workingMemory = VirtualAlloc(0, MegaBytes(500), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-	workingArena = InitArena(workingMemory, MegaBytes(500));
+	void *frameMem = VirtualAlloc(0, MegaBytes(100), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+	frameArena = InitArena(frameMem, MegaBytes(100));
+	void *workingMemory = VirtualAlloc(0, MegaBytes(5), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+	workingArena = InitArena(workingMemory, MegaBytes(5));
+
+	void *debugMemory = VirtualAlloc(0, MegaBytes(300), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+	DWORD asd = GetLastError();
+	globalDebugState.arena = InitArena(debugMemory, MegaBytes(300));
+	globalDebugState.tweekers = CreateDynamicArray(globalDebugState.arena);
 
 	const u32 inputBufferSize = 100;
 	KeyStateMessage inputBuffer[inputBufferSize];
@@ -942,6 +948,7 @@ int CALLBACK WinMain(
 		window = CreateWindowEx(0, windowClass.lpszClassName, "Game Try 1", WS_POPUP|WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, windowWidth, windowHeight, 0, 0, instance, 0);
 		if (window)
 		{
+			
 			running = true;
 			HDC deviceContext = GetDC(window);
 
@@ -978,8 +985,7 @@ int CALLBACK WinMain(
 			*/
 			SoundBuffer soundOutput = {};
 			initializeSoundBuffer(window, &soundOutput);
-			s16 *samples = (s16 *)VirtualAlloc(0, soundOutput.secondaryBufferSize,
-				MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+			s16 *samples = (s16 *)VirtualAlloc(0, soundOutput.secondaryBufferSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 			soundOutput.soundSamples = samples;
 			int sampleAmount = soundOutput.secondaryBufferSize / sizeof(s16);
 			for (unsigned int i = 0; i < (soundOutput.secondaryBufferSize/sizeof(s16)); i++)
@@ -1002,21 +1008,25 @@ int CALLBACK WinMain(
 			LARGE_INTEGER timeCounter;
 			QueryPerformanceCounter(&timeCounter);
 
-#if Internal
-			for (u32 counterIndex = 0; counterIndex < DebugCycleCounter_Count; counterIndex++)
-			{
-				debugCounters[counterIndex].cycleCount = 0;
-				debugCounters[counterIndex].hit = 0;
-			}
-
-
-#endif
-		
-			//AnimationCreatorInit();
-
 			gameState = InitGame(windowWidth, windowHeight, &workHandler);
+
+			LoadDebugVariables();
+
 			while (running)
-			{
+			{	
+				if (globalGamePaused)
+				{
+					HandleWindowsMassages(&keyMessageBuffer);
+					SwapBuffers(deviceContext);
+					continue;
+				}
+
+				ResetDebugState();
+
+				TimedBlock;
+
+				CollectDebugRecords(); // collect for last frame
+				
 				HandleWindowsMassages(&keyMessageBuffer);
 				
 				GetClientRect(window, &windowRect);
@@ -1051,8 +1061,6 @@ int CALLBACK WinMain(
 				GameUpdateAndRender(&gameState, &renderCommands, input, &soundOutput);
 				
 				//AnimationCreatorUpdateAndRender(&renderCommands, &input);
-
-				//LightingMain(&renderCommands, &workHandler, &input);
 				
 #if Internal
 				HandleDebugCycleCount();
@@ -1068,37 +1076,50 @@ int CALLBACK WinMain(
 					soundOutput.soundIsPlaying = true;
 				}
 				
-				LARGE_INTEGER endCounter;
-				QueryPerformanceCounter(&endCounter);
 				
-				
-				windowDimension dim;
-				dim = win32GetWindowDimension(window);
 				
 #if 1
 				RenderGroup renderGroup = InitRenderGroup(gameState.assetHandler, &renderCommands);
 				RenderGroup *rg = &renderGroup;
+
+				LARGE_INTEGER endCounter;
+				QueryPerformanceCounter(&endCounter);
 				f32 deltaTime = win32GetSecondsElapsed(timeCounter, endCounter);
-				String s = CreateString(frameArena, deltaTime);
+				timeCounter = endCounter;
+
+				
+				String s = FtoS(deltaTime);
 
 				float screenWidth = (f32)renderCommands.width;
 				float screenHeight = (f32)renderCommands.height;
 
 				PushRenderSetup(rg, {}, V3(), Setup_Orthogonal);
+
 				PushString(rg, V2(20.1f, 10.1f), s, 20, gameState.font);
 				
+				
+				DrawDebugRecords(rg, gameState.font, targetSecondsPerFrame, input);
+
 #endif
 
 				OpenGlRenderGroupToOutput(&renderCommands);
 				
-				displayImageBuffer(&globalInfo, deviceContext, dim.width, dim.height, &globalImageBuffer);
+				windowDimension dim;
+				dim = win32GetWindowDimension(window);
+				displayImageBuffer(deviceContext);
 
 				Clear(frameArena);
 				Clear(workingArena);
-				timeCounter = endCounter;
+				
+
 			}
 
-			ClipCursor(NULL);
+			//ClipCursor(NULL);
 		}
 	}
 }
+//todo clean this file up really good....
+
+static u32 const DebugRecordsAmount = __COUNTER__;
+static DebugBlockInfo debugInfoArray[DebugRecordsAmount];
+

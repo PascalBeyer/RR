@@ -1,25 +1,12 @@
 #ifndef RR_CONSOLE
 #define RR_CONSOLE
 
-#if 0
-enum ConsoleState
-{
-	Console_Invalid		= 0x0,
-	Console_Open		= 0x1,
-	Console_Closed		= 0x2,
-	Console_WideOpen	= 0x4
-};
-#endif
-
-
-
 enum ConsoleSelectTag
 {
 	SelectTag_Selecting = 0x1,
 	SelectTag_TextField = 0x2,
 	SelectTag_History = 0x4,
 };
-static ConsoleCommandArray consoleComands;
 
 static v4 ColorForHistoryEntry(HistoryEntryEnum flag)
 {
@@ -65,17 +52,23 @@ static void InitConsole(Font font)
 	console.inputString.data = PushArray(constantArena, unsigned char, console.maxInputStringLength);
 	console.inputString.length = 0;
 
-	consoleComands.data = PushArray(constantArena, ConsoleCommand, 0);
-	//ConsoleCommand hello = CreateCommand("hello", HelloHelper);
-	//u32 size1 = sizeof(hello);
-	//u32 size2 = sizeof(CreateCommand("hello", HelloHelper));
-	ArrayAdd(constantArena, consoleComands, CreateCommand("hello", HelloHelper, 0, 0));
-	ArrayAdd(constantArena, consoleComands, CreateCommand("add", AddHelper, 2, 2));
-	ArrayAdd(constantArena, consoleComands, CreateCommand("clear", ClearHelper, 0, 0));
-	ArrayAdd(constantArena, consoleComands, CreateCommand("lorum", LorumHelper, 0, 0));
+	console.commands.data = PushArray(constantArena, ConsoleCommand, 0);
 
+	BuildStaticArray(constantArena, console.commands, CreateCommand("hello", HelloHelper, 0, 0));
+	BuildStaticArray(constantArena, console.commands, CreateCommand("add", AddHelper, 2, 2));
+	BuildStaticArray(constantArena, console.commands, CreateCommand("clear", ClearHelper, 0, 0));
+	BuildStaticArray(constantArena, console.commands, CreateCommand("lorum", LorumHelper, 0, 0));
+	BuildStaticArray(constantArena, console.commands, CreateCommand("help", HelpHelper, 0, 0));
+	BuildStaticArray(constantArena, console.commands, CreateCommand("tweek", TweekHelper, 0, 2));
+	BuildStaticArray(constantArena, console.commands, CreateCommand("save", SaveTweekersHelper, 1, 1));
+	
 
 	//ConsoleOutputString(lorum);
+}
+
+static bool ConsoleActive()
+{
+	return (console.selecting & SelectTag_TextField);
 }
 
 static bool ConsoleOpen()
@@ -83,23 +76,101 @@ static bool ConsoleOpen()
 	return (console.intendedOpenness > 0.0f);
 }
 
-static unsigned char KeyToChar(u32 keyCode, bool shiftDown)
+static Char KeyToChar(u32 keyCode, bool shiftDown)
 {
+	if (shiftDown)
+	{
+		switch (keyCode)
+		{
+		case Key_0:
+		{
+			return '=';
+		}break;
+		case Key_1:
+		{
+			return '!';
+		}break;
+		case Key_2:
+		{
+			return '"';
+		}break;
+		case Key_3:
+		{
+			return '§';
+		}break;
+		case Key_4:
+		{
+			return '$';
+		}break;
+		case Key_5:
+		{
+			return '%';
+		}break;
+		case Key_6:
+		{
+			return '&';
+		}break;
+		case Key_7:
+		{
+			return '/';
+		}break;
+		case Key_8:
+		{
+			return '(';
+		}break;
+		case Key_9:
+		{
+			return ')';
+		}break;
+		case Key_dot:
+		{
+			return ':';
+		}break;
+		case Key_comma:
+		{
+			return ';';
+		}break;
+		case Key_minus:
+		{
+			return '_';
+		}break;
+		}
+	
+	}
+	else
+	{
+		switch (keyCode)
+		{
+		case Key_dot:
+		{
+			return '.';
+		}break;
+		case Key_comma:
+		{
+			return ',';
+		}break;
+		case Key_minus:
+		{
+			return '-';
+		}break;
+		}
+	}
+
 	if (Key_a <= keyCode && keyCode <=  Key_z)
 	{
 		u32 shiftedKeyCode = keyCode - Key_a;
 		if (shiftDown)
 		{
-			return (shiftedKeyCode + 0x41);
+			return (shiftedKeyCode + 'A');
 		}
 		else
 		{
-			return (shiftedKeyCode + 0x61);
+			return (shiftedKeyCode + 'a');
 		}
 	}
-	else if (Key_zero <= keyCode &&  keyCode <= Key_nine)
+	else if (Key_0 <= keyCode &&  keyCode <= Key_9)
 	{
-		u32 shiftedKeyCode = keyCode - Key_zero;
+		u32 shiftedKeyCode = keyCode - Key_0;
 		return (shiftedKeyCode + 0x30);
 	}
 	else if (keyCode == Key_space)
@@ -113,7 +184,7 @@ static void AddSingleLineToHistory(String string, HistoryEntryEnum flag)
 {
 	if (console.historyLength + 1 < console.maxHistoryLength)
 	{
-		String copy = CopyString(console.arena, string);
+		String copy = CopyString(string, console.arena);
 		console.history[console.historyLength].entry = copy;
 		console.history[console.historyLength].flag = flag;
 		console.historyLength++;
@@ -123,24 +194,6 @@ static void AddSingleLineToHistory(String string, HistoryEntryEnum flag)
 		Die;
 	}
 }
-
-static String EatToNextSpaceReturnHead(String *string) //do not know how to name the two obvious versions of this?
-{
-	String ret = *string;
-
-	for (u32 i = 0; i < ret.length; i++)
-	{
-		if (ret[i] == ' ')
-		{
-			ret.length = i;
-			return ret;
-		}
-		string->data++;
-		string->length--;
-	}
-	return ret;
-}
-
 
 static void AddStringToHistory(String string, HistoryEntryEnum flag = HistoryEntry_Default)
 {
@@ -177,17 +230,36 @@ static void AddStringToHistory(String string, HistoryEntryEnum flag = HistoryEnt
 		}
 	}
 	AddSingleLineToHistory(gatheredString, flag);
-
 }
 
-static void ConsoleOutputString(String string, HistoryEntryEnum flag)
+static void ConsoleOutput(String toPrint)
 {
-	AddStringToHistory(string, flag);
+	AddStringToHistory(toPrint, HistoryEntry_Default);
+}
+static void ConsoleOutputError(String toPrint)
+{
+	AddStringToHistory(toPrint, HistoryEntry_Error);
 }
 
-static void ConsoleOutputString(const char* string, HistoryEntryEnum flag)
+static void ConsoleOutput(char* format, ...)
 {
-	AddStringToHistory(CreateString((char *)string), flag);
+	va_list argList;
+	va_start(argList, format);
+	String toPrint = StringFormatHelper(frameArena, format, argList);
+	va_end(argList);
+
+	AddStringToHistory(toPrint, HistoryEntry_Default);
+}
+static void ConsoleOutputError(char *format, ...)
+{
+	String toPrint = BeginConcatenate(frameArena);
+	va_list argList;
+	va_start(argList, format);
+	StringFormatHelper(frameArena, format, argList);
+	va_end(argList);
+	EndConcatenate(&toPrint, frameArena);
+
+	AddStringToHistory(toPrint, HistoryEntry_Error);
 }
 
 static u32 GetBestCursorLocationForString(String string, float xPos, f32 xOffset)
@@ -226,7 +298,7 @@ static u32 GetBestCursorLocationForConsoleHistory(Input input)
 	f32 amountOfDisplayedLinesf = console.openness / lineSize;
 	u32 amountOfDisplayedLines = (u32)amountOfDisplayedLinesf + 1;
 
-	s32 topLine = (s32)(console.historyLength - amountOfDisplayedLines - console.historyPos);
+	i32 topLine = (i32)(console.historyLength - amountOfDisplayedLines - console.historyPos);
 	f32 yOffset = 0;
 	if (topLine < 0)
 	{
@@ -236,7 +308,7 @@ static u32 GetBestCursorLocationForConsoleHistory(Input input)
 
 	if (yOffset > input.mouseZeroToOne.y) return 0;
 
-	s32 bottomLine = console.historyLength - 1 - console.historyPos;
+	i32 bottomLine = console.historyLength - 1 - console.historyPos;
 
 	f32 linef = MapRangeToRangeCapped(input.mouseZeroToOne.y, yOffset, console.openness - console.textInputFieldSize, (f32)topLine, (f32)bottomLine);
 
@@ -251,7 +323,7 @@ static void ConsoleResetSelection()
 {
 	console.firstSelectPos = 0;
 	console.endSelectPos = 0;
-	console.selecting = 0;
+	console.selecting &= ~SelectTag_Selecting;
 }
 
 static b32 ConsoleHasActiveTextFieldSelection()
@@ -261,19 +333,6 @@ static b32 ConsoleHasActiveTextFieldSelection()
 static b32 ConsoleHasActiveHistorySelection()
 {
 	return (console.firstSelectPos != console.endSelectPos) && (console.selecting & SelectTag_History);
-}
-
-static void EatSpaces(String *string)
-{
-	while (string->length)
-	{
-		if (!(string->data[0] == ' '))
-		{
-			return;
-		}
-		string->data++;
-		string->length--;
-	}
 }
 
 static void ConsoleHandleCommand(String inputLine)
@@ -291,7 +350,7 @@ static void ConsoleHandleCommand(String inputLine)
 
 	bool parsedCommand = false;
 
-	For(consoleComands)
+	For(console.commands)
 	{
 		if (it->name == command)
 		{
@@ -308,13 +367,13 @@ static void ConsoleHandleCommand(String inputLine)
 			{
 				String arg = EatToNextSpaceReturnHead(&remaining);
 				Assert(arg.length);
-				ArrayAdd(workingArena, args, arg);
+				BuildStaticArray(workingArena, args, arg);
 				EatSpaces(&remaining);
 			}
 
 			if (!(selectedCommand.minArgs <= args.amount && args.amount <= selectedCommand.maxArgs))
 			{
-				ConsoleOutputString("Error: Wrong amount of Arguments");
+				ConsoleOutput("Error: Wrong amount of Arguments!");
 				break;
 			}
 
@@ -325,7 +384,7 @@ static void ConsoleHandleCommand(String inputLine)
 	
 	if (!parsedCommand)
 	{
-		ConsoleOutputString("Error: This is not a command.");
+		ConsoleOutput("Error: This is not a command.");
 	}
 }
 
@@ -362,10 +421,27 @@ static void ShiftSelectionUpdate(u32 intendedPos)
 
 static void ConsoleHandleKeyMessage(KeyStateMessage message, Input *input)
 {
+	TimedBlock;
+
 	if (message.flag & (KeyState_PressedThisFrame | KeyState_Repeaded))
 	{
 		switch (message.key)
 		{
+		case Key_F1:
+		{
+			f32 newIntededOpenness = (message.flag & KeyState_ShiftDown) ? console.openWide : console.open;
+
+			if (console.intendedOpenness == newIntededOpenness)
+			{
+				console.intendedOpenness = 0.0f;
+				console.selecting = 0;
+			}
+			else
+			{
+				console.intendedOpenness = newIntededOpenness;
+				console.selecting = SelectTag_Selecting | SelectTag_TextField;
+			}
+		}break;
 		case Key_leftMouse:
 		{
 			if (console.openness - console.textInputFieldSize <= input->mouseZeroToOne.y && input->mouseZeroToOne.y <= console.openness)
@@ -382,9 +458,40 @@ static void ConsoleHandleKeyMessage(KeyStateMessage message, Input *input)
 			{
 				console.scrollingScrollbar = true;
 			}
+			else
+			{
+				console.selecting = 0;
+			}
 
 
 		}break;
+		
+		}
+	}
+
+	if (message.flag & (KeyState_ReleasedThisFrame))
+	{
+		switch (message.key)
+		{
+		case Key_leftMouse:
+		{
+			console.selecting &= ~SelectTag_Selecting;
+			console.scrollingScrollbar = false;
+		}break;
+		}
+
+	}
+
+	if (!ConsoleActive())
+	{
+		return;
+	}
+
+	if (message.flag & (KeyState_PressedThisFrame | KeyState_Repeaded))
+	{
+		switch (message.key)
+		{
+		
 		case Key_mouseWheelForward:
 		{
 			f32 lineSize = 1.5f * console.fontSize;
@@ -425,14 +532,14 @@ static void ConsoleHandleKeyMessage(KeyStateMessage message, Input *input)
 					stringToCopy.length = end - first;
 					OSSetClipBoard(stringToCopy);
 				}
-				
+
 				return;
 			}
 		}break;
 		case Key_v:
 		{
 			if (message.flag & KeyState_ControlDown)
-			{	
+			{
 				if (console.selecting & SelectTag_History)
 				{
 					return;
@@ -445,8 +552,8 @@ static void ConsoleHandleKeyMessage(KeyStateMessage message, Input *input)
 					return;
 				}
 
-				 // todo : what happens if we add to much to the inputSting?
-				
+				// todo : what happens if we add to much to the inputSting?
+
 				String head = CreateString(console.inputString.data, console.cursorPos);
 				String tailToCopy = CreateString(console.inputString.data + console.cursorPos, console.inputString.length);
 
@@ -460,44 +567,7 @@ static void ConsoleHandleKeyMessage(KeyStateMessage message, Input *input)
 				return;
 			}
 		}break;
-		}
-	}
 
-	if (message.flag & (KeyState_ReleasedThisFrame))
-	{
-		switch (message.key)
-		{
-		case Key_leftMouse:
-		{
-			console.selecting &= ~SelectTag_Selecting;
-			console.scrollingScrollbar = false;
-		}break;
-		}
-
-	}
-
-	if (console.selecting & SelectTag_History)
-	{
-		return;
-	}
-
-	if (message.flag & (KeyState_PressedThisFrame | KeyState_Repeaded))
-	{
-		switch (message.key)
-		{
-		case Key_F1:
-		{
-			f32 newIntededOpenness = (message.flag & KeyState_ShiftDown) ? console.openWide : console.open;
-
-			if (console.intendedOpenness == newIntededOpenness)
-			{
-				console.intendedOpenness = 0.0f;
-			}
-			else
-			{
-				console.intendedOpenness = newIntededOpenness;
-			}
-		}break;
 		case Key_backSpace:
 		{
 			if (ConsoleHasActiveTextFieldSelection())
@@ -669,7 +739,7 @@ static void ConsoleHandleKeyMessage(KeyStateMessage message, Input *input)
 				String rest = console.inputString;
 				rest.data += console.cursorPos;
 				rest.length -= console.cursorPos;
-				String copy = CopyString(workingArena, rest);
+				String copy = CopyString(rest);
 				console.inputString.data[console.cursorPos++] = charPressed;
 				console.inputString.length++;
 
@@ -687,6 +757,8 @@ static void ConsoleHandleKeyMessage(KeyStateMessage message, Input *input)
 
 static void UpdateConsole(Input input) 
 {
+	TimedBlock;
+
 	if (console.intendedOpenness > console.openness)
 	{
 		console.openness += console.dt * input.secondsPerFrame;
@@ -744,7 +816,7 @@ static void UpdateConsole(Input input)
 		}
 		else
 		{
-			ConsoleOutputString("what are we selecting?");
+			ConsoleOutput("What are we selecting?");
 		}
 		
 	}
@@ -754,9 +826,9 @@ static void UpdateConsole(Input input)
 		f32 amountOfDisplayedLinesf = console.openness / lineSize;
 		u32 amountOfDisplayedLines = (u32)amountOfDisplayedLinesf + 1;
 
-		s32 topLine = (s32)(console.historyLength - amountOfDisplayedLines - console.historyPos);
+		i32 topLine = (i32)(console.historyLength - amountOfDisplayedLines - console.historyPos);
 		topLine = Max(0, topLine);
-		s32 bottomLine = console.historyLength - 1 - console.historyPos;
+		i32 bottomLine = console.historyLength - 1 - console.historyPos;
 
 		f32 scrollbarBottom = console.openness - console.textInputFieldSize;
 		f32 scrollMiny = (f32)(topLine) / (f32)console.historyLength * scrollbarBottom;
@@ -840,9 +912,9 @@ static void DrawConsole(RenderGroup *rg)
 
 	//todo check that the historyPos does not read invalid memory when opening wide
 	v2 consoleFieldFirstRow = V2(console.historyXOffset, typeFieldPos.y);
-	s32 topLine = (s32)(console.historyLength - amountOfDisplayedLines - console.historyPos);
+	i32 topLine = (i32)(console.historyLength - amountOfDisplayedLines - console.historyPos);
 	topLine = Max(0, topLine);
-	s32 bottomLine = console.historyLength - 1 - console.historyPos;
+	i32 bottomLine = console.historyLength - 1 - console.historyPos;
 
 	//History Selection
 	if (ConsoleHasActiveHistorySelection())
@@ -851,7 +923,7 @@ static void DrawConsole(RenderGroup *rg)
 		u32 end = Max((u32)console.firstSelectPos, (u32)console.endSelectPos);
 
 		u32 firstLine = 0;
-		for (s32 i = topLine; i <= bottomLine; i++)
+		for (i32 i = topLine; i <= bottomLine; i++)
 		{
 			u32 linePos = (u32)(console.history[i].entry.data - console.history[0].entry.data);
  			if (linePos > first)
@@ -862,7 +934,7 @@ static void DrawConsole(RenderGroup *rg)
 		}
 
 		u32 endLine = firstLine;
-		for (s32 i = firstLine; i <= bottomLine; i++)
+		for (i32 i = firstLine; i <= bottomLine; i++)
 		{
 			u32 linePos = (u32)(console.history[i].entry.data - console.history[0].entry.data);
 			if (linePos > end)
@@ -927,12 +999,11 @@ static void DrawConsole(RenderGroup *rg)
 
 	//typefield Text
 	v2 typeFieldTextPos = p3 + V2(console.typeFieldXOffset - console.typeFieldTextScrollOffset, -console.textInputFieldSize);
-	// todo : bug : the rect shadows the input string, happens, as we push textures before this. Dumb hack would be to push a zero rect.
 	PushString(rg, typeFieldTextPos - V2(0.001f, 0.001f), console.inputString, console.fontSize, console.font, V4(1, 0.5f, 0.5f, 0.5f));
 	PushString(rg, typeFieldTextPos, console.inputString, console.fontSize, console.font, V4(1.0f, 1.0f, 1.0f, 1.0f)); 
 
 	//History Text
-	for (s32 i = bottomLine; i >= topLine; i--)
+	for (i32 i = bottomLine; i >= topLine; i--)
 	{
 		f32 pos = (f32)(console.historyLength - console.historyPos - i);
 		v4 color = ColorForHistoryEntry(console.history[i].flag);
@@ -943,11 +1014,11 @@ static void DrawConsole(RenderGroup *rg)
 	f32 scrollbarBottom = console.openness - console.textInputFieldSize;
 	v2 scrollbarFieldMin = V2(1.0f - console.scrollbarWidth, 0.0f);
 	v2 scrollbarFieldMax = V2(1.0f, scrollbarBottom);
-	PushRectangle(rg, scrollbarFieldMin, scrollbarFieldMax, V4(1.0f, 0.4f, 0.5f, 0.75f));
+	Tweekable(scrollbarColor, v4);
+	PushRectangle(rg, scrollbarFieldMin, scrollbarFieldMax, scrollbarColor);
 
 	if(console.historyLength)
 	{
-		//maybe of by one
 		f32 scrollMiny = (f32)(topLine) / (f32)console.historyLength * scrollbarBottom;
 		f32 scrollMaxy = (f32)(bottomLine + 1) / (f32)console.historyLength * scrollbarBottom;
 
@@ -962,10 +1033,12 @@ static void DrawConsole(RenderGroup *rg)
 
 // control left right
 // maybe handle to long strings?
-// todo : make all arrays dynamic?
+// make all arrays dynamic?
 // fix font missplacement
 // !"§$%&/()=? and such.
-
+// dont die on to may symbols i.e dynamic arrays or rolling buffer maybe 65536 long for that juicy speed?
+// sanitise strings and handle \n, \r
+// make console unselectable, right now we cant use wasd when the console is open.
 
 #endif // !RR_CONSOLE
 

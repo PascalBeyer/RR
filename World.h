@@ -1,9 +1,7 @@
 #ifndef RR_WORLD
 #define RR_WORLD
 
-#include "buffers.h"
-#include "LinearAlgebra.h"
-#include "Color.h"
+
 
 struct AABB
 {
@@ -31,9 +29,9 @@ struct Camera
 
 struct Triangle
 {
-
 	union 
 	{
+
 		struct
 		{
 			ColoredVertex cv1;
@@ -51,18 +49,32 @@ struct Triangle
 		};
 		
 	};
-	
 };
 
-struct TriangleArray
+DefineArray(Triangle);
+
+struct VertexFormat
 {
-	u32 amount;
-	Triangle *arr;
-	Triangle operator[] (u32 i)
-	{
-		return arr[i];
-	}
+	v3 p;
+	u32 c;
 };
+
+
+struct TriangleMesh
+{
+	u32 amountOfVerticies;
+	v3 *verticies;
+	u32 *colors;
+
+	u32 amountOfIndicies;
+	u16 *indecies;
+	//v3 *normals; //todo :this does not really make sense to me... apperantly you save it with the nodes but these seem triangle related I ignore normals right now anyway
+	
+	u32 vertexVBO; // to init this call glBufferData and glBindData
+	u32 indexVBO;
+};
+
+void RegisterTriangleMesh(TriangleMesh *mesh); //note : triangleMesh has to me filled out.
 
 struct World
 {
@@ -74,6 +86,7 @@ struct World
 	Camera camera;
 	Camera debugCamera;
 	v3 lightSource;
+	TriangleMesh testMesh;
 };
 
 struct RockCorner
@@ -286,7 +299,6 @@ static void UpdateCamGodMode(Input *input, Camera *cam, DEBUGKeyTracker tracker)
 	
 }
 
-
 static v3 AABBCorner(AABB aabb, u32 index)
 {
 	Assert(index < 8);
@@ -370,7 +382,6 @@ static void PushTriangleToArena(Arena *arena, v3 p1, v3 p2, v3 p3, v3 normal)
 	PushTriangleToArena(arena, p1, p2, p3, c, c, c, normal);
 }
 
-
 static void SetNeighborPointerToNULL(RockCorner **neighbors, RockCorner *corner)
 {
 
@@ -413,7 +424,7 @@ static u32 Over(u32 n, u32 k)
 static TriangleArray CreateSkyBoxAndPush(AABB aabb, u32 color, Arena *arena)
 {
 	TriangleArray ret;
-	ret.arr = PushArray(arena, Triangle, 0);
+	ret.data = PushArray(arena, Triangle, 0);
 	ret.amount = 12;
 	v3 d1 = V3(aabb.maxDim.x - aabb.minDim.x, V2());
 	v3 d2 = V3(0.0f, aabb.maxDim.y - aabb.minDim.y, 0.0f);
@@ -465,7 +476,7 @@ static TriangleArray CreateStoneAndPush(AABB aabb, f32 desiredVolume, Arena *are
 	Clear(workingArena);
 
 	TriangleArray ret;
-	ret.arr = PushArray(arena, Triangle, 0);
+	ret.data = PushArray(arena, Triangle, 0);
 	ret.amount = 0;
 
 
@@ -612,7 +623,7 @@ static TriangleArray GenerateAndPushTriangleFloor(AABB aabb, Arena* arena)
 	}
 
 	TriangleArray ret;
-	ret.arr = PushArray(arena, Triangle, 0);
+	ret.data = PushArray(arena, Triangle, 0);
 	ret.amount = 0;
 	for (u32 x = 0; x < meshSize - 1; x++)
 	{
@@ -627,5 +638,80 @@ static TriangleArray GenerateAndPushTriangleFloor(AABB aabb, Arena* arena)
 	return ret;
 }
 
-#endif // !RR_WORLD
+
+static TriangleMesh GenerateAndPushTriangleFloorMesh(AABB aabb, Arena* arena, u32 meshSize = 40)
+{
+	TriangleMesh ret;
+
+	u32 blackBrown = RGBAfromHEX(0x553A26);
+	v4 groundColor = Unpack4x8(&blackBrown);
+
+	ret.amountOfVerticies = meshSize * meshSize;
+	Assert(ret.amountOfVerticies < 65536);
+	ret.verticies = PushArray(arena, v3, ret.amountOfVerticies);
+	ret.colors = PushArray(arena, u32, ret.amountOfVerticies);
+
+	RandomSeries series = { RandomSeed() };
+
+	for (u32 x = 0; x < meshSize; x++)
+	{
+		for (u32 y = 0; y < meshSize; y++)
+		{
+			f32 xEntropy = 0.15f * RandomSignedPercent(&series);
+			f32 yEntropy = 0.15f * RandomSignedPercent(&series);
+			f32 zEntropy = 1.0f * RandomPercent(&series);
+
+			f32 xVal = (xEntropy + (f32)x) / (meshSize) * (aabb.maxDim.x - aabb.minDim.x) + (aabb.minDim.x);
+			f32 yVal = (yEntropy + (f32)y) / (meshSize) * (aabb.maxDim.y - aabb.minDim.y) + (aabb.minDim.y);
+
+			ret.verticies[x + meshSize * y] = 0.5f * V3(xVal, yVal, zEntropy + aabb.minDim.z);
+			ret.colors   [x + meshSize * y] = GrayFromU32(RandomU32(&series) % 100) & 0xFFFFFF00;
+		}
+	}
+
+	
+	ret.amountOfIndicies = 4 * (meshSize - 1) + (meshSize - 2) * (meshSize - 2);
+	ret.indecies = PushArray(constantArena, u16, ret.amountOfVerticies);
+
+	ret.indecies[0] = meshSize + 0; // x = 0, y = 0
+	ret.indecies[1] = meshSize + 1; // x = 0, y = 1
+	ret.indecies[2] = meshSize + 0; // x = 1, y = 0
+
+	u32 index = 3;
+
+	for (u32 x = 0; x < meshSize - 1; x++)
+	{
+		//move up
+		for (u32 y = 1; y < meshSize - 1; y++)
+		{	
+			ret.indecies[index++] = meshSize * (x + 1) + y;
+			ret.indecies[index++] = meshSize * x + (y + 1);
+		}
+
+		ret.indecies[index++] = meshSize * (x + 1) + (meshSize - 1);
+		ret.indecies[index++] = meshSize * (x + 2) + (meshSize - 1);
+
+		x++; 
+
+		//move down
+		for (u32 y = 1; y < meshSize - 1; y++)
+		{
+			ret.indecies[index++] = meshSize * (x + 1) +((meshSize - 1) - y);
+			ret.indecies[index++] = meshSize * x + ((meshSize - 1) - (y + 1));
+		}
+
+		ret.indecies[index++] = meshSize * (x + 1) + 0;
+		ret.indecies[index++] = meshSize * (x + 2) + 0;
+
+	}
+	
+	//Assert(ret.amountOfIndicies == index);
+
+	RegisterTriangleMesh(&ret);
+
+	return ret;
+}
+
+
+#endif 
 

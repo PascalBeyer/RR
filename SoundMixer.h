@@ -8,7 +8,7 @@ struct SoundListEntry
 {
 	float volume0;
 	float volume1;
-	s32 samplesPlayed;
+	i32 samplesPlayed;
 	AssetId soundId;
 	u32 soundIndex;
 	SoundListEntry *next;
@@ -24,7 +24,7 @@ class PlayingSoundList
 public:
 	PlayingSoundList();
 
-	void Add(float volume0, float volume1, s32 samplesPlayed, AssetId soundId, u32 soundIndex);
+	void Add(float volume0, float volume1, i32 samplesPlayed, AssetId soundId, u32 soundIndex);
 	void Free(SoundListEntry *soundListEntry);
 
 	SoundListEntry *first;
@@ -72,7 +72,7 @@ u32 FirstZeroIndex(bool *boolArray, u32 size)
 	return size;
 }
 
-void PlayingSoundList::Add(float volume0, float volume1, s32 samplesPlayed, AssetId soundId, u32 soundIndex)
+void PlayingSoundList::Add(float volume0, float volume1, i32 samplesPlayed, AssetId soundId, u32 soundIndex)
 {
 	u32 leastUnfilledIndex = FirstZeroIndex(empty, maxListSize);
 	if (leastUnfilledIndex < maxListSize)

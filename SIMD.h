@@ -426,34 +426,34 @@ static v3 SumLanes(v3Wide f)
 }
 static bool MaskIsZero(u32Wide a)
 {
-	s32 Mask = _mm_movemask_epi8(a);
+	i32 Mask = _mm_movemask_epi8(a);
 	return(Mask == 0);
 }
 
 static bool AnyTrue(u32Wide a)
 {
-	s32 Mask = _mm_movemask_epi8(a);
+	i32 Mask = _mm_movemask_epi8(a);
 	return !(Mask == 0);
 }
 static bool AnyFalse(u32Wide a)
 {
-	s32 Mask = _mm_movemask_epi8(a);
+	i32 Mask = _mm_movemask_epi8(a);
 	return !(Mask == 0xffff);
 }
 static bool AllFalse(u32Wide a)
 {
-	s32 Mask = _mm_movemask_epi8(a);
+	i32 Mask = _mm_movemask_epi8(a);
 	return (Mask == 0);
 }
 static bool AllTrue(u32Wide a)
 {
-	s32 Mask = _mm_movemask_epi8(a);
+	i32 Mask = _mm_movemask_epi8(a);
 	return (Mask == 0xffff);
 }
 
 static u32 FirstZeroLane(u32Wide a)
 {
-	s32 mask = _mm_movemask_epi8(a);
+	i32 mask = _mm_movemask_epi8(a);
 
 	if (!(mask & 0xf000)) return 0;
 	if (!(mask & 0xf00)) return 1;

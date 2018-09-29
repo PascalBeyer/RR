@@ -12,6 +12,8 @@ struct CharInfo
 	f32 xAdvance;
 	u32 width;
 	u32 height;
+	f32 xOff;
+	f32 yOff;
 };
 typedef CharInfo CharData;
 
@@ -54,6 +56,8 @@ static Font CreateFontFromSTB(u32 width, u32 height, u8 *pixels, u32 amountOfCha
 		data.maxUV = scale * V2(cur->x1, cur->y1);
 		data.width = cur->x1 - cur->x0;
 		data.height = cur->y1 - cur->y0;
+		data.xOff = cur->xoff;
+		data.yOff = cur->yoff;
 
 		ret.charData[i] = data;
 	}

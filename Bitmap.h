@@ -14,14 +14,14 @@ struct BitmapFileHeader
 
 	//infoheader
 	u32 biSize;
-	s32 biWidth;
-	s32 biHeight;
+	i32 biWidth;
+	i32 biHeight;
 	u16 biPlanes;
 	u16 biBitCount;
 	u32 compression;
 	u32 sizeImage;
-	s32 biXPerlsPerMeter;
-	s32 biYPerlsPerMeter;
+	i32 biXPerlsPerMeter;
+	i32 biYPerlsPerMeter;
 	u32 biClrUsed;
 	u32 biCLrImpartant;
 
@@ -90,9 +90,9 @@ static Bitmap CreateBitmap(char* fileName)
 	u32 alphaShift = BitScanForward(alphaMask);
 
 	u32 *tempPixels = ret.pixels;
-	for (s32 x = 0; x < header->biWidth; x++)
+	for (i32 x = 0; x < header->biWidth; x++)
 	{
-		for (s32 y = 0; y < header->biHeight; y++)
+		for (i32 y = 0; y < header->biHeight; y++)
 		{
 			u32 c = *tempPixels;
 

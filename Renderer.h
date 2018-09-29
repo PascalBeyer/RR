@@ -12,6 +12,7 @@ enum RenderGroupEntryType
 	RenderGroup_EntryLines,
 	RenderGroup_EntryTriangles,
 	RenderGroup_EntryClear,
+	RenderGroup_EntryTriangleMesh,
 };
 
 enum RenderSetUpFlags
@@ -21,7 +22,6 @@ enum RenderSetUpFlags
 	Setup_Orthogonal = 0x2,
 	Setup_ZeroToOne = 0x3,
 	Setup_ShadowMapping = 0x4,
-	
 };
 
 struct RenderSetup
@@ -55,6 +55,11 @@ struct EntryClear
 	v4 color;
 };
 
+struct EntryTriangleMesh
+{
+	RenderGroupEntryHeader header;
+	TriangleMesh mesh;
+};
 
 struct EntryTexturedQuads
 {
@@ -130,6 +135,8 @@ static void ClearPushBuffer(RenderGroup *rg)
 
 static void PushRenderSetup(RenderGroup *rg, Camera camera, v3 lightPos, u32 flag)
 {
+	TimedBlock;
+
 	RenderCommands *commands = rg->commands;
 
 	RenderSetup ret;
@@ -248,7 +255,7 @@ static void PushTriangle(RenderGroup *rg, v3 p1, v3 p2, v3 p3, u32 c1, u32 c2, u
 	if (!rg->currentTriangles)
 	{
 		EntryColoredVertices *triangles = PushRenderEntryType(EntryColoredVertices, EntryTriangles);
-		triangles->maxAmount = 10000;
+		triangles->maxAmount = 65536;
 		triangles->data = PushArray(frameArena, ColoredVertex, triangles->maxAmount);
 		triangles->vertexCount = 0;
 		
@@ -281,6 +288,12 @@ static void PushTriangle(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v4 color = V4(1, 
 static void PushTriangle(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 color)
 {
 	PushTriangle(rg, p1, p2, p3, V4(1.0f, color));
+}
+
+static void PushTriangleMesh(RenderGroup *rg, TriangleMesh mesh)
+{
+	EntryTriangleMesh *meshHeader = PushRenderEntry(EntryTriangleMesh);
+	meshHeader->mesh = mesh;
 }
 
 static void PushLine(RenderGroup *rg, v3 p1, v3 p2)
@@ -443,9 +456,12 @@ static void PushRectangle(RenderGroup *rg, v3 pos, v3 vec1, v3 vec2, v4 color)
 	PushQuadrilateral(rg, pos, pos + vec1, pos + vec2, pos + vec1 + vec2, color);
 }
 
+#define Orthogonal_Rectangle_OFFSET 0.5f
+
+// note : these are a bit "back" so they render behind the "text" / all bit maps
 static void PushRectangle(RenderGroup *rg, v2 pos, v2 vec1, v2 vec2, v4 color)
 {
-	PushQuadrilateral(rg, i12(pos), i12(pos + vec1), i12(pos + vec2), i12(pos + vec1 + vec2), color);
+	PushQuadrilateral(rg, V3(pos, Orthogonal_Rectangle_OFFSET), V3(pos + vec1, Orthogonal_Rectangle_OFFSET), V3(pos + vec2, Orthogonal_Rectangle_OFFSET), V3(pos + vec1 + vec2, Orthogonal_Rectangle_OFFSET), color);
 }
 
 static void PushRectangle(RenderGroup *rg, v2 min, v2 max, v4 color)
@@ -455,16 +471,23 @@ static void PushRectangle(RenderGroup *rg, v2 min, v2 max, v4 color)
 	v2 p3 = V2(min.x, max.y);
 	v2 p4 = max;
 
-	PushQuadrilateral(rg, i12(p1), i12(p2), i12(p3), i12(p4), color);
+	PushQuadrilateral(rg, V3(p1, Orthogonal_Rectangle_OFFSET), V3(p2, Orthogonal_Rectangle_OFFSET), V3(p3, Orthogonal_Rectangle_OFFSET), V3(p4, Orthogonal_Rectangle_OFFSET), color);
 }
 
+static void PushRectangle(RenderGroup *rg, v2 pos, f32 width, f32 height, f32 zOffset, v4 color)
+{
+	v2 vec1 = V2(width, 0.0f);
+	v2 vec2 = V2(0.0f, height);
+
+	PushQuadrilateral(rg, V3(pos, zOffset), V3(pos + vec1, zOffset), V3(pos + vec2, zOffset), V3(pos + vec1 + vec2, zOffset), color);
+}
 
 static void PushRectangle(RenderGroup *rg, v2 pos, f32 width, f32 height, v4 color)
 {
 	v2 vec1 = V2(width, 0.0f);
 	v2 vec2 = V2(0.0f, height);
 
-	PushQuadrilateral(rg, i12(pos), i12(pos + vec1), i12(pos + vec2), i12(pos + vec1 + vec2), color);
+	PushQuadrilateral(rg, V3(pos, Orthogonal_Rectangle_OFFSET), V3(pos + vec1, Orthogonal_Rectangle_OFFSET), V3(pos + vec2, Orthogonal_Rectangle_OFFSET), V3(pos + vec1 + vec2, Orthogonal_Rectangle_OFFSET), color);
 }
 
 static void PushCenteredRectangle(RenderGroup *rg, v2 pos, float width, float height, v4 color)
@@ -472,13 +495,15 @@ static void PushCenteredRectangle(RenderGroup *rg, v2 pos, float width, float he
 	v2 vec1 = V2(width, 0.0f);    
 	v2 vec2 = V2(0.0f, height);
 
-	v3 p1 = i12(pos - 0.5f * (vec1 + vec2));
-	v3 p2 = i12(pos + vec1 - 0.5f * (vec1 + vec2));
-	v3 p3 = i12(pos + vec2 - 0.5f * (vec1 + vec2));
-	v3 p4 = i12(pos + vec1 + vec2 - 0.5f * (vec1 + vec2));
+	v2 p1 = (pos - 0.5f * (vec1 + vec2));
+	v2 p2 = (pos + vec1 - 0.5f * (vec1 + vec2));
+	v2 p3 = (pos + vec2 - 0.5f * (vec1 + vec2));
+	v2 p4 = (pos + vec1 + vec2 - 0.5f * (vec1 + vec2));
 
-	PushQuadrilateral(rg, p1, p2, p3, p4, color);
+	PushQuadrilateral(rg, V3(p1, Orthogonal_Rectangle_OFFSET), V3(p2, Orthogonal_Rectangle_OFFSET), V3(p3, Orthogonal_Rectangle_OFFSET), V3(p4, Orthogonal_Rectangle_OFFSET), color);
 }
+ 
+#undef Orthogonal_Rectangle_OFFSET
 
 static void PushTexturedQuad(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, Bitmap bitmap, v4 color, bool inverted, v2 minUV, v2 maxUV)
 {
@@ -537,6 +562,7 @@ static void PushTexturedQuad(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, AssetI
 	PushTexturedQuad(rg, p1, p2, p3, p4, bitmap, color, false, V2(), V2(1, 1));
 }
 
+//Setup_BitmapsOnTop = 0x8, // for orthogonal UI stuff,	this is a general rule for now
 static void PushTexturedRect(RenderGroup *rg, v2 p1, f32 width, f32 height, Bitmap bitmap, v4 color, bool inverted, v2 minUV, v2 maxUV)
 {
 	v2 p2 = p1 + V2(width, 0);
@@ -577,8 +603,11 @@ static void PushBitmap(RenderGroup *rg, v2 pos, Bitmap bitmap, v4 color = V4(1, 
 	PushTexturedRect(rg, pos, (f32)bitmap.width, (f32)bitmap.height, bitmap, color, false, V2(0, 0), V2(1, 1));
 }
 
-static void PushString(RenderGroup *rg, v2 pos, unsigned char* string, u32 stringLength, f32 size, Font font, v4 color = V4(1, 1, 1, 1))
+// returns actual string width
+static f32 PushString(RenderGroup *rg, v2 pos, unsigned char* string, u32 stringLength, f32 size, Font font, v4 color = V4(1, 1, 1, 1))
 {
+	TimedBlock;
+
 	f32 x = pos.x;
 	float fScale = size / (f32)font.charHeight;
 
@@ -590,12 +619,15 @@ static void PushString(RenderGroup *rg, v2 pos, unsigned char* string, u32 strin
 		{
 			CharData data = font.charData[string[i]];
 
+			f32 offSetX = fScale * data.xOff;
+			f32 offSetY = fScale * data.yOff;
+
 			f32 scaledWidth = fScale * (f32)data.width;
 			f32 scaledHeight = fScale * (f32)data.height;
 
-			f32 y = pos.y + (f32)size - scaledHeight;
+			f32 y = pos.y + (f32)size;
 
-			v2 writePos = V2(x, y);
+			v2 writePos = V2(x + offSetX, y + offSetY);
 			
 			PushTexturedRect(rg, writePos, scaledWidth, scaledHeight, font.bitmap, color, true, data.minUV, data.maxUV);
 			float actualFloatWidth = data.xAdvance * fScale;
@@ -607,15 +639,17 @@ static void PushString(RenderGroup *rg, v2 pos, unsigned char* string, u32 strin
 			Assert(!"Not handled font symbol");
 		}
 	}
+
+	return (x - pos.x);
 }
-static void PushString(RenderGroup *rg, v2 pos, const char* string, f32 size, Font font, v4 color = V4(1, 1, 1, 1))
+static f32 PushString(RenderGroup *rg, v2 pos, const char* string, f32 size, Font font, v4 color = V4(1, 1, 1, 1))
 {
-	PushString(rg, pos, (unsigned char *)string, ArrayCount(string), size, font, color);
+	return PushString(rg, pos, (unsigned char *)string, ArrayCount(string), size, font, color);
 }
 
-static void PushString(RenderGroup *rg, v2 pos, String string, f32 size, Font font, v4 color = V4(1, 1, 1, 1))
+static f32 PushString(RenderGroup *rg, v2 pos, String string, f32 size, Font font, v4 color = V4(1, 1, 1, 1))
 {
-	PushString(rg, pos, string.data, string.length, size, font, color);
+	return PushString(rg, pos, string.data, string.length, size, font, color);
 }
 static void PushUnit(RenderGroup *rg, v3 pos, u32 facingDirection, u32 assetId, float radius)
 {

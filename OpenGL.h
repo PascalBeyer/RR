@@ -2,6 +2,7 @@
 #define RR_OPENGL
 
 #define GL_ARRAY_BUFFER                   0x8892
+#define GL_ELEMENT_ARRAY_BUFFER           0x8893
 
 #define GL_CLAMP_TO_EDGE                  0x812F
 #define GL_CLAMP_TO_BORDER                0x812D
@@ -119,7 +120,10 @@ typedef void WINAPI glBindVertexArray_(GLuint arrayName);
 typedef void WINAPI glGenBuffers_(GLsizei n, GLuint *buffers);
 typedef void WINAPI glBindBuffer_(GLenum target, GLuint buffer);
 typedef void WINAPI glBufferData_(GLenum target, GLsizeiptr size, const GLvoid *data, GLenum usage);
+//typedef void WINAPI glDrawElements_(GLenum mode, GLsizei count, GLenum type, const GLvoid * indices);
 
+
+//static glDrawElements_ *glDrawElements;
 static glBufferData_ *glBufferData;
 static glBindBuffer_ *glBindBuffer;
 static glGenBuffers_ *glGenBuffers;
@@ -175,6 +179,7 @@ struct OpenGLProgram
 
 //globals
 static GLuint vertexBuffer;
+static GLuint elementBuffer;
 static GLuint defaultInternalTextureFormat;
 
 static OpenGLProgram basic;
@@ -406,6 +411,27 @@ void OpenGLSetScreenSpace(u32 width, u32 height, float inGameWidth)
 		0, 0, 0, inGameWidth,
 	};
 	glLoadMatrixf(projM);
+}
+
+void RegisterTriangleMesh(TriangleMesh *mesh)
+{
+	glGenBuffers(1, &mesh->vertexVBO);
+	glGenBuffers(1, &mesh->indexVBO);
+
+	VertexFormat *buffer = PushArray(constantArena, VertexFormat, mesh->amountOfVerticies);//todo can I use Frame Arena here?
+	
+	for (u32 i = 0; i < mesh->amountOfVerticies; i++)
+	{
+		buffer[i].c    = mesh->colors[i];
+		buffer[i].p = mesh->verticies[i];
+	}
+
+	glBindBuffer(GL_ARRAY_BUFFER, mesh->vertexVBO);
+	glBufferData(GL_ARRAY_BUFFER, mesh->amountOfVerticies * sizeof(VertexFormat), buffer, GL_STREAM_DRAW);
+
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->indexVBO);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh->amountOfIndicies * sizeof(mesh->indecies[0]), mesh->indecies, GL_STREAM_DRAW);
+
 }
 
 u32 OpenGLDownLoadImage(u32 width, u32 height, u32* pixels)
@@ -644,7 +670,7 @@ void SetUpDepthProgram()
 
 }
 
-static void OpenGLDebugCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, void *userParam)
+static void WINAPI OpenGLDebugCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, void *userParam)
 {
 	if (1 || severity == GL_DEBUG_SEVERITY_HIGH)
 	{
@@ -716,6 +742,10 @@ void OpenGLInit(HGLRC modernContext)
 
 	glGenBuffers(1, &vertexBuffer);
 	glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
+	
+	glGenBuffers(1, &elementBuffer);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementBuffer);
+
 
 	SetUpBasicZBiasProgram();
 
@@ -857,6 +887,14 @@ void RenderIntoShadowMap(RenderCommands *rg)
 			
 			pBufferIt += sizeof(*trianglesHeader);
 		}break;
+		case RenderGroup_EntryTriangleMesh:
+		{
+			EntryTriangleMesh *meshHeader = (EntryTriangleMesh *)header;
+
+
+			pBufferIt += sizeof(*meshHeader);
+		}break;
+
 		case RenderGroup_EntryTexturedQuads:
 		{
 			EntryTexturedQuads *quadHeader = (EntryTexturedQuads *)header;
@@ -876,7 +914,12 @@ void RenderIntoShadowMap(RenderCommands *rg)
 
 			pBufferIt += sizeof(*lineHeader);
 		}break;
+		
+		default:
+		{
+			Die;
 
+		}break;
 		}
 	}
 
@@ -887,6 +930,8 @@ void RenderIntoShadowMap(RenderCommands *rg)
 //todo look into vertex sharing
 void OpenGlRenderGroupToOutput(RenderCommands *rg)
 {
+	TimedBlock;
+
 	glDepthMask(GL_TRUE);
 	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 	glDepthFunc(GL_LEQUAL);
@@ -924,9 +969,6 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg)
 	};
 	m4x4 biasedShadowMat = biasMatrix *  shadowMat;
 
-	
-
-	
 	glUseProgram(0);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	glViewport(0, 0, rg->width, rg->height);
@@ -999,7 +1041,34 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg)
 
 			pBufferIt += sizeof(*trianglesHeader);
 		}break;
+		case RenderGroup_EntryTriangleMesh:
+		{
+			EntryTriangleMesh *meshHeader = (EntryTriangleMesh *)header;
 
+			TriangleMesh mesh = meshHeader->mesh;
+
+			glUseProgram(basic.program);
+
+			glUniformMatrix4fv(basic.transform, 1, GL_TRUE, setup.transform.a[0]);
+
+			glBindBuffer(GL_ARRAY_BUFFER, mesh.vertexVBO);
+			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.indexVBO);
+
+			glEnableVertexAttribArray(basic.vertP);
+			glEnableVertexAttribArray(basic.vertC);
+
+			glVertexAttribPointer(basic.vertP, 3, GL_FLOAT, false, sizeof(VertexFormat), (void *)OffsetOf(VertexFormat, p));
+			glVertexAttribPointer(basic.vertC, 4, GL_UNSIGNED_BYTE, true, sizeof(VertexFormat), (void *)OffsetOf(VertexFormat, c));
+
+			glDrawElements(GL_TRIANGLE_STRIP, meshHeader->mesh.amountOfIndicies, GL_UNSIGNED_SHORT, NULL);
+
+			glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
+			glDisableVertexAttribArray(basic.vertP);
+			glDisableVertexAttribArray(basic.vertC);
+
+			glUseProgram(0);
+			pBufferIt += sizeof(*meshHeader);
+		}break;
 		case RenderGroup_EntryClear:
 		{
 			EntryClear *clearHeader = (EntryClear *)header;

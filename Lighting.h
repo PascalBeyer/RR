@@ -26,8 +26,8 @@ static ClipRect Intersect(ClipRect first, ClipRect second)
 }
 static u32 Area(ClipRect clipRect)
 {
-	s32 width = clipRect.xMax - clipRect.xMin;
-	s32 height = clipRect.yMax - clipRect.yMin;
+	i32 width = clipRect.xMax - clipRect.xMin;
+	i32 height = clipRect.yMax - clipRect.yMin;
 	if (width > 0 && height > 0)
 		return (width * height);
 	else
