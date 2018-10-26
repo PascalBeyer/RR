@@ -1,7 +1,6 @@
 #ifndef RR_GAME
 #define RR_GAME
 
-
 #include "BasicTypes.h"
 
 #include "buffers.h"
@@ -14,7 +13,6 @@
 #include "Math.h"
 #include "Color.h"
 #include "File.h"
-#include "Matrix.h"
 
 #include "LinearAlgebra.h"
 
@@ -22,11 +20,12 @@
 #include "Random.h"
 #include "Input.h"
 #include "Intrinsics.h"
-#include "TileMap.h"
 #include "Bitmap.h"
 #include "Sound.h"
 #include "Fonts.h"
 #include "World.h"
+
+#include "TileMap.h"
 
 #include "ConsoleHeader.h"
 #include "Screen.h"
@@ -49,11 +48,8 @@
 #include "Player.h"
 
 #include "MovementHandler.h"
+#include "Editor.h" // todo rank this once we know more.
 
-#include "ConsoleCommands.h"
-#include "Console.h"
-
-#include "DebugBody.h"
 
 struct Partical
 {
@@ -75,15 +71,22 @@ struct GameState
 	WorkHandler *workHandler;
 	AssetHandler *assetHandler;
 	SoundMixer *soundMixer;
-	
+	Editor editor;
+
 	Font font;
 
 	DEBUGKeyTracker keyTracker;
 };
 
+//debug stuff, has to be after gamestate for now, as console commands have to alter the gamestate
+#include "ConsoleCommands.h"
+#include "Console.h"
+#include "DebugBody.h"
+
+
+
 #define pi32 3.14159265359f
 
-//todo : get a whole debug thing working
 static bool viewLighting = false;
 
 static void UpdateDEBUGKeyTracker(DEBUGKeyTracker *tracker, KeyStateMessage message)
@@ -113,46 +116,19 @@ static void UpdateDEBUGKeyTracker(DEBUGKeyTracker *tracker, KeyStateMessage mess
 	}
 }
 
-static void HandleInput(GameState *gameState, Input input)
-{
-	KeyMessageBuffer buffer = input.buffer;
-	for (u32 i = 0; i < buffer.amountOfMessages; i++)
-	{
-		KeyStateMessage message = buffer.messages[i];
-
-		ConsoleHandleKeyMessage(message, &input);
-
-		if (ConsoleActive())
-		{	
-			continue;
-		}
-		
-		UpdateDEBUGKeyTracker(&gameState->keyTracker, message);
-
-		if (message.key == Key_l && message.flag == KeyState_PressedThisFrame)
-		{
-			viewLighting = !viewLighting;
-		}
-		if (message.key == Key_o && message.flag == KeyState_PressedThisFrame)
-		{
-			viewLighting = !viewLighting;
-			CalculateLightingSolution(gameState->world);
-		}
-	}
-
-}
-
 static GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHandler)
 {
 	GameState ret = {};
 	ret.workHandler = workHandler;
 
 	u16 newTileSize = 50;
-	int tileMapHeight = 200;
-	int tileMapWidth = 250;
+	int tileMapHeight = 20;
+	int tileMapWidth = 25;
 
 	//tileMap = TileMap("map.tm");
 	ret.font = LoadFont("consola.ttf");
+
+	globalFont = ret.font;
 
 	InitConsole(ret.font);
 	
@@ -169,38 +145,33 @@ static GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHa
 	*ret.soundMixer = SoundMixer(ret.assetHandler);
 	//soundMixer.PlaySound({ Asset_Map }, 0);
 
-	AABB stoneaabb = { V3(0, 0, -4), V3(1, 1, -2) };
-	Triangle *t = PushArray(constantArena, Triangle, 0);
-	u32 amountOfTriangles = 0;
-
 	i32 skyRadius = 40;
-	amountOfTriangles += CreateSkyBoxAndPush({ V3(-skyRadius, -skyRadius, -skyRadius), V3(skyRadius, skyRadius, skyRadius) }, RGBAfromHEX(0x87CEEB), constantArena).amount;
-	amountOfTriangles += CreateStoneAndPush(stoneaabb, 5.0f, constantArena, 0).amount;
+	TriangleArray t = CreateSkyBoxAndPush({ V3(-skyRadius, -skyRadius, -skyRadius), V3(skyRadius, skyRadius, skyRadius) }, RGBAfromHEX(0x87CEEB), constantArena);
 
 	AABB groundaabb = { V3(-20, -20, -0.25f), V3(20, 20, 0) };
-	amountOfTriangles += GenerateAndPushTriangleFloor(groundaabb, constantArena).amount;
+	//amountOfTriangles += GenerateAndPushTriangleFloor(groundaabb, constantArena).amount;
 
-	TriangleMesh mesh = GenerateAndPushTriangleFloorMesh(groundaabb, constantArena);
-	//PushTriangleToArenaIntendedNormal(constantArena, V3(0, -10, 0), V3(10, 10, 0), V3(-10, 10, 0), 0xFFFFFFFF, V3(0, 0, -1));
-	//amountOfTriangles += 1;
-
+	//TriangleMesh mesh = GenerateAndPushTriangleFloorMesh(groundaabb, constantArena);
+	
 	World *world = PushZeroStruct(constantArena, World);
 	ret.world = world;
 	world->lightSource = V3(20, 0, -20);
-	world->triangles.data = t;
-	world->triangles.amount = amountOfTriangles;
+	world->triangles = t;
 	world->camera.pos = V3(0, 0, -2.5f);
 	world->camera.basis = v3StdBasis;
 
 	world->debugCamera.pos = V3(0, 0, -10);
 	world->debugCamera.basis = v3StdBasis;
 
-	world->testMesh = mesh;
+	world->testMeshes = ReadObj("obj/maja/howDoTheyDoIt.obj");
+	
 	//InitLighting(world);
 
 	ret.screen = PushStruct(constantArena, Screen);
 	*ret.screen = CreateScreen((f32)screenWidth, (f32)screenHeight, (float)ret.tileMap->width, (float)ret.tileMap->height, 10, 1);
 
+
+#if 0
 	ret.entities = new EntitySelection();
 	ret.units = new UnitSelection();
 
@@ -227,6 +198,9 @@ static GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHa
 
 	ret.player->entitySelection.PushBack(unit3);
 	HandleRightClick(ret.player, ret.entities, V2(25, 25), *ret.tileMap);
+#endif
+
+	ret.editor.elements = EditorUIElementCreateDynamicArray(constantArena);
 
 	return ret;
 }
@@ -235,7 +209,6 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 {
 	TimedBlock;
 
-
 	TileMap *tileMap = gameState->tileMap;
 	Player *player = gameState->player;
 	EntitySelection *entities = gameState->entities;
@@ -243,10 +216,38 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 	Screen *screen = gameState->screen;
 
 	u16 tileSize = tileMap->tileSize;
-
 	//Update(*gameState->player, input, *tileMap, gameState->entities);
 
-	HandleInput(gameState, input);
+	// HandleInput
+	{
+		KeyMessageBuffer buffer = input.buffer;
+		for (u32 i = 0; i < buffer.amountOfMessages; i++)
+		{
+			KeyStateMessage message = buffer.messages[i];
+
+			ConsoleHandleKeyMessage(message, &input);
+			
+			if (ConsoleActive())
+			{
+				continue;
+			}
+
+			EditorHandleEvents(&gameState->editor, message, input);
+
+			UpdateDEBUGKeyTracker(&gameState->keyTracker, message);
+
+			if (message.key == Key_l && message.flag == KeyState_PressedThisFrame)
+			{
+				viewLighting = !viewLighting;
+			}
+			if (message.key == Key_o && message.flag == KeyState_PressedThisFrame)
+			{
+				viewLighting = !viewLighting;
+				CalculateLightingSolution(gameState->world);
+			}
+		}
+
+	}
 
 	RenderGroup renderGroup = InitRenderGroup(gameState->assetHandler, renderCommands);
 	RenderGroup *rg = &renderGroup;
@@ -259,29 +260,14 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 
 	World *world = gameState->world;
 
-	Tweekable(debugCam, b32);
-
-#if 0
-	if (input->keybord.z.pressedThisFrame)
-	{
-
-		if (input->keybord.shift.isDown)
-		{
-			world->debugCamera = world->camera;
-		}
-		else
-		{
-			debugCam = !debugCam;
-		}
-	}
-#endif 
+	Tweekable(b32, debugCam);
 
 	Camera *cam = debugCam ? &world->debugCamera : &world->camera;
 
-	UpdateCamGodMode(&input, &gameState->world->camera, gameState->keyTracker);
+	Tweekable(v3, lightPos);
 
-	PushRenderSetup(rg, *cam, world->lightSource, (Setup_Projective | Setup_ShadowMapping));
-
+	UpdateCamGodMode(&input, &gameState->world->camera, gameState->keyTracker); // cam?
+	PushRenderSetup(rg, *cam, lightPos/*world->lightSource*/, (Setup_Projective | Setup_ShadowMapping));
 	PushClear(rg, V4(1.0f, 0.1f, 0.1f, 0.1f));
 
 	//MoveUnits(units, *tileMap);
@@ -304,33 +290,42 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 	float maxScreenX = Max(Max(screenUL.x, screenUR.x), Max(screenBL.x, screenBR.x));
 	float maxScreenY = Max(Max(screenUL.y, screenUR.y), Max(screenBL.y, screenBR.y));
 
-	int minScreenXi = (int)Max((int)floorf(minScreenX) - 1.0f, 0.0f);
-	int minScreenYi = (int)Max((int)floorf(minScreenY) - 1.0f, 0.0f);
+	u32 minScreenXi = (u32)Max((int)floorf(minScreenX) - 1.0f, 0.0f);
+	u32 minScreenYi = (u32)Max((int)floorf(minScreenY) - 1.0f, 0.0f);
 
-	int maxScreenXi = (int)Min((int)ceilf(maxScreenX) + 1.0f, (float)tileMap->width);
-	int maxScreenYi = (int)Min((int)ceilf(maxScreenY) + 1.0f, (float)tileMap->height);
+	u32 maxScreenXi = (u32)Min((int)ceilf(maxScreenX) + 1.0f, (float)tileMap->width);
+	u32 maxScreenYi = (u32)Min((int)ceilf(maxScreenY) + 1.0f, (float)tileMap->height);
 
-	//DEBUG_ON_OFF(DrawWholeMap, false)
-	//{
-	//	minScreenXi = 0;
-	//	minScreenYi = 0;
-	//	maxScreenXi = tileMap->width;
-	//	maxScreenYi = tileMap->height;
-	//}
+	Tweekable(b32, DrawWholeMap);
+	if (DrawWholeMap)
+	{
+		minScreenXi = 0;
+		minScreenYi = 0;
+		maxScreenXi = tileMap->width;
+		maxScreenYi = tileMap->height;
+	}
 
-	/*
+#if 0
 	for (u32 x = minScreenXi; x < maxScreenXi; x++)
 	{
-	for (u32 y = minScreenYi; y < maxScreenYi; y++)
-	{
-	Tile tile = *GetTile(*tileMap, x, y);
-	//renderGroup.PushAsset(v3::Inclusion12(tile.pos), { Asset_TileMapTiles }, tile.type, v3StdBasis);
-	//renderGroup.PushAsset(v3(x, y, randomSamples[(x*y + x + y) % 1000] - 0.01f), { Asset_Building }, 0, Scale(v3StdBasis, 1));
-	renderGroup.PushCuboid(V3(x, y, -tile.height + 1), { {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, tile.height} }, V4(1.0f, 0.9f, 0.9f, 0.9f));
+		for (u32 y = minScreenYi; y < maxScreenYi; y++)
+		{
+			Tile *tile = GetTile(*tileMap, x, y);
+			PushTriangleMesh(rg, tile->mesh);
+		}
+	}
+#else
 
+	PushDebugPointCuboid(rg, lightPos);
+
+	static u32 angleIt = 0;
+	angleIt++;
+	Quaternion q = QuaternionFromAngleAxis(0.01f * angleIt, V3(0,1,0));
+	For(world->testMeshes)
+	{
+		PushTriangleMesh(rg, *it, q);
 	}
-	}
-	*/
+#endif 
 
 	v4 allColorsOfTheRainbow[] =
 	{
@@ -355,7 +350,7 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 
 
 	static KdNode *selectedLeaf;
-	static v2 selectedPoint;
+	Tweekable(v2, selectedPoint);
 #if 0
 	if (input->mouse.leftButtonPressedThisFrame)
 	{
@@ -386,10 +381,10 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 	}
 #endif
 
-	
+
 	if (viewLighting)
 	{
-		PushLightingImage(rg);	
+		PushLightingImage(rg);
 	}
 	else
 	{
@@ -400,7 +395,10 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 			PushTriangle(rg, t[triI].cv1, t[triI].cv2, t[triI].cv3);
 		}
 		*/
-		PushTriangleMesh(rg, gameState->world->testMesh);
+		//todo make key binidings for console commands
+
+		//gameState->world->testMesh.amountOfIndicies = amountToRender;
+		//PushTriangleMesh(rg, gameState->world->testMesh);
 #if 0
 		for (u32 triI = 0; triI < 40; triI++)
 		{
@@ -452,7 +450,6 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 			renderGroup.PushBuilding(i12(buildingPtr->GetPos()), Asset_Building, buildingPtr->GetSize());
 
 		}
-	}
 #endif
 	//renderGroup.PushUnit(v3(unit1->pos, -tileMap.GetHeight(unit1->GetPos()) + 1), unit1->facingDirection, Asset_Unit, unit1->radius);
 
@@ -496,11 +493,23 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 #endif
 	//PushRectangle(rg, player->markingRect, 0.0f); todo : redo this.
 
-	PushRenderSetup(rg, *cam, world->lightSource, Setup_ZeroToOne);
+	PushRenderSetup(rg, *cam, world->lightSource, Setup_ZeroToOne); //todo  make PushRenderSetup have optional lightsource.
 
 	//PushTexturedRect(rg, V2(0.1f, 0.1f), 0.5f, 0.5f, gameState->font.bitmap);
+#if 0
+	u32 it_index = 0;
+	For(world->testMeshes)
+	{
+		//if (it_index == 3) break;
+		PushTexturedRect(rg, V2(0.1f + 0.2f * it_index++, 0.1f), 0.2f, 0.2f, it->mat.bitmap);
+	}
+#endif
+	
+
 	//PushString(rg, V2(0.1f, 0.5f), CreateString("asd"), 0.1f, gameState->font);
 
+	UpdateEditor(&gameState->editor, input);
+	RenderEditor(rg, gameState->editor);
 	
 	UpdateConsole(input);
 	DrawConsole(rg);

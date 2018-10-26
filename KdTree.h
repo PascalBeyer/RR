@@ -423,7 +423,7 @@ static KdNode *BuildKdNode(LightingTriangle **triangles, u32 triangleAmount, Are
 		if (triangleAmount)
 		{
 			node->amountOfTriangles = triangleAmount;
-			node->triangles = PushZeroArray(arena, LightingTriangle *, triangleAmount);
+			node->triangles = PushZeroData(arena, LightingTriangle *, triangleAmount);
 			for (u32 i = 0; i< triangleAmount; i++)
 			{
 				node->triangles[i] = triangles[i];
@@ -453,8 +453,8 @@ static KdNode *BuildKdNode(LightingTriangle **triangles, u32 triangleAmount, Are
 
 	u8 *saveArena = transientArena->current;
 
-	LightingTriangle** negativeTriangle = PushArray(transientArena, LightingTriangle*, triangleAmount);
-	LightingTriangle** positiveTriangle = PushArray(transientArena, LightingTriangle*, triangleAmount);
+	LightingTriangle** negativeTriangle = PushData(transientArena, LightingTriangle*, triangleAmount);
+	LightingTriangle** positiveTriangle = PushData(transientArena, LightingTriangle*, triangleAmount);
 	for (u32 i = 0; i < triangleAmount; i++)
 	{
 		if (Intersect(negativeBound, triangles[i]))
@@ -505,7 +505,7 @@ static KdNode *BuildKdTree(LightingTriangle *triangles, u32 triangleAmount, Aren
 	KdNode *ret;
 	Clear(tempArena);
 	AABB tAABB = GetEnclosingAABB(triangles, triangleAmount);
-	LightingTriangle **trianglePointers = PushArray(tempArena, LightingTriangle *, triangleAmount);
+	LightingTriangle **trianglePointers = PushData(tempArena, LightingTriangle *, triangleAmount);
 	for (u32 i = 0; i< triangleAmount; i++)
 	{
 		trianglePointers[i] = triangles + i;

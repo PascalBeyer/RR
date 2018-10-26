@@ -7,7 +7,6 @@
 #define MegaBytes(a) (1024 * KiloBytes(a))
 #define KiloBytes(a) (1024 * (a))
 #define OffsetOf(type, Member) (umm)&(((type *)0)->Member)
-#define Assert(Expression) if(!(Expression)) {*(int *)0 = 0;}
 #define Die Assert(false)
 
 
@@ -21,8 +20,6 @@
 #undef CreateFile
 #undef PlaySound
 
-//todo remove this (own sprintf)
-#include <stdio.h>
 #include "OpenGL.h"
 
 struct windowDimension
@@ -54,16 +51,13 @@ static HWND window;
 //todo : make these allocate into arenas
 u32 (*AllocateGPUTexture)(u32 width, u32 height, u32 *pixels);
 void (*UpdateGPUTexture)(Bitmap bitmap);
-bool(*WriteEntireFile)(char *fileName, File file);
-File(*LoadFile)(char *fileName);
-void(*FreeFile)(File file);
-
 
 Arena *constantArena;
 Arena *frameArena;
 Arena *workingArena;
+DynamicAllocator *alloc;
 
-static void freeFile(File file)
+static void FreeFile(File file)
 {
 	void *memory = file.memory;
 	if (memory)
@@ -72,7 +66,7 @@ static void freeFile(File file)
 	}
 }
 
-static File loadEntireFile(char *fileName)
+static File LoadFile(char *fileName)
 {
 	void *memory = 0;
 	unsigned int size = 0;
@@ -94,7 +88,7 @@ static File loadEntireFile(char *fileName)
 				}
 				else
 				{
-					VirtualFree(memory, 0, MEM_RELEASE);
+					Die;
 					memory = 0;
 				}
 			}
@@ -108,7 +102,43 @@ static File loadEntireFile(char *fileName)
 	return result;
 }
 
-static bool writeEntireFile(char * fileName, File file) //zero terminated
+static File LoadFile(char *fileName, Arena *arena)
+{
+	void *memory = 0;
+	unsigned int size = 0;
+
+	HANDLE fileHandle = CreateFileA(fileName, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	if (fileHandle != INVALID_HANDLE_VALUE)
+	{
+		LARGE_INTEGER fileSize;
+		if (GetFileSizeEx(fileHandle, &fileSize))
+		{
+			u32 fileSize32 = (u32)fileSize.QuadPart;
+			memory = PushData(arena, u8, fileSize32);
+			if (memory)
+			{
+				DWORD bytesRead;
+				if (ReadFile(fileHandle, memory, fileSize32, &bytesRead, 0) && fileSize32 == bytesRead)
+				{
+					size = fileSize32;
+				}
+				else
+				{
+					Die;
+					memory = 0;
+				}
+			}
+
+		}
+		CloseHandle(fileHandle);
+	}
+	File result;
+	result.fileSize = size;
+	result.memory = memory;
+	return result;
+}
+
+static bool WriteEntireFile(char * fileName, File file) //zero terminated
 {
 	void * memory = file.memory;
 	unsigned int size = file.fileSize;
@@ -126,6 +156,7 @@ static bool writeEntireFile(char * fileName, File file) //zero terminated
 		else
 		{
 			//todo: logging
+			Die;
 			OutputDebugStringA("Error writing file.");
 		}
 
@@ -137,7 +168,6 @@ static bool writeEntireFile(char * fileName, File file) //zero terminated
 
 static void initializeImageBuffer(BITMAPINFO *info, ImageBuffer *buffer, int width, int height)
 {
-	//TODO: BULLETPROOF THIS
 
 	if (buffer->memory)
 	{
@@ -668,6 +698,7 @@ static void win32InitOpenGL(HWND window)
 		WGLPROC(glDebugMessageCallback);
 		WGLPROC(glActiveTexture);
 		WGLPROC(glUniform1i);
+		WGLPROC(glUniform3f);
 		WGLPROC(glBindAttribLocation);
 
 
@@ -905,10 +936,6 @@ int CALLBACK WinMain(
 #endif
 	workHandler.Initiate(&InterlockedCompareExchange, &WakeThreads, &InterlockedIncrement, threadCount);
 
-	LoadFile = &loadEntireFile;
-	FreeFile = &freeFile;
-	WriteEntireFile = &writeEntireFile;
-
 	WNDCLASSA windowClass = {};
 	windowClass.style = CS_HREDRAW | CS_VREDRAW;
 	windowClass.lpfnWndProc = win32MainWindowCallback;
@@ -930,11 +957,13 @@ int CALLBACK WinMain(
 	void *workingMemory = VirtualAlloc(0, MegaBytes(5), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 	workingArena = InitArena(workingMemory, MegaBytes(5));
 
+	alloc = PushStruct(constantArena, DynamicAllocator);
+
+
 	void *debugMemory = VirtualAlloc(0, MegaBytes(300), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 	DWORD asd = GetLastError();
 	globalDebugState.arena = InitArena(debugMemory, MegaBytes(300));
-	globalDebugState.tweekers = CreateDynamicArray(globalDebugState.arena);
-
+	
 	const u32 inputBufferSize = 100;
 	KeyStateMessage inputBuffer[inputBufferSize];
 	KeyMessageBuffer keyMessageBuffer;
@@ -964,9 +993,9 @@ int CALLBACK WinMain(
 
 			AllocateGPUTexture = OpenGLDownLoadImage;
 			UpdateGPUTexture = OpenGLUpdateBitmap;
-			//todo move the allocation stuff into the game?
 
-			u32 pushBufferSize = KiloBytes(4);
+			//todo move the allocation stuff into the game?
+			u32 pushBufferSize = MegaBytes(4);
 			void* pushBuffer = VirtualAlloc(0, pushBufferSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 			RenderCommands renderCommands = {};
 			renderCommands.focalLength = 1.0f;
@@ -1010,8 +1039,10 @@ int CALLBACK WinMain(
 
 			gameState = InitGame(windowWidth, windowHeight, &workHandler);
 
-			LoadDebugVariables();
+			console.state = &gameState;
 
+			InitDebug();
+			
 			while (running)
 			{	
 				if (globalGamePaused)
@@ -1062,10 +1093,6 @@ int CALLBACK WinMain(
 				
 				//AnimationCreatorUpdateAndRender(&renderCommands, &input);
 				
-#if Internal
-				HandleDebugCycleCount();
-#endif				
-				
 				if (soundOutput.soundIsValid)
 				{
 					win32FillSoundBuffer(&soundOutput, byteToLock, bytesToWrite, samples);
@@ -1076,11 +1103,10 @@ int CALLBACK WinMain(
 					soundOutput.soundIsPlaying = true;
 				}
 				
-				
-				
 #if 1
 				RenderGroup renderGroup = InitRenderGroup(gameState.assetHandler, &renderCommands);
 				RenderGroup *rg = &renderGroup;
+				Font font = gameState.font;
 
 				LARGE_INTEGER endCounter;
 				QueryPerformanceCounter(&endCounter);
@@ -1095,10 +1121,11 @@ int CALLBACK WinMain(
 
 				PushRenderSetup(rg, {}, V3(), Setup_Orthogonal);
 
-				PushString(rg, V2(20.1f, 10.1f), s, 20, gameState.font);
+				PushString(rg, V2(20.1f, 10.1f), s, 20, font);
 				
 				
-				DrawDebugRecords(rg, gameState.font, targetSecondsPerFrame, input);
+				//DrawDebugRecords(rg, gameState.font, targetSecondsPerFrame, input);
+				//DrawTweekers(rg, font);
 
 #endif
 
@@ -1110,8 +1137,6 @@ int CALLBACK WinMain(
 
 				Clear(frameArena);
 				Clear(workingArena);
-				
-
 			}
 
 			//ClipCursor(NULL);

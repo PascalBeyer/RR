@@ -1,9 +1,6 @@
 #ifndef RR_SCREEN
 #define RR_SCREEN
 
-#include "Matrix.h"
-#include "World.h"
-
 struct Screen
 {
 	f32 maxX, maxY;

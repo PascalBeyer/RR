@@ -10,23 +10,24 @@ enum ConsoleSelectTag
 
 static v4 ColorForHistoryEntry(HistoryEntryEnum flag)
 {
-	v4 errorColor = V4(1, 0.1f, 0.1f, 0.4f);
-	v4 defaultColor = V4(1, 0.5f, 1.0f, 0.5f);
-	v4 commandColor = V4(1, 1, 1, 1);
+	Tweekable(v4, consoleCommandTextColor);
+	Tweekable(v4, consoleErrorTextColor);
+	Tweekable(v4, consoleDefaultTextColor);
+	
 
 	switch (flag)
 	{
 	case HistoryEntry_Command:
 	{
-		return commandColor;
+		return consoleCommandTextColor;
 	}break;
 	case HistoryEntry_Error:
 	{
-		return errorColor;
+		return consoleErrorTextColor;
 	}break;
 	default:
 	{
-		return defaultColor;
+		return consoleDefaultTextColor;
 	}break;
 
 	}
@@ -45,14 +46,14 @@ static ConsoleCommand CreateCommand(char* name, void (*interp)(StringArray args)
 static void InitConsole(Font font)
 {
 	console.font = font;
-	console.buffer = PushArray(constantArena, Char, console.bufferSize);
+	console.buffer = PushData(constantArena, Char, console.bufferSize);
 	console.arena = InitArena(console.buffer, console.bufferSize * sizeof(Char));
-	console.history = PushArray(constantArena, HistoryEntry, console.maxHistoryLength);
-	console.commandHistory = PushArray(constantArena, String, console.maxCommandHistoryLength);
-	console.inputString.data = PushArray(constantArena, unsigned char, console.maxInputStringLength);
+	console.history = PushData(constantArena, HistoryEntry, console.maxHistoryLength);
+	console.commandHistory = PushData(constantArena, String, console.maxCommandHistoryLength);
+	console.inputString = PushArray(constantArena, unsigned char, console.maxInputStringLength);
 	console.inputString.length = 0;
 
-	console.commands.data = PushArray(constantArena, ConsoleCommand, 0);
+	console.commands = PushArray(constantArena, ConsoleCommand, 0);
 
 	BuildStaticArray(constantArena, console.commands, CreateCommand("hello", HelloHelper, 0, 0));
 	BuildStaticArray(constantArena, console.commands, CreateCommand("add", AddHelper, 2, 2));
@@ -61,12 +62,16 @@ static void InitConsole(Font font)
 	BuildStaticArray(constantArena, console.commands, CreateCommand("help", HelpHelper, 0, 0));
 	BuildStaticArray(constantArena, console.commands, CreateCommand("tweek", TweekHelper, 0, 2));
 	BuildStaticArray(constantArena, console.commands, CreateCommand("save", SaveTweekersHelper, 1, 1));
-	
-
-	//ConsoleOutputString(lorum);
+	BuildStaticArray(constantArena, console.commands, CreateCommand("tweekers", TweekersHelper, 0, 0));
+	BuildStaticArray(constantArena, console.commands, CreateCommand("grisu", GrisuHelper, 1, 1));
 }
 
 static bool ConsoleActive()
+{
+	return (console.selecting);
+}
+
+static bool ConsoleReadyToType()
 {
 	return (console.selecting & SelectTag_TextField);
 }
@@ -359,8 +364,7 @@ static void ConsoleHandleCommand(String inputLine)
 
 			StringArray args = {};
 			Clear(workingArena);
-			args.data = PushArray(workingArena, String, 0);
-			args.amount = 0;
+			args = PushArray(workingArena, String, 0);
 
 			EatSpaces(&remaining);
 			while (remaining.length)
@@ -390,6 +394,7 @@ static void ConsoleHandleCommand(String inputLine)
 
 static void RemoveSubstring(String *string, u32 first, u32 last)
 {
+	if (first == last) return;
 	Assert(first < last);
 	Assert(last <= string->length);
 
@@ -439,7 +444,7 @@ static void ConsoleHandleKeyMessage(KeyStateMessage message, Input *input)
 			else
 			{
 				console.intendedOpenness = newIntededOpenness;
-				console.selecting = SelectTag_Selecting | SelectTag_TextField;
+				console.selecting = SelectTag_TextField;
 			}
 		}break;
 		case Key_leftMouse:
@@ -491,7 +496,7 @@ static void ConsoleHandleKeyMessage(KeyStateMessage message, Input *input)
 	{
 		switch (message.key)
 		{
-		
+
 		case Key_mouseWheelForward:
 		{
 			f32 lineSize = 1.5f * console.fontSize;
@@ -536,6 +541,19 @@ static void ConsoleHandleKeyMessage(KeyStateMessage message, Input *input)
 				return;
 			}
 		}break;
+		}
+	}
+
+
+	if (!ConsoleReadyToType())
+	{
+		return;
+	}
+
+	if (message.flag & (KeyState_PressedThisFrame | KeyState_Repeaded))
+	{
+		switch (message.key)
+		{
 		case Key_v:
 		{
 			if (message.flag & KeyState_ControlDown)
@@ -551,8 +569,10 @@ static void ConsoleHandleKeyMessage(KeyStateMessage message, Input *input)
 				{
 					return;
 				}
+				u32 first = Min((u32)console.firstSelectPos, (u32)console.endSelectPos);
+				u32 end = Max((u32)console.firstSelectPos, (u32)console.endSelectPos);
 
-				// todo : what happens if we add to much to the inputSting?
+				RemoveSubstring(&console.inputString, first, end);
 
 				String head = CreateString(console.inputString.data, console.cursorPos);
 				String tailToCopy = CreateString(console.inputString.data + console.cursorPos, console.inputString.length);
@@ -562,7 +582,9 @@ static void ConsoleHandleKeyMessage(KeyStateMessage message, Input *input)
 				CopyStringToString(toAdd, &tailToCopy);
 				console.inputString.length += toAdd.length;
 
-				console.cursorPos += toAdd.length;
+				console.cursorPos += toAdd.length - (end - first);
+
+				ConsoleResetSelection();
 
 				return;
 			}
@@ -591,7 +613,7 @@ static void ConsoleHandleKeyMessage(KeyStateMessage message, Input *input)
 		
 		case Key_enter:
 		{
-			Char *beginOfCommand = PushArray(console.arena, Char, 0); // todo: stupid hack
+			Char *beginOfCommand = PushData(console.arena, Char, 0); // todo: stupid hack
 			AddStringToHistory(console.inputString, HistoryEntry_Command);
 			String command = CreateString(beginOfCommand, console.inputString.length);
 
@@ -728,7 +750,7 @@ static void ConsoleHandleKeyMessage(KeyStateMessage message, Input *input)
 					RemoveSubstring(&console.inputString, first, end - 1);
 				}
 				
-				console.inputString[end] = charPressed;
+				console.inputString[first] = charPressed;
 
 				console.cursorPos = first + 1;
 				ConsoleResetSelection();
@@ -860,7 +882,9 @@ static void ConsoleDrawSelection(RenderGroup *rg, String string, u32 first, u32 
 	f32 selectionMinX = stringLengthUpToSelection - console.typeFieldTextScrollOffset + xOffset;
 	f32 selectionMaxX = selectionMinX + selectionLength;
 
-	PushRectangle(rg, V2(selectionMinX, yMin), V2(selectionMaxX, yMax), V4(1.0f, 0.0f, 0.2f, 0.45f));
+	Tweekable(v4, consoleSelectionColor); // V4(1.0f, 0.0f, 0.2f, 0.45f)
+
+	PushRectangle(rg, V2(selectionMinX, yMin), V2(selectionMaxX, yMax), consoleSelectionColor);
 }
 
 
@@ -878,8 +902,9 @@ static void DrawConsole(RenderGroup *rg)
 	PushRectangle(rg, p1, V2(1 - console.scrollbarWidth, console.openness) - V2(0, console.textInputFieldSize), V4(1.0f, 0.5f, 0.6f, 0.85f));
 
 	//typeField
+	Tweekable(v4, consoleTextFieldColor); //V4(1.0f, 0.6f, 0.7f, 0.85f)
 	v2 typeFieldPos = p3 - V2(0, console.textInputFieldSize);
-	PushRectangle(rg, typeFieldPos, p4, V4(1.0f, 0.6f, 0.7f, 0.85f));
+	PushRectangle(rg, typeFieldPos, p4, consoleTextFieldColor);
 
 	//cursor
 	if ((console.cursorTimer < 0.5f) && !(console.selecting & SelectTag_History))
@@ -910,7 +935,6 @@ static void DrawConsole(RenderGroup *rg)
 		amountOfDisplayedLines = console.historyLength;
 	}
 
-	//todo check that the historyPos does not read invalid memory when opening wide
 	v2 consoleFieldFirstRow = V2(console.historyXOffset, typeFieldPos.y);
 	i32 topLine = (i32)(console.historyLength - amountOfDisplayedLines - console.historyPos);
 	topLine = Max(0, topLine);
@@ -1014,9 +1038,10 @@ static void DrawConsole(RenderGroup *rg)
 	f32 scrollbarBottom = console.openness - console.textInputFieldSize;
 	v2 scrollbarFieldMin = V2(1.0f - console.scrollbarWidth, 0.0f);
 	v2 scrollbarFieldMax = V2(1.0f, scrollbarBottom);
-	Tweekable(scrollbarColor, v4);
-	PushRectangle(rg, scrollbarFieldMin, scrollbarFieldMax, scrollbarColor);
+	Tweekable(v4, consoleScrollbarBackGroundColor);
+	PushRectangle(rg, scrollbarFieldMin, scrollbarFieldMax, consoleScrollbarBackGroundColor);
 
+	Tweekable(v4, consoleScrollbarColor); //V4(1.0f, 0.5f, 0.6f, 0.85f)
 	if(console.historyLength)
 	{
 		f32 scrollMiny = (f32)(topLine) / (f32)console.historyLength * scrollbarBottom;
@@ -1025,7 +1050,7 @@ static void DrawConsole(RenderGroup *rg)
 		v2 scrollbarMin = V2(1.0f - console.scrollbarWidth + 0.003f, scrollMiny);
 		v2 scrollbarMax = V2(1.0f - 0.003f, scrollMaxy);
 
-		PushRectangle(rg, scrollbarMin, scrollbarMax, V4(1.0f, 0.5f, 0.6f, 0.85f));
+		PushRectangle(rg, scrollbarMin, scrollbarMax, consoleScrollbarColor);
 	}
 }
 
@@ -1034,11 +1059,8 @@ static void DrawConsole(RenderGroup *rg)
 // control left right
 // maybe handle to long strings?
 // make all arrays dynamic?
-// fix font missplacement
-// !"§$%&/()=? and such.
 // dont die on to may symbols i.e dynamic arrays or rolling buffer maybe 65536 long for that juicy speed?
 // sanitise strings and handle \n, \r
-// make console unselectable, right now we cant use wasd when the console is open.
 
 #endif // !RR_CONSOLE
 

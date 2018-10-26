@@ -1,57 +1,46 @@
 #ifndef RR_BUILDING
 #define RR_BUILDING
 
-class Building : public Entity
+struct Building
 {
-public:
-	Building();
-	Building(v2 pos, float radius, float unitProduceTime, float expectedSecondsPerFrame);
-	~Building();
-
-	void Update(u16 tileSize, EntitySelection *entitys);
-
+	Entity e;
+	
 	bool producing;
-private:
 	u32 runningFrameIndex;
 	float expectedSecondsPerFrame;
 	float unitProduceTime;
 
 };
 
-Building::Building()
+static Building CreateBuilding(v2 pos, float radius, float unitProduceTime, float expectedSecondsPerFrame)
 {
+	Building ret;
+	ret.unitProduceTime = unitProduceTime;
+	ret.expectedSecondsPerFrame = expectedSecondsPerFrame;
 
-}
-Building::~Building()
-{
-
-}
-
-Building::Building(v2 pos, float radius, float unitProduceTime, float expectedSecondsPerFrame) : Entity(pos, radius)
-{
-	this->unitProduceTime = unitProduceTime;
-	this->expectedSecondsPerFrame = expectedSecondsPerFrame;
-
-	runningFrameIndex = 0;
+	ret.runningFrameIndex = 0;
+	return ret;
 }
 
-void Building::Update(u16 tileSize, EntitySelection *entitys)
+static void Update(Building *building, u16 tileSize, EntitySelection *entitys)
 {
-	if (producing)
+	Entity e = building->e;
+
+	if (building->producing)
 	{
-		runningFrameIndex++;
-		if (unitProduceTime < (float)runningFrameIndex * expectedSecondsPerFrame)
+		building->runningFrameIndex++;
+		if (building->unitProduceTime < (float)building->runningFrameIndex * building->expectedSecondsPerFrame)
 		{
-			runningFrameIndex = 0;
-			producing = false;
+			building->runningFrameIndex = 0;
+			building->producing = false;
 
-			v2 unitPos = pos + V2((GetSize() + 3), (GetSize() + 3));
+			v2 unitPos = building->e.pos + V2((e.radius + 3), (e.radius + 3));
 			float acceleration = 0.5f;
 			float maxSpeed = 1.0f;
 			float speed = 0;
 
-			Unit *unit = new Unit(unitPos, acceleration, maxSpeed, expectedSecondsPerFrame, 1.0f);
-			entitys->PushBack(unit);
+			//Unit *unit = new Unit(unitPos, acceleration, maxSpeed, expectedSecondsPerFrame, 1.0f);
+			//entitys->PushBack(unit);
 		}
 	}
 }

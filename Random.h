@@ -1138,6 +1138,11 @@ static u32 RandomSeed()
 	return (u32)(randomSamples[seed++ % ArrayCount(randomSamples)] * (u32)(-1));
 }
 
+static RandomSeries GetRandomSeries()
+{
+	return { RandomSeed() };
+}
+
 static float RandomSeedSigned()
 {
 	return (2.0f* randomSamples[seed++ % ArrayCount(randomSamples)] - 1.0f);

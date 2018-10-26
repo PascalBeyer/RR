@@ -15,9 +15,10 @@ static File CreateFile(void *memory, u32 fileSize)
 	return ret;
 }
 
-extern bool (*WriteEntireFile)(char *fileName, File file); // todo make these either allways take arenas or make arena versions at least
-extern File (*LoadFile)(char *fileName);
-extern void (*FreeFile)(File file);
+static bool WriteEntireFile(char *fileName, File file);
+static File LoadFile(char *fileName, Arena *arena);
+static File LoadFile(char *fileName);
+static void FreeFile(File file);
 
 
 

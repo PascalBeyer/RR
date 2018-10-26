@@ -133,6 +133,7 @@ struct Input
 	v2 mouseDelta;
 	v2 oldMousePos;
 	v2 mouseZeroToOne;
+	v2 mouseZeroToOneDelta;
 
 	f32 secondsPerFrame;
 };
@@ -144,7 +145,10 @@ static void UpdateInput(Input *input, MouseInput mouseInput, int windowWidth, in
 	input->mouseDelta = mousePos - input->mousePos;
 	input->mouse = mouseInput;
 	input->mousePos = mousePos;
-	input->mouseZeroToOne = V2((float)mouseInput.x / (float)windowWidth, (float)mouseInput.y / (float) windowHeight);
+
+	v2 mouseZeroToOne = V2((float)mouseInput.x / (float)windowWidth, (float)mouseInput.y / (float)windowHeight);
+	input->mouseZeroToOneDelta = mouseZeroToOne - input->mouseZeroToOne;
+	input->mouseZeroToOne = mouseZeroToOne;
 	input->secondsPerFrame = targetSecondsPerFrame;
 	input->buffer = messages;
 }

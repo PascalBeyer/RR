@@ -1,3 +1,24 @@
+ 
+
+
 debugCam false
-scrollbarColor (1.00000,0.40000,0.50000,0.75000)
-renderCycleThreshhold 10000
+DrawWholeMap true 
+selectedPoint (0.00000,0.00000)
+consoleTextFieldColor (1.00000,0.40614,0.53918,0.79166)
+consoleCommandTextColor (1.00000,0.62239,0.86968,1.00000)
+consoleErrorTextColor (1.00000,0.59341,0.17481,0.67129)
+consoleDefaultTextColor (1.00000,0.12011,0.16945,0.56944)
+consoleScrollbarBackGroundColor (1.00000,0.25694,0.44011,0.66666)
+consoleScrollbarColor (1.00000,0.24026,0.23512,0.45370)
+pickerBorder 0.00499
+pickerWidth 0.30000
+pickerHeight 0.30000
+pickerSliderHeight 0.02999
+pickerHeaderSize 0.04999
+borderColor (1.00000,0.09706,0.29415,0.38425)
+headerKillColor (1.00000,1.00000,1.00000,0.00000)
+sliderSlider 0.00999
+pickerFontSize 0.01299
+pickerFontXIncrease 6.00000 
+consoleSelectionColor (1.00000,0.03315,0.03315,0.57870)
+lightPos (20.00000,-20.00000,0.00000)

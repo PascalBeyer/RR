@@ -2,6 +2,13 @@
 #define RR_WORLD
 
 
+DefineArray(v3);
+DefineArray(v2);
+DefineArray(v4);
+
+DefineDynamicArray(v2);
+DefineDynamicArray(v3);
+DefineDynamicArray(v4);
 
 struct AABB
 {
@@ -56,25 +63,63 @@ DefineArray(Triangle);
 struct VertexFormat
 {
 	v3 p;
+	v2 uv;
+	v3 n;
 	u32 c;
 };
 
+enum TriangleMeshType
+{
+	TriangleMeshType_List,
+	TrianlgeMeshType_Strip,
+};
+
+struct Material
+{
+	String name;
+
+	f32 spectularExponent;		// Ns
+	v3 ambientColor;			// Ka
+	v3 diffuseColor;			// Kd
+	v3 specularColor;			// Ks
+	v3 ke;						// not in the spec and always (0,0,0)
+
+	f32 indexOfReflection;		// Ni ("optical density")	0.001 - 10
+	f32 dissolved;				// d						0 - 1	
+								//f32 transparency;			// Tr = 1 - dissolsved		0 - 1
+								//v3 transmissionFilter;		// Tf						
+	u32 illuminationModel;		// illum					0 - 10
+	Bitmap bitmap;
+
+
+};
+
+DefineDynamicArray(Material);
 
 struct TriangleMesh
 {
+	u32 type;
 	u32 amountOfVerticies;
-	v3 *verticies;
+	v3 *vertices;
+	v2 *textCoordinates;
 	u32 *colors;
 
 	u32 amountOfIndicies;
 	u16 *indecies;
-	//v3 *normals; //todo :this does not really make sense to me... apperantly you save it with the nodes but these seem triangle related I ignore normals right now anyway
+	//todo :this does not really make sense to me... apperantly you save it with the nodes but these seem triangle related...
+	v3 *normals; 
 	
+	
+	Material mat;
+
 	u32 vertexVBO; // to init this call glBufferData and glBindData
 	u32 indexVBO;
 };
 
-void RegisterTriangleMesh(TriangleMesh *mesh); //note : triangleMesh has to me filled out.
+DefineArray(TriangleMesh);
+DefineDynamicArray(TriangleMesh);
+
+void RegisterTriangleMesh(TriangleMesh *mesh);
 
 struct World
 {
@@ -86,7 +131,7 @@ struct World
 	Camera camera;
 	Camera debugCamera;
 	v3 lightSource;
-	TriangleMesh testMesh;
+	TriangleMeshDynamicArray testMeshes;
 };
 
 struct RockCorner
@@ -260,7 +305,7 @@ static void UpdateCamFocus(Input *input, v3 focusPoint, Camera *camera, f32 aspe
 
 static void UpdateCamGodMode(Input *input, Camera *cam, DEBUGKeyTracker tracker)
 {
-	f32 moveSpeed = 0.5f;
+	f32 moveSpeed = 0.25f;
 #if 0
 	if (input->keybord[Key_shift].flag & KeyState_Down)
 	{
@@ -424,7 +469,7 @@ static u32 Over(u32 n, u32 k)
 static TriangleArray CreateSkyBoxAndPush(AABB aabb, u32 color, Arena *arena)
 {
 	TriangleArray ret;
-	ret.data = PushArray(arena, Triangle, 0);
+	ret.data = PushData(arena, Triangle, 0);
 	ret.amount = 12;
 	v3 d1 = V3(aabb.maxDim.x - aabb.minDim.x, V2());
 	v3 d2 = V3(0.0f, aabb.maxDim.y - aabb.minDim.y, 0.0f);
@@ -475,10 +520,7 @@ static TriangleArray CreateStoneAndPush(AABB aabb, f32 desiredVolume, Arena *are
 {
 	Clear(workingArena);
 
-	TriangleArray ret;
-	ret.data = PushArray(arena, Triangle, 0);
-	ret.amount = 0;
-
+	TriangleArray ret = PushArray(arena, Triangle, 0);
 
 	v3 aabbMidPoint = 0.5f * (aabb.minDim + aabb.maxDim);
 
@@ -596,60 +638,18 @@ static TriangleArray CreateStoneAndPush(AABB aabb, f32 desiredVolume, Arena *are
 	
 }
 
-static TriangleArray GenerateAndPushTriangleFloor(AABB aabb, Arena* arena)
-{
-	u32 blackBrown = RGBAfromHEX(0x553A26);
-	v4 groundColor = Unpack4x8(&blackBrown);
-
-	RandomSeries series = { RandomSeed() };
-
-	const u32 meshSize = 40;
-	ColoredVertex groundMesh[meshSize][meshSize];
-
-	for (u32 x = 0; x < meshSize; x++)
-	{
-		for (u32 y = 0; y < meshSize; y++)
-		{
-			f32 xEntropy = 0.15f * RandomSignedPercent(&series);
-			f32 yEntropy = 0.15f * RandomSignedPercent(&series);
-			f32 zEntropy = 1.0f * RandomPercent(&series);
-
-			f32 xVal = (xEntropy + (f32)x) / (meshSize) * (aabb.maxDim.x - aabb.minDim.x) + (aabb.minDim.x);
-			f32 yVal = (yEntropy + (f32)y) / (meshSize) * (aabb.maxDim.y - aabb.minDim.y) + (aabb.minDim.y);
-
-			groundMesh[x][y].pos = 0.5f * V3(xVal, yVal, zEntropy + aabb.minDim.z);
-			groundMesh[x][y].color =  GrayFromU32(RandomU32(&series) % 100) & 0xFFFFFF00;
-		}
-	}
-
-	TriangleArray ret;
-	ret.data = PushArray(arena, Triangle, 0);
-	ret.amount = 0;
-	for (u32 x = 0; x < meshSize - 1; x++)
-	{
-		for (u32 y = 0; y < meshSize - 1; y++)
-		{
-			PushTriangleToArenaIntendedNormal(arena, groundMesh[x][y], groundMesh[x + 1][y], groundMesh[x + 1][y + 1], V3(0, 0, -1));
-			PushTriangleToArenaIntendedNormal(arena, groundMesh[x][y], groundMesh[x][y + 1], groundMesh[x + 1][y + 1], V3(0, 0, -1));
-			ret.amount += 2;
-		}
-	}
-	//ret.amount = 2 * Square((meshSize - 1));
-	return ret;
-}
-
-
-static TriangleMesh GenerateAndPushTriangleFloorMesh(AABB aabb, Arena* arena, u32 meshSize = 40)
+static TriangleMesh GenerateAndPushTriangleFloorMesh(AABB aabb, Arena* arena, u32 meshSize = 255)
 {
 	TriangleMesh ret;
 
+	ret.type = TrianlgeMeshType_Strip;
 	u32 blackBrown = RGBAfromHEX(0x553A26);
-	v4 groundColor = Unpack4x8(&blackBrown);
+	u32 grassGreen = RGBAfromHEX(0x4B6F44);
 
-	ret.amountOfVerticies = meshSize * meshSize;
+	ret.amountOfVerticies = meshSize * meshSize; // 1600
 	Assert(ret.amountOfVerticies < 65536);
-	ret.verticies = PushArray(arena, v3, ret.amountOfVerticies);
-	ret.colors = PushArray(arena, u32, ret.amountOfVerticies);
+	ret.vertices = PushData(arena, v3, ret.amountOfVerticies);
+	ret.colors = PushData(arena, u32, ret.amountOfVerticies);
 
 	RandomSeries series = { RandomSeed() };
 
@@ -659,53 +659,38 @@ static TriangleMesh GenerateAndPushTriangleFloorMesh(AABB aabb, Arena* arena, u3
 		{
 			f32 xEntropy = 0.15f * RandomSignedPercent(&series);
 			f32 yEntropy = 0.15f * RandomSignedPercent(&series);
-			f32 zEntropy = 1.0f * RandomPercent(&series);
+			f32 zEntropy = 0.3f * RandomPercent(&series);
 
 			f32 xVal = (xEntropy + (f32)x) / (meshSize) * (aabb.maxDim.x - aabb.minDim.x) + (aabb.minDim.x);
 			f32 yVal = (yEntropy + (f32)y) / (meshSize) * (aabb.maxDim.y - aabb.minDim.y) + (aabb.minDim.y);
 
-			ret.verticies[x + meshSize * y] = 0.5f * V3(xVal, yVal, zEntropy + aabb.minDim.z);
-			ret.colors   [x + meshSize * y] = GrayFromU32(RandomU32(&series) % 100) & 0xFFFFFF00;
+			ret.vertices[x + meshSize * y] = 0.5f * V3(xVal, yVal, zEntropy + aabb.minDim.z);
+			ret.colors  [x + meshSize * y] = Pack3x8(LerpVector3(Unpack3x8(blackBrown), Unpack3x8(grassGreen), zEntropy * 3.0f));
 		}
 	}
 
-	
-	ret.amountOfIndicies = 4 * (meshSize - 1) + (meshSize - 2) * (meshSize - 2);
-	ret.indecies = PushArray(constantArena, u16, ret.amountOfVerticies);
+	ret.amountOfIndicies = (meshSize - 1) * (3 + 2 * (meshSize - 1));
+	ret.indecies = PushData(constantArena, u16, ret.amountOfIndicies);
 
-	ret.indecies[0] = meshSize + 0; // x = 0, y = 0
-	ret.indecies[1] = meshSize + 1; // x = 0, y = 1
-	ret.indecies[2] = meshSize + 0; // x = 1, y = 0
+	u32 index = 0;
 
-	u32 index = 3;
-
-	for (u32 x = 0; x < meshSize - 1; x++)
+	for (u32 x = 0; x < meshSize - 1; x++) 
 	{
+		ret.indecies[index++] = 0xFFFF; // reset Index
+
+		ret.indecies[index++] = x * meshSize + 0; // (x, 0)
+
 		//move up
-		for (u32 y = 1; y < meshSize - 1; y++)
+		for (u32 y = 0; y < meshSize - 1; y++) // 2* (meshSize - 1)
 		{	
-			ret.indecies[index++] = meshSize * (x + 1) + y;
-			ret.indecies[index++] = meshSize * x + (y + 1);
+			ret.indecies[index++] = (x + 1) * meshSize + y;
+			ret.indecies[index++] = x       * meshSize + (y + 1);
 		}
 
-		ret.indecies[index++] = meshSize * (x + 1) + (meshSize - 1);
-		ret.indecies[index++] = meshSize * (x + 2) + (meshSize - 1);
-
-		x++; 
-
-		//move down
-		for (u32 y = 1; y < meshSize - 1; y++)
-		{
-			ret.indecies[index++] = meshSize * (x + 1) +((meshSize - 1) - y);
-			ret.indecies[index++] = meshSize * x + ((meshSize - 1) - (y + 1));
-		}
-
-		ret.indecies[index++] = meshSize * (x + 1) + 0;
-		ret.indecies[index++] = meshSize * (x + 2) + 0;
-
+		ret.indecies[index++] = (x + 1) * meshSize + (meshSize - 1);
 	}
 	
-	//Assert(ret.amountOfIndicies == index);
+	Assert(ret.amountOfIndicies == index);
 
 	RegisterTriangleMesh(&ret);
 

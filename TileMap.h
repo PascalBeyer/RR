@@ -1,26 +1,18 @@
 #ifndef RR_TILEMAP
 #define RR_TILEMAP
 
-#include "File.h"
-#include "Arena.h"
-
 enum
 {
-	TileType_Empty,
-	TileType_Full,
-	TileType_UpperLeft,
-	TileType_UpperRight,	
-	TileType_LowerLeft,
-	TileType_LowerRight,
+	Tile_Passible = 0x1,
 
-	TileType_Count
 };
 
 struct Tile
 {
 	u16 type;
 	v2 pos; //at top left
-	float height;
+	TriangleMesh mesh;
+	u32 tag;
 };
 
 struct TileMap
@@ -30,6 +22,91 @@ struct TileMap
 	u16 tileSize;
 };
 
+
+static TriangleMesh GenerateMeshForFlatTile(AABB aabb, Arena* arena)
+{
+	TriangleMesh ret;
+
+	u32 blackBrown = RGBAfromHEX(0x553A26);
+	u32 grassGreen = RGBAfromHEX(0x4B6F44);
+
+	u32 meshSize = 10; // @hardcoded
+
+	ret.amountOfVerticies = meshSize * meshSize; 
+	Assert(ret.amountOfVerticies < 65536);
+	ret.vertices = PushData(arena, v3, ret.amountOfVerticies);
+	ret.colors = PushData(arena, u32, ret.amountOfVerticies);
+
+	RandomSeries series = { RandomSeed() };
+	
+	f32 xFac = (aabb.maxDim.x - aabb.minDim.x) / (meshSize - 1);
+	f32 yFac = (aabb.maxDim.y - aabb.minDim.y) / (meshSize - 1);
+
+	for (u32 i = 0; i < meshSize; i++)
+	{
+		ret.vertices[0 + meshSize * i] = V3(0, yFac * i, 0) + aabb.minDim;
+		ret.colors	[0 + meshSize * i] = blackBrown;
+
+		ret.vertices[(meshSize - 1) + meshSize * i] = V3(xFac * (meshSize - 1), yFac * i, 0) + aabb.minDim;
+		ret.colors	[(meshSize - 1) + meshSize * i] = blackBrown;
+
+		ret.vertices[i + meshSize * (meshSize - 1)] = V3(xFac * i, yFac * (meshSize - 1), 0) + aabb.minDim;
+		ret.colors	[i + meshSize * (meshSize - 1)] = blackBrown;
+
+		ret.vertices[i + meshSize * 0] = V3(xFac * i, 0, 0) + aabb.minDim;
+		ret.colors	[i + meshSize * 0] = blackBrown;
+	}
+
+	f32 zVariance = aabb.maxDim.z - aabb.minDim.z;
+
+	for (u32 x = 1; x < meshSize - 1; x++)
+	{
+		for (u32 y = 1; y < meshSize - 1; y++)
+		{
+			f32 xEntropy = RandomSignedPercent(&series);
+			f32 yEntropy = RandomSignedPercent(&series);
+			f32 zEntropy = RandomPercent(&series);
+
+			f32 xVal = (xEntropy + (f32)x) * xFac + (aabb.minDim.x);
+			f32 yVal = (yEntropy + (f32)y) * yFac + (aabb.minDim.y);
+			f32 zVal = zVariance * zEntropy + aabb.minDim.z;
+
+			ret.vertices[x + meshSize * y] = V3(xVal, yVal, zVal);
+			f32 lerpFactor = zEntropy;
+			ret.colors[x + meshSize * y] = Pack3x8(LerpVector3(Unpack3x8(blackBrown), Unpack3x8(grassGreen), lerpFactor));
+		}
+	}
+
+	ret.amountOfIndicies = (meshSize - 1) * (3 + 2 * (meshSize - 1));
+	ret.indecies = PushData(constantArena, u16, ret.amountOfIndicies);
+
+	u32 index = 0;
+
+	for (u32 x = 0; x < meshSize - 1; x++)
+	{
+		ret.indecies[index++] = 0xFFFF; // reset Index
+
+		ret.indecies[index++] = x * meshSize + 0; // (x, 0)
+
+												  //move up
+		for (u32 y = 0; y < meshSize - 1; y++) // 2* (meshSize - 1)
+		{
+			ret.indecies[index++] = (x + 1) * meshSize + y;
+			ret.indecies[index++] = x       * meshSize + (y + 1);
+		}
+
+		ret.indecies[index++] = (x + 1) * meshSize + (meshSize - 1);
+	}
+
+	Assert(ret.amountOfIndicies == index);
+
+	RegisterTriangleMesh(&ret);
+
+	return ret;
+}
+
+
+
 static TileMap InitTileMap(u32 width, u32 height, u32 tileSize, Arena *arena)
 {
 	TileMap ret;
@@ -37,7 +114,9 @@ static TileMap InitTileMap(u32 width, u32 height, u32 tileSize, Arena *arena)
 	ret.height = height;
 	ret.tileSize = tileSize;
 
-	ret.tiles = PushArray(arena, Tile, width * height);
+	ret.tiles = PushData(arena, Tile, width * height);
+
+	RandomSeries series = GetRandomSeries();
 
 	for (u32 x = 0; x < width; x++)
 	{
@@ -46,7 +125,9 @@ static TileMap InitTileMap(u32 width, u32 height, u32 tileSize, Arena *arena)
 			Tile *tempTile = ret.tiles + x + width * y;
 			tempTile->pos = V2(x, y);
 			tempTile->type = 0;
-			tempTile->height = 1.0f;// randomSamples[(x*y + 1) % 100];
+			tempTile->tag = RandomU32(&series) % 2;
+			AABB aabb = CreateAABB(V3(x, y, 0.1f), V3(x+1, y+1, 0));
+			//tempTile->mesh = GenerateMeshForFlatTile(aabb, arena);
 		}
 	}
 	return ret;
@@ -87,7 +168,7 @@ static TileMap LoadTileMap(char *fileName, Arena *arena)
 	u8 *buffer = (u8 *)memory;
 	buffer += tileMapHeader->headerSize;
 
-	ret.tiles = PushArray(arena, Tile, ret.width * ret.height);;
+	ret.tiles = PushData(arena, Tile, ret.width * ret.height);;
 	for (unsigned int x = 0; x < ret.width; x++)
 	{
 		for (unsigned int y = 0; y < ret.height; y++)

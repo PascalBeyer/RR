@@ -29,6 +29,7 @@ struct ConsoleCommand
 
 DefineArray(ConsoleCommand);
 
+struct GameState;
 
 struct Console
 {
@@ -75,6 +76,8 @@ struct Console
 
 	f32 scrollbarWidth = 0.02f;
 	b32 scrollingScrollbar = false;
+
+	GameState *state;
 
 	ConsoleCommandArray commands;
 };

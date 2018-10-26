@@ -21,8 +21,63 @@ struct type##Array				\
 	}							\
 }; 
 
-//todo :not sure where to put all this. if it gets enought maybe own file?
-#define BuildStaticArray(arena, arr, item) arena->current += sizeof(item); arr.data[arr.amount++] = item;
+
+#define BeginArray(arena, type, name) type##Array name = PushArray(arena, type, 0);
+#define EndArray(arena, type, name) name.amount = (u32)((type *)arena->current - name.data);
+
+
+// apperantly having a space after \ ruines the define.
+#define DefineDynamicArray(type)												\
+struct type##DynamicArray														\
+{																				\
+	type *data;																	\
+	Arena *arena;																\
+	u32 amount;																	\
+	u32 capacity;																\
+																				\
+	type &operator[] (u32 i)													\
+	{																			\
+		Assert(i < amount);														\
+		return data[i];															\
+	}																			\
+};																				\
+static type *ArrayAdd(type##DynamicArray *arr, type t)							\
+{																				\
+	if (arr->amount + 1 < arr->capacity)										\
+	{																			\
+		(arr->data)[arr->amount++] = t;											\
+		return arr->data + (arr->amount - 1);									\
+	}																			\
+																				\
+	u32 newCapacity = 2 * arr->capacity + 1;									\
+																				\
+	type *newData = DynamicAlloc(alloc, type, 2 * arr->capacity + 1);			\
+	memcpy(newData, arr->data, arr->capacity * sizeof(type));					\
+	arr->capacity = 2 * arr->capacity + 1;										\
+	DynamicFree(alloc, arr->data);												\
+	arr->data = newData;														\
+	arr->data[arr->amount++] = t;												\
+																				\
+	return (arr->data + (arr->amount - 1));										\
+}																				\
+																				\
+static type##DynamicArray type##CreateDynamicArray(Arena *arena, u32 capacity = 8)	\
+{																				\
+	type##DynamicArray ret;														\
+	ret.data = DynamicAlloc(alloc, type, capacity);								\
+	ret.arena = arena;															\
+	ret.amount = 0;																\
+	ret.capacity = capacity;													\
+	return ret;																	\
+}																				\
+static void Clear(type##DynamicArray *arr)										\
+{																				\
+	arr->amount = 0;															\
+}																				\
+
+
+
+#define BuildStaticArray(arena, arr, item) PushData(arena, u8, sizeof(item)); arr.data[arr.amount++] = item;
 
 #define For(arr) for(auto it = arr.data; it < arr.data + arr.amount; it++)
 
@@ -43,10 +98,6 @@ typedef uintptr_t uintptr;
 
 typedef uintptr_t umm;
 typedef intptr_t smm;
-
-DefineArray(u32);
-DefineArray(u16);
-
 
 struct v2
 {
@@ -94,14 +145,19 @@ union v4
 	};
 	struct
 	{
+		union
+		{
+			struct
+			{
+				float x;
+				float y;
+				float z;
+			};
+			v3 xyz;
+		};
 		float w;
-		float x;
-		float y;
-		float z;
 	};
 };
-
-DefineArray(v3);
 
 static v2 V2()
 {
@@ -571,6 +627,13 @@ static v4 V4(float a, v3 rgb)
 	ret.rgb = rgb;
 	return ret;
 }
+static v4 V4(v3 xyz, float w)
+{
+	v4 ret;
+	ret.w = w;
+	ret.xyz = xyz;
+	return ret;
+}
 
 static v4 operator+(v4 a, v4 b)
 {
@@ -677,6 +740,5 @@ static bool operator!=(v4 a, v4 b)
 {
 	return !(a == b);
 }
-
 
 #endif

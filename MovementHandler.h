@@ -519,12 +519,12 @@ static void MoveSelection(UnitSelection *selection, UnitSteeringData *data, Tile
 			{
 				steeredSpeed = preNormalizedSteeredSpeed;
 			}
-			v2 oldPos = cur->pos;
+			v2 oldPos = cur->e.pos;
 			v2 by = steeredSpeed * moveHandlerDt;
 
-			TileMapCollisionMovement(&cur->pos, cur->radius, by, data[i].goal, tileMap);
+			TileMapCollisionMovement(&cur->e.pos, cur->e.radius, by, data[i].goal, tileMap);
 
-			v2 traveledDist = cur->pos - oldPos;
+			v2 traveledDist = cur->e.pos - oldPos;
 			cur->velocity = traveledDist * (1.0f / moveHandlerDt);
 			float newSpeed = Norm(traveledDist);
 
@@ -547,15 +547,15 @@ static void MoveSelection(UnitSelection *selection, UnitSteeringData *data, Tile
 
 
 			//cur->speed = newSpeed * (1.0f / dt);
-			bool collidedWithTileMap = !((oldPos + by) == cur->pos);
+			bool collidedWithTileMap = !((oldPos + by) == cur->e.pos);
 
 			bool steered = (data[i].steering == V2());
 
 			//TODO: Put this into update + fix it (implenebt arrival)
-			if (newSpeed == 0.0f && !collidedWithTileMap && cur->way.size() <= 1)
+			if (newSpeed == 0.0f && !collidedWithTileMap && cur->way.amount <= 1)
 			{
 				cur->idle = true;
-				cur->way.clear();
+				Clear(&cur->way);
 			}
 			else if (collidedWithTileMap)
 			{
@@ -572,16 +572,12 @@ static void MoveSelection(UnitSelection *selection, UnitSteeringData *data, Tile
 
 static void CollectSteeringData(UnitSelection *selection, UnitSteeringData *data)
 {
-	if (selection->amountSelected > 0)
-	{
-		moveHandlerDt = selection->Get(0)->expectedSecondsPerFrame;
-	}
 
 	for (u32 i = 0; i < selection->amountSelected; i++)
 	{
 		Unit *cur = selection->Get(i);
-		data[i].pos = cur->pos;
-		data[i].radius = cur->radius;
+		data[i].pos = cur->e.pos;
+		data[i].radius = cur->e.radius;
 		data[i].steering = v2();
 		data[i].idle = cur->idle;
 		data[i].group = cur->steeringGroupId;
@@ -589,13 +585,13 @@ static void CollectSteeringData(UnitSelection *selection, UnitSteeringData *data
 		data[i].acceleration = cur->acceleration;
 		data[i].speed = Norm(cur->velocity);
 		data[i].velocity = cur->velocity;
-		if (!cur->way.empty())
+		if (cur->way.amount)
 		{
-			data[i].goal = cur->way.back();
+			data[i].goal = cur->way[cur->way.amount - 1];
 		}
 		else
 		{
-			data[i].goal = cur->pos;
+			data[i].goal = cur->e.pos;
 		}
 	}
 }
@@ -747,7 +743,7 @@ FixPath(&cur->way, p12(cur->pos), tileMap, cur->radius);
 }*/
 
 
-
+#if 0
 struct RelativeTile
 {
 	Tile *tile;
@@ -859,14 +855,14 @@ static void AStarAlgorithm(std::vector<v2> *outputWay, v2 goalVector, v2 positio
 
 static void SimpleStupidFunnelAlgorithm(Unit *unit, TileMap tileMap)
 {
-	std::vector<v2> *way = &unit->way;
+	v2DynamicArray way = unit->way;
 	float radius = unit->radius;
 
 	v2 pos = unit->pos;
 
-	if (!way->empty())
+	if (way.amount)
 	{
-		v2 firstGoal = way->back();
+		v2 firstGoal = way[way.amount - 1];
 		if (GetFirstTileWithType(tileMap, pos, firstGoal, 1))
 		{
 			AStarAlgorithm(way, firstGoal, pos, tileMap);
@@ -877,14 +873,14 @@ static void SimpleStupidFunnelAlgorithm(Unit *unit, TileMap tileMap)
 
 		v2 goal = firstGoal;
 
-		if (way->empty())
+		if (!way.amount)
 		{
 			way->push_back(firstGoal);
 			return;
 		}
 		v2 saveLast;
 
-		u32 sizeOfWay = (u32)way->size();
+		u32 sizeOfWay = way.amount;
 		for (u32 i = 0; i < sizeOfWay - 1; i++)
 		{
 			saveLast = goal;
@@ -960,7 +956,7 @@ static void MoveUnits(UnitSelection *selection, TileMap tileMap)
 	delete[] data;
 }
 
-
+#endif
 /*
 TODO: Are building circles or rectangular? probably rectangular if I want to stick to a tilemap system
 //this is collision code/move code.

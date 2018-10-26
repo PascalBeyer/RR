@@ -5,6 +5,7 @@
 //		gpu stuff
 //		gradients
 //		think of a way to remove the default triangle
+//		width first tree creation, better memory layout, prolly. (maybe maybe not.)
 
 struct ClipRect
 {
@@ -680,7 +681,6 @@ static v3 CastRayToLightSource(v3 initialP, v3 lightSource, KdNode *initialLeaf,
 		}
 	}
 }
-
 
 #define ConditionalPointerAssign(left, mask, right) \
 for (u32 assignIndex = 0; assignIndex < 4; assignIndex++)\
@@ -1562,7 +1562,7 @@ static RayCastResult CastRaysCache(Bitmap bitmap, ClipRect clipRect, World world
 
 static RayCastResult CastRaysCacheWide(Bitmap bitmap, ClipRect clipRect, World world)
 {
-	u32 rayAmountPerBounceAmount = 1024u;
+	u32 rayAmountPerBounceAmount = 1024u; //todo  tweekable
 	u32 maxBounceCount = 2u;
 
 	IrradianceCache *cache = world.cache;
@@ -1794,13 +1794,6 @@ static void RenderKdTree(KdNode *node, RenderGroup *rg)
 	RenderKdTree(node->negative, rg);
 }
 
-static v3 zPlusEps(v3 v)
-{
-	v.z += 0.001f;
-	return v;
-}
-
-
 static void InitLighting(World *world)
 {
 	Assert(!world->lightingTriangles);
@@ -1817,7 +1810,7 @@ static void InitLighting(World *world)
 	TriangleArray t = world->triangles;
 	u32 amountOfTriangles = t.amount;
 	world->amountOfTriangles = amountOfTriangles;
-	LightingTriangle *trs = PushArray(constantArena, LightingTriangle, amountOfTriangles);
+	LightingTriangle *trs = PushData(constantArena, LightingTriangle, amountOfTriangles);
 	for (u32 i = 0; i < amountOfTriangles; i++)
 	{
 		trs[i] = CreateLightingTriangleFromThreePoints(t[i].p1, t[i].p2, t[i].p3, Unpack3x8(t[i].c2), constantArena);
@@ -1827,10 +1820,10 @@ static void InitLighting(World *world)
 
 	world->cache = PushStruct(constantArena, IrradianceCache);
 	world->cache->maxEntriesPerTriangle = 200;
-	world->cache->triangleSamples = PushArray(constantArena, IrradianceSampleArray, amountOfTriangles);
+	world->cache->triangleSamples = PushData(constantArena, IrradianceSampleArray, amountOfTriangles);
 	for (u32 i = 0; i < amountOfTriangles; i++)
 	{
-		world->cache->triangleSamples[i].entries = PushArray(constantArena, IrradianceSample, world->cache->maxEntriesPerTriangle);
+		world->cache->triangleSamples[i].entries = PushData(constantArena, IrradianceSample, world->cache->maxEntriesPerTriangle);
 		world->cache->triangleSamples[i].amount = 0;
 	}
 }

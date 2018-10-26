@@ -19,8 +19,6 @@ struct Player
 	u32 gas;
 
 	u32 steeringGroupingIndex;
-
-
 };
 
 Player InitPlayer(u32 screenPixelWidth, u32 screenPixelHeight, float screenWidth, TileMap *tileMap, float screenScrollSpeed);
@@ -136,6 +134,8 @@ v2 AdjustTargetPos(v2 targetPos, TileMap tileMap, v2 unitPos)
 {
 	Tile *targetedTile = GetTile(tileMap, targetPos);
 
+	//todo handle positions out of tilemap
+
 	if (targetedTile->type == 0)
 	{
 		return targetPos;
@@ -164,10 +164,10 @@ void HandleRightClick(Player *player, EntitySelection *entities, v2 targetPos, T
 	{
 		v2 unitPos = player->entitySelection.Get(i)->pos;
 		centerOfMass += unitPos;
-		xMax = fmax(xMax, unitPos.x);
-		yMax = fmax(yMax, unitPos.y);
-		xMin = fmin(xMin, unitPos.x);
-		yMin = fmin(yMin, unitPos.y);
+		xMax = Max(xMax, unitPos.x);
+		yMax = Max(yMax, unitPos.y);
+		xMin = Min(xMin, unitPos.x);
+		yMin = Min(yMin, unitPos.y);
 	}
 	centerOfMass /= player->entitySelection.amountSelected;
 	if (++player->steeringGroupingIndex == 0)
@@ -179,12 +179,13 @@ void HandleRightClick(Player *player, EntitySelection *entities, v2 targetPos, T
 	{
 		Entity *entity = player->entitySelection.Get(i);
 
-		Unit *unit;
-		Building *building;
-		if (unit = dynamic_cast<Unit*> (entity))
+		switch (entity->type)
 		{
+		case Entity_Unit:
+		{
+			Unit *unit = (Unit *)entity;
 
-			unit->way.clear();
+			Clear(&unit->way);
 			unit->idle = false;
 			unit->steeringGroupId = player->steeringGroupingIndex;
 
@@ -195,23 +196,24 @@ void HandleRightClick(Player *player, EntitySelection *entities, v2 targetPos, T
 
 			if (unitsInAllignedMoveBox && !targetPointInBox)
 			{
-				v2 unitTarget = (unit->pos - centerOfMass) + targetPos;
+				v2 unitTarget = (unit->e.pos - centerOfMass) + targetPos;
 
-				v2 adjustedCenterOfMass = AdjustTargetPos(centerOfMass, tileMap, unit->pos);
-				unit->way.push_back(AdjustTargetPos(unitTarget, tileMap, adjustedCenterOfMass));
+				v2 adjustedCenterOfMass = AdjustTargetPos(centerOfMass, tileMap, unit->e.pos);
+				ArrayAdd(&unit->way, AdjustTargetPos(unitTarget, tileMap, adjustedCenterOfMass));
 			}
 			else
 			{
 				v2 unitTarget = targetPos;
 
-				unit->way.push_back(AdjustTargetPos(unitTarget, tileMap, unit->pos));
+				ArrayAdd(&unit->way, AdjustTargetPos(unitTarget, tileMap, unit->e.pos));
 			}
 
-
-		}
-		else if (building = dynamic_cast<Building*> (entity))
+		}break;
+		case Entity_Building:
 		{
+			Building *building = (Building *)entity;
 			building->producing = true;
+		}break;
 		}
 	}
 }

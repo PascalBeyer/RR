@@ -1,57 +1,22 @@
 #ifndef RR_ENTITY
 #define RR_ENTITY
 
-class Entity
+enum EntityType
 {
-public:
-	Entity();
-	Entity(v2 pos, float radius);
-	~Entity();
-
-	v2 GetPos();
-	v2 GetBitmapPos();
-	float GetSize();
-
-	//virtual void Update(std::vector<Entity*> *entitys);
-	virtual void Render(ImageBuffer *imageBuffer, Screen *screen);
-	float radius;
-	v2 pos;
-protected:
-	
+	Entity_Invalid,
+	Entity_Building,
+	Entity_Unit,
 };
 
+struct Entity
+{
+	EntityType type;
 
-Entity::Entity()
-{
-}
-
-Entity::~Entity()
-{
-}
-
-Entity::Entity(v2 pos, float radius)
-{
-	this->pos = pos + V2(0.5f, 0.5f);
-	this->radius = radius - 0.01f;
-}
-
-v2 Entity::GetPos()
-{
-	return pos;
-}
-v2 Entity::GetBitmapPos()
-{
-	return pos - V2(radius, radius);
-}
-float Entity::GetSize()
-{
-	return radius;
-}
-
-void Entity::Render(ImageBuffer *imageBuffer, Screen *screen)
-{
-	//sprite->Render(imageBuffer, screen);
-}
+	f32 radius; // ignored for now
+	v2 pos;
+	TriangleMeshArray meshes;
+	Quaternion oriantation;
+};
 
 
 #endif

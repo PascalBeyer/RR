@@ -50,61 +50,12 @@ static void HelpHelper(StringArray args)
 	}
 }
 
-static Tweeker *GetTweeker(String name)
-{
-	For(globalDebugState.tweekers)
-	{
-		if (name == it->name)
-		{
-			return it;
-		}
-	}
-	return NULL;
-}
 
-static String TweekerToString(Tweeker t, Arena *arena = frameArena)
-{
-	switch (t.type)
-	{
-	case Tweeker_b32:
-	{
-		if (t.b)
-		{
-			return S("true", arena);
-		}
-		return S("false", arena);
-
-	}break;
-	case Tweeker_u32:
-	{
-		return UtoS(t.u, arena);
-	}break;
-	case Tweeker_f32:
-	{
-		return FtoS(t.f, arena);
-	}break;
-
-	case Tweeker_v2:
-	{
-		return V2toS(t.vec2, arena);
-	}break;
-
-	case Tweeker_v3:
-	{
-		return V3toS(t.vec3, arena);
-	}break;
-	case Tweeker_v4:
-	{
-		return V4toS(t.vec4, arena);
-	}break;
-	default:
-		break;
-	}
-	return S("");
-}
 
 static void WriteDebugVariables();
+static void WriteSingleTweeker(Tweeker tweeker);
 
+// todo : make this need file names
 static void TweekHelper(StringArray args)
 {
 	if (args.amount == 0)
@@ -121,13 +72,21 @@ static void TweekHelper(StringArray args)
 	
 	if(!toTweek) 
 	{
-		ConsoleOutput("Error: Tweeker not found!", HistoryEntry_Error); // nearest match?
+		ConsoleOutputError("Error: Tweeker not found!", HistoryEntry_Error); // todo : nearest match?
 		return;
 	}
 
 	if (args.amount == 1)
 	{
-		ConsoleOutput("Current Tweeker Value is: %s", TweekerToString(*toTweek)); //todo may this should open tweeker gui?
+		if (toTweek->type == Tweeker_v4)
+		{
+			ColorPicker picker = CreateColorPicker(toTweek->vec4);
+			picker.tweeker = *toTweek;
+			EditorUIElement elem = { EditorUI_ColorPicker, picker };
+			ArrayAdd(&console.state->editor.elements, elem);
+		}
+
+		ConsoleOutput("Current Tweeker Value is: %s", TweekerToString(*toTweek)); 
 		return;
 	}
 
@@ -180,6 +139,8 @@ static void TweekHelper(StringArray args)
 	}
 
 	ConsoleOutput("Tweeked %s: %s -> %s!", toTweek->name, TweekerToString(save), TweekerToString(*toTweek));
+
+	WriteSingleTweeker(*toTweek);
 }
 
 static void SaveTweekersHelper(StringArray args)
@@ -193,6 +154,30 @@ static void SaveTweekersHelper(StringArray args)
 	
 
 	ConsoleOutput("Don't know what to save! (Could not read input).");
+}
+
+
+static void TweekersHelper(StringArray args)
+{
+	For(globalDebugState.tweekers)
+	{
+		ConsoleOutput("%s %s", it->name, TweekerToString(*it));
+	}
+}
+
+static void GrisuHelper(StringArray args)
+{
+	b32 success = true;
+	f32 ret = StoF(args[0], &success);
+	if (success)
+	{
+		ConsoleOutput("parsed float is %f32", ret);
+		Grisu(frameArena, ret);
+	}
+	else
+	{
+		ConsoleOutput("Could not read float");
+	}
 }
 
 

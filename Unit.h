@@ -1,23 +1,15 @@
 #ifndef RR_UNIT
 #define RR_UNIT
 
-#include <vector>
 
-class Unit : public Entity
+struct Unit
 {
-public:
-	Unit();
-	Unit(v2 pos, float acceleration, float maxSpeed, float expectedSecondsPerFrame, float radius);
-	~Unit();
-
-	//static void FindPaths(std::vector<Unit> *unitSelection, TileMap *tileMap, std::vector<Entity> *entities, v2 targetPos);
-
+	Entity e;
 	u32 facingDirection;
-	std::vector<v2> way;
+	v2DynamicArray way;
 
 	//float idleTimer;
 	//float idleTime;
-	float expectedSecondsPerFrame;
 	float acceleration;
 	v2 velocity;
 	u32 steeringGroupId;
@@ -25,26 +17,17 @@ public:
 	float maxSpeed;
 	bool idle;
 
-private:
 	
 };
 
-
-Unit::Unit()
+static Unit CreateUnit(v2 pos, float acceleration, float maxSpeed, float radius)
 {
-}
-
-Unit::Unit(v2 pos, float acceleration, float maxSpeed, float expectedSecondsPerFrame, float radius) : Entity(pos, radius)
-{
-	this->idle = true;
-	this->acceleration = acceleration;
-	this->maxSpeed = maxSpeed;
-	this->expectedSecondsPerFrame = expectedSecondsPerFrame;
-	facingDirection = 2;
-}
-
-Unit::~Unit()
-{
+	Unit ret;
+	ret.idle = true;
+	ret.acceleration = acceleration;
+	ret.maxSpeed = maxSpeed;
+	ret.facingDirection = 2;
+	return ret;
 }
 
 

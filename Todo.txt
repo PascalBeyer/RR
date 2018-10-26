@@ -1,0 +1,11 @@
+
+
+Add the standart lighting to rendering.
+Make everything an entity, like they have in Sokoban
+Move to front Asset system? 
+Are meshes assets?
+how to handle textured and untextured entities? Should there be such a thing as untextured entity, probably not.
+
+
+make the meshstruct work like it does in soko? having a vertex pool, an index pool and then have list {start index, amount, materialIndex}?
+associating data to triangles, to open gl... like normals.

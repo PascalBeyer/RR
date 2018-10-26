@@ -64,6 +64,8 @@
 #define GL_STREAM_READ                    0x88E1
 #define GL_STREAM_COPY                    0x88E2
 
+#define GL_PRIMITIVE_RESTART_FIXED_INDEX  0x8D69
+
 struct OpenGLInfo
 {
 	bool modernContext;
@@ -120,10 +122,13 @@ typedef void WINAPI glBindVertexArray_(GLuint arrayName);
 typedef void WINAPI glGenBuffers_(GLsizei n, GLuint *buffers);
 typedef void WINAPI glBindBuffer_(GLenum target, GLuint buffer);
 typedef void WINAPI glBufferData_(GLenum target, GLsizeiptr size, const GLvoid *data, GLenum usage);
+typedef void WINAPI glUniform3f_(GLint location, GLfloat v0, GLfloat v1, GLfloat v2);
+
 //typedef void WINAPI glDrawElements_(GLenum mode, GLsizei count, GLenum type, const GLvoid * indices);
 
 
 //static glDrawElements_ *glDrawElements;
+static glUniform3f_ *glUniform3f;
 static glBufferData_ *glBufferData;
 static glBindBuffer_ *glBindBuffer;
 static glGenBuffers_ *glGenBuffers;
@@ -169,12 +174,20 @@ static glGetAttribLocation_ *glGetAttribLocation;
 struct OpenGLProgram
 {
 	GLuint program;
+
+	//uniforms
 	GLuint transform;
+	GLuint shadowTransform;
+	GLuint lightPos;
+
+	GLuint depthSampler;
+	GLuint textureSampler;
+
+	//attributes
 	GLuint vertP;
 	GLuint vertC;
 	GLuint vertUV;
-
-	GLuint sampler;
+	GLuint vertN;
 };
 
 //globals
@@ -183,10 +196,9 @@ static GLuint elementBuffer;
 static GLuint defaultInternalTextureFormat;
 
 static OpenGLProgram basic;
+static OpenGLProgram basicMesh;
 static OpenGLProgram shadow;
 static OpenGLProgram zBias;
-
-static GLuint basicShadowTransform;
 
 static GLuint renderFrameBuffer;
 static GLuint renderTexture;
@@ -198,7 +210,7 @@ static GLuint shadowTexture;
 static m4x4 projectionMat;
 static m4x4 shadowMat;
 
-bool StringEquals(char *first, u64 firstSize, char* second)
+bool CStringEquals(char *first, u64 firstSize, char* second)
 {
 	char* at = second;
 	for (u64 i = 0; i < firstSize; i++, at++)
@@ -211,7 +223,7 @@ bool StringEquals(char *first, u64 firstSize, char* second)
 	return true;
 }
 
-OpenGLInfo OpenGLGetInfo(bool modernContext)
+static OpenGLInfo OpenGLGetInfo(bool modernContext)
 {
 	OpenGLInfo info = {};
 
@@ -238,14 +250,14 @@ OpenGLInfo OpenGLGetInfo(bool modernContext)
 
 		u64 count = end - at;
 
-		if (StringEquals(at, count, "GL_EXT_texture_sRGB")) { info.GL_EXT_texture_sRGB = true; }
+		if (CStringEquals(at, count, "GL_EXT_texture_sRGB")) { info.GL_EXT_texture_sRGB = true; }
 		at = end;
 	}
 
 	return info;
 }
 
-GLuint OpenGLCreateProgram(char *headerCode, char *vertexCode, char *fragmentCode)
+static GLuint OpenGLCreateProgram(char *headerCode, char *vertexCode, char *fragmentCode)
 {
 	GLuint vertexShaderID = glCreateShader(GL_VERTEX_SHADER);
 	GLchar *vertexShaderCode[] =
@@ -289,7 +301,7 @@ GLuint OpenGLCreateProgram(char *headerCode, char *vertexCode, char *fragmentCod
 	return programID;
 }
 
-void OpenGLRect3D(v3 pos, v3 v1, v3 v2, v4 color)
+static void OpenGLRect3D(v3 pos, v3 v1, v3 v2, v4 color)
 {
 
 	v3 UL = pos;
@@ -334,7 +346,7 @@ void OpenGLRect3D(v3 pos, v3 v1, v3 v2, v4 color)
 	glVertex3f(DR.x, DR.y, DR.z);
 	glEnd();
 }
-void OpenGLRect3D(v3 p1, v3 p2, v3 p3, v3 p4, v4 c1, v4 c2, v4 c3, v4 c4)
+static void OpenGLRect3D(v3 p1, v3 p2, v3 p3, v3 p4, v4 c1, v4 c2, v4 c3, v4 c4)
 {
 	glBegin(GL_TRIANGLES);
 	//Lower Triangle
@@ -378,7 +390,7 @@ void OpenGLRect3D(v3 p1, v3 p2, v3 p3, v3 p4, v4 c1, v4 c2, v4 c3, v4 c4)
 
 }
 
-void OpenGLUpdateBitmap(Bitmap bitmap)
+static void OpenGLUpdateBitmap(Bitmap bitmap)
 {
 	Assert(bitmap.textureHandle);
 
@@ -418,12 +430,16 @@ void RegisterTriangleMesh(TriangleMesh *mesh)
 	glGenBuffers(1, &mesh->vertexVBO);
 	glGenBuffers(1, &mesh->indexVBO);
 
-	VertexFormat *buffer = PushArray(constantArena, VertexFormat, mesh->amountOfVerticies);//todo can I use Frame Arena here?
+	Assert(mesh->amountOfVerticies < 65536); // <, because reset index
+
+	VertexFormat *buffer = PushData(constantArena, VertexFormat, mesh->amountOfVerticies);//todo can I use Frame Arena here?
 	
 	for (u32 i = 0; i < mesh->amountOfVerticies; i++)
 	{
-		buffer[i].c    = mesh->colors[i];
-		buffer[i].p = mesh->verticies[i];
+		buffer[i].c  = mesh->colors[i];
+		buffer[i].uv = mesh->textCoordinates[i];
+		buffer[i].p	 = mesh->vertices[i];
+		buffer[i].n  = mesh->normals[i];
 	}
 
 	glBindBuffer(GL_ARRAY_BUFFER, mesh->vertexVBO);
@@ -434,7 +450,7 @@ void RegisterTriangleMesh(TriangleMesh *mesh)
 
 }
 
-u32 OpenGLDownLoadImage(u32 width, u32 height, u32* pixels)
+static u32 OpenGLDownLoadImage(u32 width, u32 height, u32* pixels)
 {
 	GLuint handle;
 	glGenTextures(1, &handle);
@@ -446,7 +462,22 @@ u32 OpenGLDownLoadImage(u32 width, u32 height, u32* pixels)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-	
+	glBindTexture(GL_TEXTURE_2D, 0);
+	return handle;
+}
+
+
+static u32 RegisterWrapingImage(u32 width, u32 height, u32* pixels)
+{
+	GLuint handle;
+	glGenTextures(1, &handle);
+	glBindTexture(GL_TEXTURE_2D, handle);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_BGRA_EXT, GL_UNSIGNED_BYTE, pixels);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
 	glBindTexture(GL_TEXTURE_2D, 0);
 	return handle;
@@ -470,7 +501,7 @@ R"FOO(
 
 )FOO";
 
-void SetUpBasicZBiasProgram()
+static void SetUpBasicZBiasProgram()
 {
 
 	char *vertexCodeTex =
@@ -518,14 +549,14 @@ void SetUpBasicZBiasProgram()
 	)FOO";
 	zBias.program = OpenGLCreateProgram(headerCodeOpenGL, vertexCodeTex, fragmentCodeTex);
 	zBias.transform = glGetUniformLocation(zBias.program, "transform");
-	zBias.sampler = glGetUniformLocation(zBias.program, "texSampler");
+	zBias.depthSampler = glGetUniformLocation(zBias.program, "texSampler");
 	zBias.vertP = glGetAttribLocation(zBias.program, "vertP");
 	zBias.vertC = glGetAttribLocation(zBias.program, "vertC");
 	zBias.vertUV = glGetAttribLocation(zBias.program, "vertUV");
 	Assert(zBias.program);
 }
 
-void SetUpBasicProgram()
+static void SetUpBasicProgram()
 {
 
 	char *vertexCode =
@@ -593,12 +624,104 @@ void SetUpBasicProgram()
 	
 
 	basic.transform = glGetUniformLocation(basic.program, "transform");
-	basic.sampler = glGetUniformLocation(basic.program, "depthTexture");
-	basicShadowTransform = glGetUniformLocation(basic.program, "shadowTransform");
+	basic.depthSampler = glGetUniformLocation(basic.program, "depthTexture");
+	basic.shadowTransform = glGetUniformLocation(basic.program, "shadowTransform");
 	glUseProgram(0);
 }
 
-void SetUpDepthProgram()
+static void SetUpBasicMeshProgram()
+{
+
+	char *vertexCode =
+		R"FOO(
+	//Vertex Code
+
+	uniform mat4x4 transform;
+	uniform mat4x4 shadowTransform;
+	uniform vec3   lightPos; // allready transfomed for now, so we do not need a third matrix, that is the transform with out the object Transform
+
+	in vec3 vertP;
+	in vec4 vertC;
+	in vec2 vertUV;
+	in vec3 vertN;
+
+	smooth out vec4 fragColor;
+	smooth out vec4 shadowCoord;
+	smooth out vec2 fragCoord;
+	smooth out float cosinAttenuation;
+
+	void main(void)
+	{
+		vec4 inputVertex = vec4(vertP, 1);
+		vec4 outputVertex = transform * inputVertex;
+		gl_Position = outputVertex;
+		
+		fragColor = vertC;
+		shadowCoord = shadowTransform * inputVertex;
+		fragCoord = vertUV;
+		
+		vec3 lightDirection = normalize(lightPos - outputVertex.xyz);
+
+		vec4 transformedNormal = transform * vec4(vertN, 0);
+		cosinAttenuation = dot(lightDirection, transformedNormal.xyz);
+	}
+
+	)FOO";
+	char *fragmentCode =
+		R"FOO(
+	//Fragment Code
+
+	out vec4 resultColor;
+
+	smooth in vec4 fragColor;
+	smooth in vec4 shadowCoord;
+	smooth in vec2 fragCoord;
+	smooth in float cosinAttenuation;
+
+	uniform sampler2D depthTexture;
+	uniform sampler2D texture;
+	void main(void)
+	{
+		float visibility = 1.0f;
+		vec3 shadowCoord2 = shadowCoord.xyz / shadowCoord.w;
+		vec3 shadowCoord3 = shadowCoord2;
+		
+		float distanceLightNearestGeometry = texture2D(depthTexture, shadowCoord3.xy).r;
+
+		float distanceFromLight = shadowCoord3.z;
+
+		float bias = 0.0001;
+
+		if (distanceLightNearestGeometry < distanceFromLight - bias)
+		{
+			visibility = 0.5f;
+		}
+		resultColor =  vec4(cosinAttenuation * visibility * fragColor.rgb, fragColor.a) * texture2D(texture, fragCoord);
+
+		//resultColor = vec4(vec3(distanceLightNearestGeometry), 1);
+		//resultColor = texture2D(depthTexture, shadowCoord3.xy);
+	}
+
+	)FOO";
+
+
+	basicMesh.program = OpenGLCreateProgram(headerCodeOpenGL, vertexCode, fragmentCode);
+	Assert(basicMesh.program);
+	glUseProgram(basicMesh.program);
+	basicMesh.vertP  = glGetAttribLocation(basicMesh.program, "vertP");
+	basicMesh.vertC  = glGetAttribLocation(basicMesh.program, "vertC");
+	basicMesh.vertUV = glGetAttribLocation(basicMesh.program, "vertUV");
+	basicMesh.vertN  = glGetAttribLocation(basicMesh.program, "vertN");
+
+	basicMesh.transform = glGetUniformLocation(basicMesh.program, "transform");
+	basicMesh.depthSampler = glGetUniformLocation(basicMesh.program, "depthTexture");
+	basicMesh.textureSampler = glGetUniformLocation(basicMesh.program, "texture");
+	basicMesh.shadowTransform = glGetUniformLocation(basicMesh.program, "shadowTransform");
+	basicMesh.lightPos = glGetUniformLocation(basicMesh.program, "lightPos");
+	glUseProgram(0);
+}
+
+static void SetUpDepthProgram()
 {
 	glGenFramebuffers(1, &shadowFrameBuffer);
 	glBindFramebuffer(GL_FRAMEBUFFER, shadowFrameBuffer);
@@ -690,6 +813,8 @@ static void BeginUseProgram(OpenGLProgram prog, RenderSetup setup, bool textured
 
 	glUniformMatrix4fv(prog.transform, 1, GL_TRUE, setup.transform.a[0]);
 
+	glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
+
 	glEnableVertexAttribArray(prog.vertP);
 	glEnableVertexAttribArray(prog.vertC);
 
@@ -749,6 +874,7 @@ void OpenGLInit(HGLRC modernContext)
 
 	SetUpBasicZBiasProgram();
 
+	SetUpBasicMeshProgram();
 	SetUpBasicProgram();
 	
 	SetUpDepthProgram();
@@ -927,10 +1053,11 @@ void RenderIntoShadowMap(RenderCommands *rg)
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-//todo look into vertex sharing
 void OpenGlRenderGroupToOutput(RenderCommands *rg)
 {
 	TimedBlock;
+
+	glEnable(GL_PRIMITIVE_RESTART_FIXED_INDEX);
 
 	glDepthMask(GL_TRUE);
 	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
@@ -947,7 +1074,7 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg)
 	shadowMat = /*biasMatrix * */Projection(rg->aspectRatio, rg->focalLength) * CameraTransform(V3(1, 0, 0), V3(0, 1, 0), V3(0, 0, 1), V3(0, 0, -30));
 
 	glUseProgram(basic.program); 
-	glUniform1i(basic.sampler, 1);
+	glUniform1i(basic.depthSampler, 1);
 
 	m4x4 biasMatrix =
 	{
@@ -1026,11 +1153,11 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg)
 
 			if (setup.flag & Setup_ShadowMapping)
 			{
-				glUniformMatrix4fv(basicShadowTransform, 1, GL_TRUE, &biasedShadowMat.a[0][0]);
+				glUniformMatrix4fv(basic.shadowTransform, 1, GL_TRUE, &biasedShadowMat.a[0][0]);
 			}
 			else
 			{
-				glUniformMatrix4fv(basicShadowTransform, 1, GL_TRUE, &zero.a[0][0]);
+				glUniformMatrix4fv(basic.shadowTransform, 1, GL_TRUE, &zero.a[0][0]);
 			}
 				
 
@@ -1045,26 +1172,56 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg)
 		{
 			EntryTriangleMesh *meshHeader = (EntryTriangleMesh *)header;
 
+			Quaternion q = meshHeader->orientation;
+			m4x4 qmat = QuaternionToMatrix(q);
+
+			m4x4 mat = setup.transform * qmat;
+			v3 lightP = setup.transform * setup.lightPos;
+
 			TriangleMesh mesh = meshHeader->mesh;
 
-			glUseProgram(basic.program);
+			glUseProgram(basicMesh.program);
 
-			glUniformMatrix4fv(basic.transform, 1, GL_TRUE, setup.transform.a[0]);
+			glUniformMatrix4fv(basicMesh.transform, 1, GL_TRUE, mat.a[0]); // todo : why is shadow transform not being set?
+			glUniform3f(basicMesh.lightPos, lightP.x, lightP.y, lightP.z); 
 
 			glBindBuffer(GL_ARRAY_BUFFER, mesh.vertexVBO);
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.indexVBO);
 
-			glEnableVertexAttribArray(basic.vertP);
-			glEnableVertexAttribArray(basic.vertC);
+			glEnableVertexAttribArray(basicMesh.vertP);
+			glEnableVertexAttribArray(basicMesh.vertN);
+			glEnableVertexAttribArray(basicMesh.vertUV);
+			glEnableVertexAttribArray(basicMesh.vertC);
 
-			glVertexAttribPointer(basic.vertP, 3, GL_FLOAT, false, sizeof(VertexFormat), (void *)OffsetOf(VertexFormat, p));
-			glVertexAttribPointer(basic.vertC, 4, GL_UNSIGNED_BYTE, true, sizeof(VertexFormat), (void *)OffsetOf(VertexFormat, c));
+			glBindTexture(GL_TEXTURE_2D, mesh.mat.bitmap.textureHandle);
 
-			glDrawElements(GL_TRIANGLE_STRIP, meshHeader->mesh.amountOfIndicies, GL_UNSIGNED_SHORT, NULL);
+			glVertexAttribPointer(basicMesh.vertN, 3, GL_FLOAT, false, sizeof(VertexFormat), (void *)OffsetOf(VertexFormat, n));
+			glVertexAttribPointer(basicMesh.vertP, 3, GL_FLOAT, false, sizeof(VertexFormat), (void *)OffsetOf(VertexFormat, p));
+			glVertexAttribPointer(basicMesh.vertUV, 2, GL_FLOAT, false, sizeof(VertexFormat), (void *)OffsetOf(VertexFormat, uv));
+			glVertexAttribPointer(basicMesh.vertC, 4, GL_UNSIGNED_BYTE, true, sizeof(VertexFormat), (void *)OffsetOf(VertexFormat, c));
+
+			switch (mesh.type)
+			{
+			case TriangleMeshType_List:
+			{
+				glDrawElements(GL_TRIANGLES, meshHeader->mesh.amountOfIndicies, GL_UNSIGNED_SHORT, NULL);
+			}break;
+			case TrianlgeMeshType_Strip:
+			{
+				glDrawElements(GL_TRIANGLE_STRIP, meshHeader->mesh.amountOfIndicies, GL_UNSIGNED_SHORT, NULL);
+			}break;
+			default:
+			{
+				Die;
+			}break;
+			}
+			
 
 			glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
-			glDisableVertexAttribArray(basic.vertP);
-			glDisableVertexAttribArray(basic.vertC);
+			glDisableVertexAttribArray(basicMesh.vertN);
+			glDisableVertexAttribArray(basicMesh.vertP);
+			glDisableVertexAttribArray(basicMesh.vertUV);
+			glDisableVertexAttribArray(basicMesh.vertC);
 
 			glUseProgram(0);
 			pBufferIt += sizeof(*meshHeader);

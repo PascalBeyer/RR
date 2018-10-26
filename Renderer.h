@@ -1,11 +1,6 @@
 #ifndef RR_RENDERER
 #define RR_RENDERER
 
-#include "World.h"
-#include "Matrix.h"
-#include "AssetHandler.h"
-#include "buffers.h"
-
 enum RenderGroupEntryType
 {
 	RenderGroup_EntryTexturedQuads,
@@ -59,6 +54,7 @@ struct EntryTriangleMesh
 {
 	RenderGroupEntryHeader header;
 	TriangleMesh mesh;
+	Quaternion orientation;
 };
 
 struct EntryTexturedQuads
@@ -118,6 +114,10 @@ static RenderGroupEntryHeader *PushRenderEntry_(RenderGroup *rg, u32 size, Rende
 			result->type = type;
 			result->setup = rg->setup;
 			commands->pushBufferSize += size;
+		}
+		else
+		{
+			Die;
 		}
 	}
 	else
@@ -202,13 +202,13 @@ static TexturedQuad GetTexturedQuadMemory(RenderGroup *rg)
 	{
 		EntryTexturedQuads *quads = PushRenderEntry(EntryTexturedQuads);
 		quads->maxAmount = 1000;
-		quads->data = PushArray(frameArena, TexturedVertex, quads->maxAmount);
+		quads->data = PushData(frameArena, TexturedVertex, quads->maxAmount);
 		quads->vertexCount = 0;
 
 		rg->currentQuads = quads;
 
 		u32 bitmapAmount = quads->maxAmount / 4;
-		rg->currentQuads->quadBitmaps = PushArray(frameArena, Bitmap, bitmapAmount);
+		rg->currentQuads->quadBitmaps = PushData(frameArena, Bitmap, bitmapAmount);
 
 		return GetTexturedQuadMemory(rg);
 	}
@@ -256,7 +256,7 @@ static void PushTriangle(RenderGroup *rg, v3 p1, v3 p2, v3 p3, u32 c1, u32 c2, u
 	{
 		EntryColoredVertices *triangles = PushRenderEntryType(EntryColoredVertices, EntryTriangles);
 		triangles->maxAmount = 65536;
-		triangles->data = PushArray(frameArena, ColoredVertex, triangles->maxAmount);
+		triangles->data = PushData(frameArena, ColoredVertex, triangles->maxAmount);
 		triangles->vertexCount = 0;
 		
 		rg->currentTriangles = triangles;
@@ -290,10 +290,12 @@ static void PushTriangle(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 color)
 	PushTriangle(rg, p1, p2, p3, V4(1.0f, color));
 }
 
-static void PushTriangleMesh(RenderGroup *rg, TriangleMesh mesh)
+static void PushTriangleMesh(RenderGroup *rg, TriangleMesh mesh, Quaternion orientation)
 {
 	EntryTriangleMesh *meshHeader = PushRenderEntry(EntryTriangleMesh);
 	meshHeader->mesh = mesh;
+	meshHeader->orientation = orientation;
+
 }
 
 static void PushLine(RenderGroup *rg, v3 p1, v3 p2)
@@ -302,7 +304,7 @@ static void PushLine(RenderGroup *rg, v3 p1, v3 p2)
 	{
 		EntryColoredVertices *lines = PushRenderEntryType(EntryColoredVertices, EntryLines);
 		lines->maxAmount = 1000;
-		lines->data = PushArray(frameArena, ColoredVertex, lines->maxAmount);
+		lines->data = PushData(frameArena, ColoredVertex, lines->maxAmount);
 		lines->vertexCount = 0;
 
 		rg->currentLines = lines;
@@ -444,11 +446,16 @@ static void PushClear(RenderGroup *rg, v4 color)
 	}
 }
 
+static void PushQuadrilateral(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, u32 c1, u32 c2, u32 c3, u32 c4)
+{
+	PushTriangle(rg, p1, p2, p3, c1, c2, c3);
+	PushTriangle(rg, p4, p2, p3, c4, c2, c3);
+}
+
 static void PushQuadrilateral(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, v4 color)
 {
 	PushTriangle(rg, p1, p2, p3, color);
 	PushTriangle(rg, p4, p2, p3, color);
-
 }
 
 static void PushRectangle(RenderGroup *rg, v3 pos, v3 vec1, v3 vec2, v4 color)
@@ -482,6 +489,50 @@ static void PushRectangle(RenderGroup *rg, v2 pos, f32 width, f32 height, f32 zO
 	PushQuadrilateral(rg, V3(pos, zOffset), V3(pos + vec1, zOffset), V3(pos + vec2, zOffset), V3(pos + vec1 + vec2, zOffset), color);
 }
 
+static void PushRectangle(RenderGroup *rg, v2 pos, f32 width, f32 height, f32 zOffset, u32 c1, u32 c2, u32 c3, u32 c4)
+{
+	v2 vec1 = V2(width, 0.0f);
+	v2 vec2 = V2(0.0f, height);
+
+	PushQuadrilateral(rg, V3(pos, zOffset), V3(pos + vec1, zOffset), V3(pos + vec2, zOffset), V3(pos + vec1 + vec2, zOffset), c1, c2, c3, c4);
+}
+
+static void PushRectangle(RenderGroup *rg, v2 min, v2 max, u32 c1, u32 c2, u32 c3, u32 c4)
+{
+	v2 p1 = min;
+	v2 p2 = V2(max.x, min.y);
+	v2 p3 = V2(min.x, max.y);
+	v2 p4 = max;
+
+	PushQuadrilateral(rg, V3(p1, Orthogonal_Rectangle_OFFSET), V3(p2, Orthogonal_Rectangle_OFFSET), V3(p3, Orthogonal_Rectangle_OFFSET), V3(p4, Orthogonal_Rectangle_OFFSET), c1, c2, c3, c4);
+}
+
+static void PushRectangle(RenderGroup *rg, v2 min, v2 max, u32 c)
+{
+	v2 p1 = min;
+	v2 p2 = V2(max.x, min.y);
+	v2 p3 = V2(min.x, max.y);
+	v2 p4 = max;
+
+	PushQuadrilateral(rg, V3(p1, Orthogonal_Rectangle_OFFSET), V3(p2, Orthogonal_Rectangle_OFFSET), V3(p3, Orthogonal_Rectangle_OFFSET), V3(p4, Orthogonal_Rectangle_OFFSET), c, c, c, c);
+}
+
+static void PushRectangle(RenderGroup *rg, v2 pos, f32 width, f32 height, u32 c1, u32 c2, u32 c3, u32 c4)
+{
+	v2 vec1 = V2(width, 0.0f);
+	v2 vec2 = V2(0.0f, height);
+
+	PushQuadrilateral(rg, V3(pos, Orthogonal_Rectangle_OFFSET), V3(pos + vec1, Orthogonal_Rectangle_OFFSET), V3(pos + vec2, Orthogonal_Rectangle_OFFSET), V3(pos + vec1 + vec2, Orthogonal_Rectangle_OFFSET), c1, c2, c3, c4);
+}
+
+static void PushRectangle(RenderGroup *rg, v2 pos, f32 width, f32 height, u32 c)
+{
+	v2 vec1 = V2(width, 0.0f);
+	v2 vec2 = V2(0.0f, height);
+
+	PushQuadrilateral(rg, V3(pos, Orthogonal_Rectangle_OFFSET), V3(pos + vec1, Orthogonal_Rectangle_OFFSET), V3(pos + vec2, Orthogonal_Rectangle_OFFSET), V3(pos + vec1 + vec2, Orthogonal_Rectangle_OFFSET), c, c, c, c);
+}
+
 static void PushRectangle(RenderGroup *rg, v2 pos, f32 width, f32 height, v4 color)
 {
 	v2 vec1 = V2(width, 0.0f);
@@ -511,13 +562,13 @@ static void PushTexturedQuad(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, Bitmap
 	{
 		EntryTexturedQuads *quads = PushRenderEntry(EntryTexturedQuads);
 		quads->maxAmount = 1000;
-		quads->data = PushArray(frameArena, TexturedVertex, quads->maxAmount);
+		quads->data = PushData(frameArena, TexturedVertex, quads->maxAmount);
 		quads->vertexCount = 0;
 
 		rg->currentQuads = quads;
 
 		u32 bitmapAmount = quads->maxAmount / 4;
-		rg->currentQuads->quadBitmaps = PushArray(frameArena, Bitmap, bitmapAmount);
+		rg->currentQuads->quadBitmaps = PushData(frameArena, Bitmap, bitmapAmount);
 	}
 
 	TexturedQuad mem = GetTexturedQuadMemory(rg);
@@ -644,7 +695,7 @@ static f32 PushString(RenderGroup *rg, v2 pos, unsigned char* string, u32 string
 }
 static f32 PushString(RenderGroup *rg, v2 pos, const char* string, f32 size, Font font, v4 color = V4(1, 1, 1, 1))
 {
-	return PushString(rg, pos, (unsigned char *)string, ArrayCount(string), size, font, color);
+	return PushString(rg, pos, (unsigned char *)string, NullTerminatedStringLength(string), size, font, color);
 }
 
 static f32 PushString(RenderGroup *rg, v2 pos, String string, f32 size, Font font, v4 color = V4(1, 1, 1, 1))

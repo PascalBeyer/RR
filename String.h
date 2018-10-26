@@ -1,11 +1,21 @@
 #ifndef RR_STRING
 #define RR_STRING
 
+
+
+typedef unsigned char Char;
 //todo : remove this
 #include <string.h>
 
-typedef unsigned char Char;
-
+/*
+static void memcpy(u8 *dest, u8 *source, u64 amount)
+{
+	for (u64 it = 0; it < amount; it++)
+	{
+		*dest++ = *source++;
+	}
+}
+*/
 struct String
 {
 	Char *data;
@@ -18,6 +28,19 @@ struct String
 
 DefineArray(String);
 
+
+static String BeginConcatenate(Arena *arena)
+{
+	String ret;
+	ret = PushArray(arena, Char, 0);
+	return ret;
+}
+static void EndConcatenate(String *s, Arena *arena)
+{
+	s->length = (u32)(arena->current - s->data);
+}
+
+
 static void CopyStringToString(String inp, String *out)
 {
 	memcpy(out->data, inp.data, inp.length * sizeof(Char));
@@ -27,8 +50,7 @@ static void CopyStringToString(String inp, String *out)
 static String CopyString(String str, Arena *arena = frameArena) // todo memcopy
 {
 	String ret;
-	ret.data = PushArray(arena, Char, str.length);
-	ret.length = str.length;
+	ret = PushArray(arena, Char, str.length);
 	for (u32 i = 0; i < str.length; i++)
 	{
 		ret.data[i] = str.data[i];
@@ -62,7 +84,7 @@ static u32 NullTerminatedStringLength(const char* c)
 	return ret;
 }
 
-static String CreateString(char *nullTerminatedString) // todo fast
+static String CreateString(char *nullTerminatedString) 
 {
 	return CreateString((Char *)nullTerminatedString, NullTerminatedStringLength(nullTerminatedString));
 }
@@ -85,8 +107,8 @@ static String S(char *nullTerminatedString, Arena *arena)
 {
 	String ret;
 	u32 length = NullTerminatedStringLength(nullTerminatedString);
-	ret.data = PushArray(arena, Char, length);
-	ret.length = length;
+	ret = PushArray(arena, Char, length);
+	
 	memcpy(ret.data, nullTerminatedString, length * sizeof(Char));
 
 	return ret;
@@ -100,7 +122,7 @@ static String CreateString(Char *nullTerminatedString)
 static String Append(String a, String b, Arena *arena = frameArena)
 {
 	u32 size = a.length + b.length;
-	Char *newString = PushArray(arena, Char, a.length + b.length);
+	String newString = PushArray(arena, Char, a.length + b.length);
 	for (u32 i = 0; i < a.length; i++)
 	{
 		newString[i] = a.data[i];
@@ -109,7 +131,7 @@ static String Append(String a, String b, Arena *arena = frameArena)
 	{
 		newString[a.length + i] = b.data[i];
 	}
-	return CreateString(newString, size);
+	return newString;
 }
 
 /*
@@ -135,8 +157,7 @@ static String UtoS(u64 integer, Arena *arena = frameArena)
 	}
 	u32 index = 0;
 
-	ret.data = PushArray(arena, Char, counter);
-	ret.length = counter;
+	ret = PushArray(arena, Char, counter);
 	
 	while (index != counter)
 	{
@@ -200,7 +221,11 @@ static String ItoS(i32 integer, Arena *arena = frameArena)
 {
 	if (integer < 0)
 	{
-		return Append(CreateString("-"), UtoS((u32)(-integer), arena));
+		String ret = BeginConcatenate(arena);
+		S('-', arena);
+		UtoS((u32)(-integer), arena);
+		EndConcatenate(&ret, arena);
+		return ret;
 	}
 	else
 	{
@@ -220,8 +245,244 @@ static String ItoS(i64 integer, Arena *arena = frameArena)
 	}
 }
 
-static String FtoS(float rational, u32 numberOfDigits, Arena *arena = frameArena) // todo : maybe make these good or use ryans stuff?
+
+struct FloatSpread
 {
+	u64 mant;
+	i32 exp;
+};
+
+static FloatSpread SpreadFloat(f64 f)
+{
+	Assert(f >= 0);
+
+	u64 convertedF = *(u64 *)&f;
+
+	i32 bias = 1023;
+
+	FloatSpread ret;
+	ret.exp = ((convertedF & 0xFFF0000000000000) >> 52); // 12 bits sign + exponents, 52  mantisse
+	ret.mant = (convertedF & 0x000FFFFFFFFFFFFF) 
+						   | 0x0010000000000000; // getting the mantisse and the adding the hidden bit
+
+	ret.exp = ret.exp - bias; // I think the exponent is rolled such that 0 is actually 0
+	ret.exp = ret.exp - 52; // making it such that ret.mant * 2^ret.exp = f again
+
+	return ret;
+}
+
+static FloatSpread Mult(FloatSpread x, FloatSpread y)
+{
+	// notes are from the case  that we are doing f32 not f64, so double everything
+	u64 ax = x.mant >> 32;		//we use these to have space to multiply accuratly
+	u64 bx = x.mant & 0xFFFFFFFF;
+	u64 ay = y.mant >> 32;
+	u64 by = y.mant & 0xFFFFFFFF;
+
+	// multiplication accordint to the distributive law
+	u64 upperParts = ax*ay; // should be multiplied by 2^32
+	u64 lowerParts = bx*by; // should be multiplied by 2^0
+	u64 mixed_axby = ax*by;	// should be multiplied by 2^16
+	u64 mixed_bxay = bx*ay; // should be multiplied by 2^16
+
+	// we do that at the end by doing exponent stuff and dividing everything else instead
+
+	// we throw away the lowest 16 bits of lowerPart, as these would get rounded for floats
+	// we are just interested in how lowerparts makes us round.
+	u64 temp = (lowerParts >> 32) + (mixed_axby & 0xFFFF) + (mixed_bxay & 0xFFFF); // should be multiplied by 2^16
+	u64 roundingNumber = (1U << 31);
+	temp += roundingNumber; //this allways rounds towards infinity (everything is still assumed to be positive)
+	FloatSpread ret;
+	ret.mant = upperParts + (mixed_axby >> 32) + (mixed_bxay >> 32) + (temp >> 32); // should be multiplied by 2^32
+	ret.exp = x.exp + y.exp + 64; // is multiplied by 2^32, noice!
+	return ret;
+}
+
+struct CachedPower { // c = f * 2^e ~= 10^k
+	uint64_t f;
+	int e; // binary exponent
+	int k; // decimal exponent
+};
+
+inline int BinaryExponentFromDecimalExponent(int k)
+{
+	return (k * 108853 - 63 * (1 << 15)) >> 15;
+}
+
+constexpr int kAlpha = -60;
+constexpr int kGamma = -32;
+
+constexpr int kCachedPowersSize = 85;
+constexpr int kCachedPowersMinDecExp = -348;
+constexpr int kCachedPowersMaxDecExp = 324;
+constexpr int kCachedPowersDecExpStep = 8;
+
+inline CachedPower GetCachedPower(int index)
+{
+	static constexpr uint64_t kSignificands[/*680 bytes*/] = {
+		0xFA8FD5A0081C0288, // e = -1220, k = -348, //*
+		0xBAAEE17FA23EBF76, // e = -1193, k = -340, //*
+		0x8B16FB203055AC76, // e = -1166, k = -332, //*
+		0xCF42894A5DCE35EA, // e = -1140, k = -324, //*
+		0x9A6BB0AA55653B2D, // e = -1113, k = -316, //*
+		0xE61ACF033D1A45DF, // e = -1087, k = -308, //*
+		0xAB70FE17C79AC6CA, // e = -1060, k = -300, // >>> double-precision (-1060 + 960 + 64 = -36)
+		0xFF77B1FCBEBCDC4F, // e = -1034, k = -292,
+		0xBE5691EF416BD60C, // e = -1007, k = -284,
+		0x8DD01FAD907FFC3C, // e =  -980, k = -276,
+		0xD3515C2831559A83, // e =  -954, k = -268,
+		0x9D71AC8FADA6C9B5, // e =  -927, k = -260,
+		0xEA9C227723EE8BCB, // e =  -901, k = -252,
+		0xAECC49914078536D, // e =  -874, k = -244,
+		0x823C12795DB6CE57, // e =  -847, k = -236,
+		0xC21094364DFB5637, // e =  -821, k = -228,
+		0x9096EA6F3848984F, // e =  -794, k = -220,
+		0xD77485CB25823AC7, // e =  -768, k = -212,
+		0xA086CFCD97BF97F4, // e =  -741, k = -204,
+		0xEF340A98172AACE5, // e =  -715, k = -196,
+		0xB23867FB2A35B28E, // e =  -688, k = -188,
+		0x84C8D4DFD2C63F3B, // e =  -661, k = -180,
+		0xC5DD44271AD3CDBA, // e =  -635, k = -172,
+		0x936B9FCEBB25C996, // e =  -608, k = -164,
+		0xDBAC6C247D62A584, // e =  -582, k = -156,
+		0xA3AB66580D5FDAF6, // e =  -555, k = -148,
+		0xF3E2F893DEC3F126, // e =  -529, k = -140,
+		0xB5B5ADA8AAFF80B8, // e =  -502, k = -132,
+		0x87625F056C7C4A8B, // e =  -475, k = -124,
+		0xC9BCFF6034C13053, // e =  -449, k = -116,
+		0x964E858C91BA2655, // e =  -422, k = -108,
+		0xDFF9772470297EBD, // e =  -396, k = -100,
+		0xA6DFBD9FB8E5B88F, // e =  -369, k =  -92,
+		0xF8A95FCF88747D94, // e =  -343, k =  -84,
+		0xB94470938FA89BCF, // e =  -316, k =  -76,
+		0x8A08F0F8BF0F156B, // e =  -289, k =  -68,
+		0xCDB02555653131B6, // e =  -263, k =  -60,
+		0x993FE2C6D07B7FAC, // e =  -236, k =  -52,
+		0xE45C10C42A2B3B06, // e =  -210, k =  -44,
+		0xAA242499697392D3, // e =  -183, k =  -36, // >>> single-precision (-183 + 80 + 64 = -39)
+		0xFD87B5F28300CA0E, // e =  -157, k =  -28, //
+		0xBCE5086492111AEB, // e =  -130, k =  -20, //
+		0x8CBCCC096F5088CC, // e =  -103, k =  -12, //
+		0xD1B71758E219652C, // e =   -77, k =   -4, //
+		0x9C40000000000000, // e =   -50, k =    4, //
+		0xE8D4A51000000000, // e =   -24, k =   12, //
+		0xAD78EBC5AC620000, // e =     3, k =   20, //
+		0x813F3978F8940984, // e =    30, k =   28, //
+		0xC097CE7BC90715B3, // e =    56, k =   36, //
+		0x8F7E32CE7BEA5C70, // e =    83, k =   44, // <<< single-precision (83 - 196 + 64 = -49)
+		0xD5D238A4ABE98068, // e =   109, k =   52,
+		0x9F4F2726179A2245, // e =   136, k =   60,
+		0xED63A231D4C4FB27, // e =   162, k =   68,
+		0xB0DE65388CC8ADA8, // e =   189, k =   76,
+		0x83C7088E1AAB65DB, // e =   216, k =   84,
+		0xC45D1DF942711D9A, // e =   242, k =   92,
+		0x924D692CA61BE758, // e =   269, k =  100,
+		0xDA01EE641A708DEA, // e =   295, k =  108,
+		0xA26DA3999AEF774A, // e =   322, k =  116,
+		0xF209787BB47D6B85, // e =   348, k =  124,
+		0xB454E4A179DD1877, // e =   375, k =  132,
+		0x865B86925B9BC5C2, // e =   402, k =  140,
+		0xC83553C5C8965D3D, // e =   428, k =  148,
+		0x952AB45CFA97A0B3, // e =   455, k =  156,
+		0xDE469FBD99A05FE3, // e =   481, k =  164,
+		0xA59BC234DB398C25, // e =   508, k =  172,
+		0xF6C69A72A3989F5C, // e =   534, k =  180,
+		0xB7DCBF5354E9BECE, // e =   561, k =  188,
+		0x88FCF317F22241E2, // e =   588, k =  196,
+		0xCC20CE9BD35C78A5, // e =   614, k =  204,
+		0x98165AF37B2153DF, // e =   641, k =  212,
+		0xE2A0B5DC971F303A, // e =   667, k =  220,
+		0xA8D9D1535CE3B396, // e =   694, k =  228,
+		0xFB9B7CD9A4A7443C, // e =   720, k =  236,
+		0xBB764C4CA7A44410, // e =   747, k =  244,
+		0x8BAB8EEFB6409C1A, // e =   774, k =  252,
+		0xD01FEF10A657842C, // e =   800, k =  260,
+		0x9B10A4E5E9913129, // e =   827, k =  268,
+		0xE7109BFBA19C0C9D, // e =   853, k =  276,
+		0xAC2820D9623BF429, // e =   880, k =  284,
+		0x80444B5E7AA7CF85, // e =   907, k =  292,
+		0xBF21E44003ACDD2D, // e =   933, k =  300,
+		0x8E679C2F5E44FF8F, // e =   960, k =  308,
+		0xD433179D9C8CB841, // e =   986, k =  316,
+		0x9E19DB92B4E31BA9, // e =  1013, k =  324, // <<< double-precision (1013 - 1137 + 64 = -60)
+	};
+
+	int const k = kCachedPowersMinDecExp + index * kCachedPowersDecExpStep;
+	int const e = BinaryExponentFromDecimalExponent(k);
+
+	return { kSignificands[index], e, k };
+}
+
+static i32 ComputeExponentBase10(i32 exponentBase2)
+{
+	//(i32)ceil((31 - exponentBase2) * 0.30102999566398114);
+	return (exponentBase2 * -78913 + ( (kAlpha - 1) * 78913 + (1 << 18))) >> 18; 
+}
+
+static u32 CountLeadingZeros(u64 mant)
+{
+	u32 leadingZeros = 0;
+	while (!(mant >> 63))
+	{
+		mant <<= 1;
+		++leadingZeros;
+	}
+	return leadingZeros;
+}
+
+static FloatSpread Normalize(FloatSpread f)
+{
+	u32 leadingZeros = CountLeadingZeros(f.mant);
+
+	FloatSpread ret;
+	ret.exp = f.exp - leadingZeros;
+	ret.mant = (f.mant << leadingZeros);
+	return ret;
+}
+
+static void Cut(FloatSpread f, u32 *parts)
+{
+	parts[2] = (f.mant % (10000000 >> f.exp)) << f.exp;
+	u64 temp = (f.mant / (10000000 >> f.exp));
+	parts[1] = temp % 10000000;
+	parts[0] = (u32)(temp / 10000000);
+}
+String FormatString(char *format, ...);
+void ConsoleOutput(char* format, ...);
+
+
+static void Grisu(Arena *arena, f64 f) // todo does not work.
+{
+	FloatSpread f0 = SpreadFloat(f);
+	FloatSpread normalized = Normalize(f0);
+	i32 exp10 = ComputeExponentBase10(normalized.exp); // why +32?
+	CachedPower pow = GetCachedPower(exp10);
+	FloatSpread c = { pow.f, pow.e };
+	
+	FloatSpread asd = Mult(normalized, c);
+
+	u32 parts[3];
+	Cut(asd, parts);
+	
+	ConsoleOutput("%u32%u32%u32e%i32", parts[0], parts[1], parts[2], pow.k);
+
+}
+
+
+// floats : 32bit, 1 sign bit, 8 exponent 23 mantisse (all normalized, i.e there is a "hidden bit" for mantisse)
+static String FtoS(float rational, u32 numberOfDigits, Arena *arena = frameArena)
+{
+	FloatSpread f0 = SpreadFloat(0.5f);
+	FloatSpread f1 = SpreadFloat(1.0f);
+	FloatSpread f2 = SpreadFloat(11.0f);
+	FloatSpread f3 = SpreadFloat(F32MAX);
+	FloatSpread f4 = SpreadFloat(16.0f);
+
+	FloatSpread f5 = Mult(f0, f1);
+	FloatSpread f6 = Mult(f0, f2);
+	FloatSpread f7 = Mult(f0, f3);
+	FloatSpread f8 = Mult(f0, f4);
+
 	int intPart = (int)rational;
 	float ratPart = rational - intPart;
 	if (ratPart < 0)
@@ -289,20 +550,9 @@ static String CreateString(Arena *arena, bool val)
 	}
 }
 
-static String BeginConcatenate(Arena *arena)
-{
-	String ret;
-	ret.data = PushArray(arena, Char, 0); //todo make begin and end concatenate ?
-	return ret;
-}
-static void EndConcatenate(String *s, Arena *arena)
-{
-	s->length = (u32)(arena->current - s->data);
-}
-
 static char* ToNullTerminated(Arena *arena, String string)
 {
-	char *ret = PushArray(arena, char, string.length);
+	char *ret = PushData(arena, char, string.length);
 	for (u32 i = 0; i < string.length; i++)
 	{
 		ret[i] = string.data[i];
@@ -310,6 +560,40 @@ static char* ToNullTerminated(Arena *arena, String string)
 	ret[string.length] = '\0';
 	return ret;
 }
+
+
+static void Eat1(String *s)
+{
+	Assert(s->length);
+	s->data++;
+	s->length--;
+}
+
+static void EatSpaces(String *string)
+{
+	while (string->length)
+	{
+		if (!(string->data[0] == ' '))
+		{
+			return;
+		}
+		string->data++;
+		string->length--;
+	}
+}
+
+static void EatSpacesFromEnd(String *string)
+{
+	while (string->length)
+	{
+		if (!(string->data[(string->length - 1)] == ' '))
+		{
+			return;
+		}
+		string->length--;
+	}
+}
+
 
 static String EatToNextSpaceReturnHead(String *string)
 {
@@ -394,6 +678,12 @@ static b32 StoB(String string, b32 *success)
 
 static f32 StoF(String string, b32 *success) // todo : maybe make these good or use ryans stuff?
 {
+	if (string[0] == '-')
+	{
+		Eat1(&string);
+		return (- StoF(string, success));
+	}
+
 	f32 sum = 0;
 	f32 exp = 1.0f;
 
@@ -463,6 +753,7 @@ String ConsumeNextLine(String *inp) // returns head inclusive of the endline
 	return ret;
 }
 
+
 static void Sanitize(String *s) //todo: this maybe should be "RemoveChars" and get passed a c-string? which would be slower but more convinient
 {
 	u32 currentOffset = 0;
@@ -481,28 +772,19 @@ static void Sanitize(String *s) //todo: this maybe should be "RemoveChars" and g
 		s->data[i - currentOffset] = s->data[i];
 	}
 	s->length -= currentOffset;
-}
-
-static void Eat1(String *s)
-{
-	Assert(s->length);
-	s->data++;
-	s->length--;
-}
-
-static void EatSpaces(String *string)
-{
-	while (string->length)
+	if (currentOffset)
 	{
-		if (!(string->data[0] == ' '))
-		{
-			return;
-		}
-		string->data++;
-		string->length--;
+		s->data[s->length] = '\0';
 	}
 }
 
+// Warning screws with the string
+String ConsumeNextLineSanitize(String *inp)
+{
+	String head = ConsumeNextLine(inp);
+	Sanitize(&head);
+	return head;
+}
 
 static v2 StoV2(String string, b32 *success)
 {
@@ -792,8 +1074,8 @@ static String StringFormatHelper(Arena *arena, char *format, va_list args)
 			if (inp[1] == '3')
 			{
 				Assert(inp[2] == '2');
-				f32 val = va_arg(args, f32);
-				FtoS(val, arena);
+				f64 val = va_arg(args, f64);
+				FtoS((f32)val, arena); //todo grisu.
 			}
 			else if (inp[1] == '6')
 			{

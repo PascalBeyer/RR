@@ -44,6 +44,8 @@ struct Bitmap
 
 extern u32 (*AllocateGPUTexture)(u32 width, u32 height, u32 *pixels);
 extern void (*UpdateGPUTexture)(Bitmap bitmap);
+
+static u32 RegisterWrapingImage(u32 width, u32 height, u32 *pixels);
 static u32 *GetPixel(Bitmap bitmap, u32 x, u32 y)
 {
 	u32 shift = y * bitmap.width + x;
@@ -62,7 +64,7 @@ static Bitmap CreateBitmap(u32* pixels, u32 width, u32 height)
 	return ret;
 }
 
-static Bitmap CreateBitmap(char* fileName)
+static Bitmap CreateBitmap(char* fileName, bool wrapping = false)
 {
 	Bitmap ret;
 	//TODO: maybe check if its actually a bmp
@@ -110,10 +112,21 @@ static Bitmap CreateBitmap(char* fileName)
 			*tempPixels++ = ((A << 24) | (R << 16) | (G << 8) | (B << 0));
 		}
 	}
+
+	if (wrapping)
+	{
+		ret.textureHandle = RegisterWrapingImage(ret.width, ret.height, ret.pixels);
+		return ret;
+	}
 	ret.textureHandle = AllocateGPUTexture(ret.width, ret.height, ret.pixels);
 	return ret;
 }
 
+static Bitmap CreateBitmap(String fileName)
+{
+	Clear(workingArena);
+	return CreateBitmap(ToNullTerminated(workingArena, fileName));
+}
 
 static void FreeBitmap(Bitmap *bitmap)
 {
