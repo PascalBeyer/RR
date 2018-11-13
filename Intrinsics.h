@@ -28,18 +28,14 @@
 #define IStoreInt(a, b) _mm_storeu_si128((__m128i *)a, b)
 #define IRootF(a) _mm_sqrt_ps(a)
 
-static float SquareRoot(float f)
-{
-	return sqrtf(f);
-}
-
-
-static u32 BitScanForward(u32 value)
+static u32 BitwiseScanForward(u32 value)
 {
 	unsigned long result = 32;
 #if COMPILER_MSVC
 	if (!_BitScanForward(&result, value))
+	{
 		result = 32;
+	}
 #else
 
 
@@ -55,5 +51,31 @@ static u32 BitScanForward(u32 value)
 	return (u32)result;
 
 }
+
+
+static u32 BitwiseScanReverse(u32 value)
+{
+	unsigned long result;
+#if COMPILER_MSVC
+	if (!_BitScanReverse(&result, value))
+	{
+		result = 0;
+	}
+#else
+
+
+	for (int i = 31; i > 0; i++)
+	{
+		if (value & (1 << i))
+		{
+			result = i;
+			break;
+		}
+	}
+#endif
+	return (u32)result;
+
+}
+
 
 #endif

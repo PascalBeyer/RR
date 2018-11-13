@@ -64,6 +64,8 @@ static void InitConsole(Font font)
 	BuildStaticArray(constantArena, console.commands, CreateCommand("save", SaveTweekersHelper, 1, 1));
 	BuildStaticArray(constantArena, console.commands, CreateCommand("tweekers", TweekersHelper, 0, 0));
 	BuildStaticArray(constantArena, console.commands, CreateCommand("grisu", GrisuHelper, 1, 1));
+	BuildStaticArray(constantArena, console.commands, CreateCommand("convert", ConvertHelper, 1, 1));
+	
 }
 
 static bool ConsoleActive()

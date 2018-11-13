@@ -2,13 +2,6 @@
 #define RR_WORLD
 
 
-DefineArray(v3);
-DefineArray(v2);
-DefineArray(v4);
-
-DefineDynamicArray(v2);
-DefineDynamicArray(v3);
-DefineDynamicArray(v4);
 
 struct AABB
 {
@@ -76,8 +69,6 @@ enum TriangleMeshType
 
 struct Material
 {
-	String name;
-
 	f32 spectularExponent;		// Ns
 	v3 ambientColor;			// Ka
 	v3 diffuseColor;			// Kd
@@ -86,32 +77,33 @@ struct Material
 
 	f32 indexOfReflection;		// Ni ("optical density")	0.001 - 10
 	f32 dissolved;				// d						0 - 1	
-								//f32 transparency;			// Tr = 1 - dissolsved		0 - 1
 								//v3 transmissionFilter;		// Tf						
 	u32 illuminationModel;		// illum					0 - 10
-	Bitmap bitmap;
-
-
+	u32 bitmapID;
+	String name;
 };
 
 DefineDynamicArray(Material);
 
+struct IndexSet
+{
+	u32 amount;
+	u32 offset;
+
+	Material mat; 
+};
+
+DefineArray(IndexSet);
+DefineArray(VertexFormat);
+DefineDynamicArray(IndexSet);
+
 struct TriangleMesh
 {
 	u32 type;
-	u32 amountOfVerticies;
-	v3 *vertices;
-	v2 *textCoordinates;
-	u32 *colors;
-
-	u32 amountOfIndicies;
-	u16 *indecies;
-	//todo :this does not really make sense to me... apperantly you save it with the nodes but these seem triangle related...
-	v3 *normals; 
+	VertexFormatArray vertices;
+	u16Array indices;
+	IndexSetArray indexSets;
 	
-	
-	Material mat;
-
 	u32 vertexVBO; // to init this call glBufferData and glBindData
 	u32 indexVBO;
 };
@@ -121,17 +113,146 @@ DefineDynamicArray(TriangleMesh);
 
 void RegisterTriangleMesh(TriangleMesh *mesh);
 
-struct World
+static void WriteTriangleMesh(TriangleMesh mesh, char *fileName) // todo : when we feel bored, we can make this a bit mor efficient
+{
+	File file;
+	// begin of daisy chain
+	file.memory = PushData(frameArena, u8, 0);
+	*PushStruct(frameArena, u32) = mesh.type;
+	*PushStruct(frameArena, u32) = mesh.vertices.amount;
+	For(mesh.vertices)
+	{
+		/*
+		*PushStruct(frameArena, v3) = it->p;
+		*PushStruct(frameArena, v2) = it->uv;
+		*PushStruct(frameArena, v3) = it->n;
+		*PushStruct(frameArena, u32) = it->c;
+		*/
+		*PushStruct(frameArena, VertexFormat) = *it;
+	}
+
+	*PushStruct(frameArena, u32) = mesh.indices.amount;
+	For(mesh.indices)
+	{
+		*PushStruct(frameArena, u16) = *it;
+	}
+
+	*PushStruct(frameArena, u32) = mesh.indexSets.amount;
+	For(mesh.indexSets)
+	{
+		*PushStruct(frameArena, IndexSet) = *it;
+#if 0
+		*PushStruct(frameArena, u32) = it->offset;
+		Material mat = it->mat;
+		*PushStruct(frameArena, f32) = mat.spectularExponent;
+
+		*PushStruct(frameArena, v3) = mat.ambientColor;
+		*PushStruct(frameArena, v3) = mat.diffuseColor;
+		*PushStruct(frameArena, v3) = mat.specularColor;
+		*PushStruct(frameArena, v3) = mat.ke;
+
+		*PushStruct(frameArena, f32) = mat.indexOfReflection;
+		*PushStruct(frameArena, f32) = mat.dissolved;
+
+		*PushStruct(frameArena, u32) = mat.illuminationModel;
+
+		*PushStruct(frameArena, String);
+#endif
+	}
+
+	For(mesh.indexSets)
+	{
+		Material mat = it->mat;
+		*PushStruct(frameArena, u32) = mat.name.length;
+		Char *dest = PushData(frameArena, Char, mat.name.length);
+		memcpy(dest, mat.name.data, mat.name.length * sizeof(Char));
+		PushZeroStruct(frameArena, Char); // to get it zero Terminated
+		
+	}
+
+	file.fileSize = (u32)(frameArena->current - (u8 *)file.memory);
+	WriteEntireFile(fileName, file);
+}
+
+static TriangleMesh LoadMesh(AssetHandler *assetHandler, char *fileName)
+{
+	TriangleMesh ret;
+
+	File file = LoadFile(fileName);
+	if (!file.fileSize) return {};
+	u8 *cur = (u8 *)file.memory;
+	ret.type = *(u32 *)cur;
+	cur += sizeof(u32);
+	ret.vertices.amount = *(u32 *)cur;
+	cur += sizeof(u32);
+	ret.vertices.data = (VertexFormat *)cur;
+	cur += ret.vertices.amount * sizeof(VertexFormat);
+
+	ret.indices.amount = *(u32 *)cur;
+	cur += sizeof(u32);
+	ret.indices.data = (u16 *)cur;
+	cur += ret.indices.amount * sizeof(u16);
+
+	ret.indexSets.amount = *(u32 *)cur;
+	cur += sizeof(u32);
+	ret.indexSets.data = (IndexSet *)cur;
+	cur += ret.indexSets.amount * sizeof(IndexSet);
+
+	For(ret.indexSets)
+	{
+		it->mat.name.length = *(u32 *)cur;
+		cur += sizeof(u32);
+		it->mat.name.data = (Char *)cur;
+		cur += it->mat.name.length * sizeof(Char);
+		cur++; // to get it zero Terminated
+		String name = FormatString("obj/maja/%s.texture%c1", it->mat.name, '\0'); // todo hard coded. this should probably come out of the "name"
+
+		it->mat.bitmapID = RegisterAsset(assetHandler, Asset_Texture, (char *)name.data);
+	}
+
+	RegisterTriangleMesh(&ret);
+
+
+	return ret;
+}
+
+struct LightingSolution
 {
 	struct IrradianceCache *cache;
 	struct KdNode *kdTree;
-	TriangleArray triangles;
 	struct LightingTriangle *lightingTriangles;
 	u32 amountOfTriangles;
+
+};
+
+struct PlacedMesh
+{
+	TriangleMesh mesh;
+	f32 scale;
+	Quaternion orientation;
+	v3 pos;
+};
+
+DefineDynamicArray(PlacedMesh);
+
+static PlacedMesh CreatePlacedMesh(TriangleMesh mesh, f32 scale, Quaternion orientation, v3 pos)
+{
+	PlacedMesh ret;
+	ret.mesh = mesh;
+	ret.scale = scale;
+	ret.orientation = orientation;
+	ret.pos = pos;
+	return ret;
+};
+
+struct World
+{
+	LightingSolution light;
+	TriangleArray triangles;
 	Camera camera;
 	Camera debugCamera;
 	v3 lightSource;
-	TriangleMeshDynamicArray testMeshes;
+	PlacedMeshDynamicArray placedMeshes;
 };
 
 struct RockCorner
@@ -305,7 +426,7 @@ static void UpdateCamFocus(Input *input, v3 focusPoint, Camera *camera, f32 aspe
 
 static void UpdateCamGodMode(Input *input, Camera *cam, DEBUGKeyTracker tracker)
 {
-	f32 moveSpeed = 0.25f;
+	Tweekable(f32, cameraMoveSpeed);
 #if 0
 	if (input->keybord[Key_shift].flag & KeyState_Down)
 	{
@@ -315,19 +436,19 @@ static void UpdateCamGodMode(Input *input, Camera *cam, DEBUGKeyTracker tracker)
 
 	if (tracker.wDown)
 	{
-		cam->pos += cam->basis.d3 * moveSpeed;
+		cam->pos += cam->basis.d3 * cameraMoveSpeed;
 	}
 	if (tracker.sDown)
 	{
-		cam->pos -= cam->basis.d3 * moveSpeed;
+		cam->pos -= cam->basis.d3 * cameraMoveSpeed;
 	}
 	if (tracker.dDown)
 	{
-		cam->pos += cam->basis.d1 * moveSpeed;
+		cam->pos += cam->basis.d1 * cameraMoveSpeed;
 	}
 	if (tracker.aDown)
 	{
-		cam->pos -= cam->basis.d1 * moveSpeed;
+		cam->pos -= cam->basis.d1 * cameraMoveSpeed;
 	}
 
 	if (tracker.spaceDown)
@@ -638,6 +759,8 @@ static TriangleArray CreateStoneAndPush(AABB aabb, f32 desiredVolume, Arena *are
 	
 }
 
+
+#if 0
 static TriangleMesh GenerateAndPushTriangleFloorMesh(AABB aabb, Arena* arena, u32 meshSize = 255)
 {
 	TriangleMesh ret;
@@ -697,6 +820,7 @@ static TriangleMesh GenerateAndPushTriangleFloorMesh(AABB aabb, Arena* arena, u3
 	return ret;
 }
 
+#endif
 
 #endif 
 

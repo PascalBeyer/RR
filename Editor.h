@@ -451,13 +451,14 @@ static String GetFilePathFromName(String fileName)
 
 //look at 1:50 in vertex vbo
 // todo right now this allocates into "arena", exept name and bitmap are hardcoded to go into constant arena and virtual alloc
-static MaterialDynamicArray LoadMTL(String path, String fileName, Arena *arena)
+static MaterialDynamicArray LoadMTL(AssetHandler *assetHandler, String path, String fileName, Arena *arena)
 {
-	MaterialDynamicArray ret = MaterialCreateDynamicArray(arena);
+	MaterialDynamicArray ret = MaterialCreateDynamicArray();
 
 	u8 *frameArenaReset = frameArena->current;
 	defer(frameArena->current = frameArenaReset);
-	File file = LoadFile((char *)FormatString("%s%s\0", path, fileName).data, frameArena);
+	File file = LoadFile((char *)FormatCString("%s%s\0", path, fileName).data, frameArena);
+	Assert(file.fileSize);
 	String string = CreateString((Char *)file.memory, file.fileSize); 
 	
 	b32 success = true;
@@ -473,6 +474,7 @@ static MaterialDynamicArray LoadMTL(String path, String fileName, Arena *arena)
 			String ident = EatToNextSpaceReturnHead(&line);
 			Assert(ident == "newmtl");
 			EatSpaces(&line);
+			
 			cur.name = CopyString(line, constantArena);
 		}
 
@@ -625,7 +627,7 @@ static MaterialDynamicArray LoadMTL(String path, String fileName, Arena *arena)
 			String ident = EatToNextSpaceReturnHead(&line);
 			Assert(ident == "map_Kd");
 			EatSpaces(&line);
-			cur.bitmap = CreateBitmap((char *)FormatString("%s%s\0", path, line).data, true);
+			if(assetHandler) cur.bitmapID = RegisterAsset(assetHandler, Asset_Texture, (char *)FormatCString("%s%s%c1", path, line, '\0').data);
 		}
 
 		ArrayAdd(&ret, cur);
@@ -636,16 +638,18 @@ static MaterialDynamicArray LoadMTL(String path, String fileName, Arena *arena)
 	return ret;
 }
 
-static TriangleMeshDynamicArray ReadObj(char *fileName)
+static TriangleMesh ReadObj(AssetHandler *assetHandler, char *fileName)
 {
 	String filename = CreateString(fileName);
 	String path = GetFilePathFromName(filename);
 	Arena *arena = constantArena;
-	TriangleMeshDynamicArray ret = TriangleMeshCreateDynamicArray(arena);
+	TriangleMesh ret = {};
 
 	u8 *frameArenaReset = frameArena->current;
 	defer(frameArena->current = frameArenaReset);
+
 	File file = LoadFile(fileName, frameArena);
+	if (!file.fileSize) return {};
 	String string = CreateString((Char *)file.memory, file.fileSize);
 
 	// here mtllib "bla.mtl"
@@ -656,17 +660,25 @@ static TriangleMeshDynamicArray ReadObj(char *fileName)
 	Assert(ident == "mtllib");
 	EatSpaces(&mtllib);
 
-	Clear(workingArena);
-	MaterialDynamicArray materials = LoadMTL(path, mtllib, workingArena);
+	MaterialDynamicArray materials = LoadMTL(assetHandler, path, mtllib, frameArena); 
+	// todo make sure that multiples get handled, i.e make this assets.
 
 	b32 success = true;
 	u32 amountOfVertsBefore = 1;
 	u32 amountOfNormalsBefore = 1;
 	u32 amountOfUVsBefore = 1;
+	u32 amountOfIndeciesBefore = 0;
 	String line = ConsumeNextLineSanitize(&string);
-	while (string.length) // todo: can and should I reset the frame arena after every iteration?
+
+	u16PtrDynamicArray indexPointerArray = u16PtrCreateDynamicArray();
+	IndexSetDynamicArray indexSets = IndexSetCreateDynamicArray();
+
+	// begin on vertex daisy chain
+	ret.vertices.data = (VertexFormat *)arena->current;
+
+	while (string.length)
 	{
-		TriangleMesh cur = {};
+		IndexSet cur;
 
 		while (string.length && line.length == 0 || line[0] == '#') { line = ConsumeNextLineSanitize(&string); }
 		if (!string.length) break;
@@ -797,11 +809,14 @@ static TriangleMeshDynamicArray ReadObj(char *fileName)
 		typedef UVList * UVListPtr;
 		DefineArray(UVListPtr);
 
-
-		UVListPtrArray flatten = PushZeroArray(frameArena, UVListPtr, tempVertexArray.amount);
+		Clear(workingArena);
+		UVListPtrArray flatten = PushZeroArray(workingArena, UVListPtr, tempVertexArray.amount);
 		u32 vertexArrayLength = 0;
 
-		cur.indecies = PushData(arena, u16, 0);
+		cur.offset = amountOfIndeciesBefore;
+		
+		BeginArray(frameArena, u16, indecies);
+		ArrayAdd(&indexPointerArray, indecies.data);
 		while (line[0] == 'f')
 		{
 			Eat1(&line);
@@ -818,9 +833,9 @@ static TriangleMeshDynamicArray ReadObj(char *fileName)
 				String s3 = EatToCharReturnHead(&line, ' ');
 
 
-				u32 u1 = StoU(s1, &success) - amountOfVertsBefore;
-				u32 u2 = StoU(s2, &success) - amountOfUVsBefore;
-				u32 u3 = StoU(s3, &success) - amountOfNormalsBefore;
+				u32 u1 = StoU(s1, &success) - amountOfVertsBefore;		// this has to be relative to be an index, but also saved absolute wrt the flattend array
+				u32 u2 = StoU(s2, &success) - amountOfUVsBefore;		// this is relative as we just need it to build our array
+				u32 u3 = StoU(s3, &success) - amountOfNormalsBefore;	// this is also relative 
 
 				//todo no handling for meshes, that have more then 0xFFFE verticies
 				
@@ -837,7 +852,7 @@ static TriangleMeshDynamicArray ReadObj(char *fileName)
 
 				if (flattenedIndex == 0xFFFF)
 				{
-					UVListPtr append = PushStruct(frameArena, UVList);
+					UVList *append = PushStruct(workingArena, UVList);
 					append->flattendIndex = vertexArrayLength++;
 					append->next = flatten[u1];
 					append->uvIndex = (u16)u2;
@@ -847,49 +862,58 @@ static TriangleMeshDynamicArray ReadObj(char *fileName)
 					flattenedIndex = append->flattendIndex;
 				}
 
-				u16 *val = PushData(arena, u16, 1);
-				*val = flattenedIndex;
+				*PushStruct(frameArena, u16) = flattenedIndex + ret.vertices.amount;
 			}
 
 			line = ConsumeNextLineSanitize(&string);
 		}
-		cur.amountOfIndicies = (u32)((u16 *)arena->current - cur.indecies);
+		EndArray(frameArena, u16, indecies);
+		cur.amount = indecies.amount;
 
+		ArrayAdd(&indexSets, cur);
+
+		amountOfIndeciesBefore += indecies.amount;
 		amountOfVertsBefore += tempVertexArray.amount;
 		amountOfNormalsBefore += normals.amount;
 		amountOfUVsBefore += textrueCoordinates.amount;
+		ret.vertices.amount += vertexArrayLength;
 
-		cur.amountOfVerticies = vertexArrayLength;
-		cur.vertices = PushData(arena, v3, cur.amountOfVerticies);
-		cur.textCoordinates = PushData(arena, v2, cur.amountOfVerticies);
-		cur.normals = PushData(arena, v3, cur.amountOfVerticies);
-
+		// vertexArrayLength allready incrented by flattening
+		VertexFormatArray save = PushArray(arena, VertexFormat, vertexArrayLength);
+		//
+		// WARNING, we are daisy chaining here into constantArena and into frameArena
+		//
 		For (flatten)
 		{
-			u32 it_index = it - &flatten[0];
+			u32 it_index = (u32)(it - &flatten[0]);
 			for (UVListPtr i = *it; i; i = i->next)
 			{
-				cur.vertices		[i->flattendIndex] = tempVertexArray	[it_index];
-				cur.textCoordinates	[i->flattendIndex] = textrueCoordinates	[i->uvIndex];
-				cur.normals			[i->flattendIndex] = normals			[i->normalIndex];
+				save[i->flattendIndex].p = tempVertexArray[it_index];
+				save[i->flattendIndex].uv = textrueCoordinates[i->uvIndex];
+				save[i->flattendIndex].n = normals[i->normalIndex];
+				save[i->flattendIndex].c = 0xFFFFFFFF;
 			}
 		}
-
-		cur.colors = PushData(arena, u32, cur.amountOfVerticies); 
-		u32 *it = cur.colors;
-		for (u32 i = 0; i < cur.amountOfVerticies; i++)
-		{
-			*it++ = 0xFFFFFFFF;
-		}
-
-		cur.type = TriangleMeshType_List;
-
-		RegisterTriangleMesh(&cur);
-
-		ArrayAdd(&ret, cur);
-
-		//break;
 	}
+	
+
+	ret.indices.data = (u16 *)arena->current;
+	Assert(indexPointerArray.amount == indexSets.amount);
+	for(u32 i = 0; i < indexPointerArray.amount; i++)
+	{
+		IndexSet set = indexSets[i];
+		u16 *source = indexPointerArray[i];
+		u16 *dest = PushData(arena, u16, set.amount);
+		memcpy(dest, source, set.amount * sizeof(u16));
+	}
+	ret.indices.amount = (u32)((u16 *)arena->current - ret.indices.data);
+
+	ret.indexSets = PushArray(arena, IndexSet, indexSets.amount);
+	memcpy(ret.indexSets.data, indexSets.data, indexSets.amount * sizeof(IndexSet));
+
+	ret.type = TriangleMeshType_List;
+
+	RegisterTriangleMesh(&ret);
 
 	Assert(success);
 	
@@ -915,6 +939,23 @@ static void UpdateEditor(Editor *editor, Input input)
 
 	}
 }
+
+static void WriteTexture(char *fileName, Bitmap bitmap)
+{
+	u8 *arenaCur = frameArena->current;
+	defer(frameArena->current = arenaCur);
+
+	Assert(bitmap.height == AssetBitmapSize);
+	Assert(bitmap.width  == AssetBitmapSize);
+	Assert(bitmap.pixels);
+
+	u32 fileSize = AssetBitmapSize * AssetBitmapSize * sizeof(u32);
+	File file = CreateFile(PushData(frameArena, u8, fileSize), fileSize);
+	memcpy(file.memory, bitmap.pixels, fileSize);
+	WriteEntireFile(fileName, file);
+}
+
+
 
 #endif // !RR_EDITOR
 

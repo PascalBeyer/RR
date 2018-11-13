@@ -1453,14 +1453,14 @@ static RayCastResult CastRaysCache(Bitmap bitmap, ClipRect clipRect, World world
 	u32 rayAmountPerBounceAmount = 1u;
 	u32 maxBounceCount = 2u;
 
-	LightingTriangle *triangles = world.lightingTriangles;
-	IrradianceCache *cache = world.cache;
+	LightingTriangle *triangles = world.light.lightingTriangles;
+	IrradianceCache *cache = world.light.cache;
 
 	RayCastResult ret = {};
 
 	Camera camera = world.camera;
 
-	KdNode *kdTree = world.kdTree;
+	KdNode *kdTree = world.light.kdTree;
 	RandomSeries entropy = { RandomSeed() };
 	//RandomSeries entropy = { 123 };
 	v3 lightSource = world.lightSource;
@@ -1565,14 +1565,14 @@ static RayCastResult CastRaysCacheWide(Bitmap bitmap, ClipRect clipRect, World w
 	u32 rayAmountPerBounceAmount = 1024u; //todo  tweekable
 	u32 maxBounceCount = 2u;
 
-	IrradianceCache *cache = world.cache;
-	LightingTriangle *triangles = world.lightingTriangles;
+	IrradianceCache *cache = world.light.cache;
+	LightingTriangle *triangles = world.light.lightingTriangles;
 
 	RayCastResult ret = {};
 
 	Camera camera = world.camera;
 
-	KdNode *kdTree = world.kdTree;
+	KdNode *kdTree = world.light.kdTree;
 
 	//RandomSeries entropy = { 123 };
 
@@ -1796,7 +1796,7 @@ static void RenderKdTree(KdNode *node, RenderGroup *rg)
 
 static void InitLighting(World *world)
 {
-	Assert(!world->lightingTriangles);
+	Assert(!world->light.lightingTriangles);
 	dummyLeaf = PushStruct(constantArena, KdNode);
 	dummyLeaf->amountOfTriangles = 1;
 	dummyLeaf->triangles = PushStruct(constantArena, LightingTriangle*);
@@ -1809,22 +1809,22 @@ static void InitLighting(World *world)
 
 	TriangleArray t = world->triangles;
 	u32 amountOfTriangles = t.amount;
-	world->amountOfTriangles = amountOfTriangles;
+	world->light.amountOfTriangles = amountOfTriangles;
 	LightingTriangle *trs = PushData(constantArena, LightingTriangle, amountOfTriangles);
 	for (u32 i = 0; i < amountOfTriangles; i++)
 	{
 		trs[i] = CreateLightingTriangleFromThreePoints(t[i].p1, t[i].p2, t[i].p3, Unpack3x8(t[i].c2), constantArena);
 	}
-	world->lightingTriangles = trs;
-	world->kdTree = BuildKdTree(trs, t.amount, constantArena, workingArena);
+	world->light.lightingTriangles = trs;
+	world->light.kdTree = BuildKdTree(trs, t.amount, constantArena, workingArena);
 
-	world->cache = PushStruct(constantArena, IrradianceCache);
-	world->cache->maxEntriesPerTriangle = 200;
-	world->cache->triangleSamples = PushData(constantArena, IrradianceSampleArray, amountOfTriangles);
+	world->light.cache = PushStruct(constantArena, IrradianceCache);
+	world->light.cache->maxEntriesPerTriangle = 200;
+	world->light.cache->triangleSamples = PushData(constantArena, IrradianceSampleArray, amountOfTriangles);
 	for (u32 i = 0; i < amountOfTriangles; i++)
 	{
-		world->cache->triangleSamples[i].entries = PushData(constantArena, IrradianceSample, world->cache->maxEntriesPerTriangle);
-		world->cache->triangleSamples[i].amount = 0;
+		world->light.cache->triangleSamples[i].entries = PushData(constantArena, IrradianceSample, world->light.cache->maxEntriesPerTriangle);
+		world->light.cache->triangleSamples[i].amount = 0;
 	}
 }
 
@@ -1833,7 +1833,7 @@ static bool lightingInitialized = false;
 static void PushLightingImage(RenderGroup *rg)
 {
 	PushRenderSetup(rg, {}, V3(), Setup_Orthogonal);
-	UpdateGPUTexture(globalLightingBitmap);
+	UpdateWrapingTexture(globalLightingBitmap);
 	PushBitmap(rg, V2(), globalLightingBitmap);
 }
 

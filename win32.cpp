@@ -4,6 +4,7 @@
 #define WGLPROC(a) a = (a##_ *)wglGetProcAddress(#a);
 
 #define ArrayCount(a) (sizeof(a)/sizeof(*a))
+#define GigaBytes(a) (1024 * MegaBytes(a))
 #define MegaBytes(a) (1024 * KiloBytes(a))
 #define KiloBytes(a) (1024 * (a))
 #define OffsetOf(type, Member) (umm)&(((type *)0)->Member)
@@ -48,54 +49,95 @@ static GLuint globalTextureHandle;
 static OpenGLInfo openGLInfo;
 static HWND window;
 
-//todo : make these allocate into arenas
-u32 (*AllocateGPUTexture)(u32 width, u32 height, u32 *pixels);
-void (*UpdateGPUTexture)(Bitmap bitmap);
-
 Arena *constantArena;
 Arena *frameArena;
 Arena *workingArena;
-DynamicAllocator *alloc;
+BuddyAllocator *alloc;
 
 static void FreeFile(File file)
 {
 	void *memory = file.memory;
 	if (memory)
 	{
-		VirtualFree(memory, 0, MEM_RELEASE);
+		DynamicFree(memory);
 	}
 }
 
+//todo clean it up, such that there are not 3 LoadFile...
 static File LoadFile(char *fileName)
 {
 	void *memory = 0;
 	unsigned int size = 0;
 	
 	HANDLE fileHandle = CreateFileA(fileName, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-	if (fileHandle != INVALID_HANDLE_VALUE)
+	if (fileHandle == INVALID_HANDLE_VALUE)
 	{
-		LARGE_INTEGER fileSize;
-		if (GetFileSizeEx(fileHandle, &fileSize))
-		{
-			u32 fileSize32 = (u32)fileSize.QuadPart;
-			memory = VirtualAlloc(0, fileSize32, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-			if (memory)
-			{
-				DWORD bytesRead;
-				if (ReadFile(fileHandle, memory, fileSize32, &bytesRead, 0) && fileSize32 == bytesRead)
-				{
-					size = fileSize32;
-				}
-				else
-				{
-					Die;
-					memory = 0;
-				}
-			}
-			
-		}
-		CloseHandle(fileHandle);
+		return { 0, NULL };
 	}
+
+	LARGE_INTEGER fileSize;
+	if (GetFileSizeEx(fileHandle, &fileSize))
+	{
+		u32 fileSize32 = (u32)fileSize.QuadPart;
+		memory = DynamicAlloc(u8, fileSize32);
+		if (memory)
+		{
+			DWORD bytesRead;
+			if (ReadFile(fileHandle, memory, fileSize32, &bytesRead, 0) && fileSize32 == bytesRead)
+			{
+				size = fileSize32;
+			}
+			else
+			{
+				Die;
+				memory = 0;
+			}
+		}		
+	}
+
+	CloseHandle(fileHandle);
+
+	File result;
+	result.fileSize = size;
+	result.memory = memory;
+	return result;
+}
+
+static File LoadFile(char *fileName, void *dest, u32 destSize)
+{
+	void *memory = NULL;
+	u32 size = 0;
+
+	HANDLE fileHandle = CreateFileA(fileName, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	if (fileHandle == INVALID_HANDLE_VALUE)
+	{
+		return { 0, NULL };
+	}
+
+	LARGE_INTEGER fileSize;
+	if (GetFileSizeEx(fileHandle, &fileSize))
+	{
+		u32 fileSize32 = (u32)fileSize.QuadPart;
+		
+		if (fileSize32 <= destSize)
+		{
+			memory = dest;
+
+			DWORD bytesRead;
+			if (ReadFile(fileHandle, memory, fileSize32, &bytesRead, 0) && fileSize32 == bytesRead)
+			{
+				size = fileSize32;
+			}
+			else
+			{
+				Die;
+				memory = 0;
+			}
+		}
+	}
+
+	CloseHandle(fileHandle);
+
 	File result;
 	result.fileSize = size;
 	result.memory = memory;
@@ -295,7 +337,7 @@ static void initializeSoundBuffer(HWND window, SoundBuffer *soundOutput)
 	soundOutput->runningSampleIndex = 0;
 	//soundOutput.squareWavePeriod = soundOutput.samplesPerSecond / soundOutput.hz;
 	//soundOutput.halfSquareWavePeriod = (soundOutput.squareWavePeriod / 2);
-	soundOutput->bytesPerSample = sizeof(s16) * 2;
+	soundOutput->bytesPerSample = sizeof(i16) * 2;
 	soundOutput->secondaryBufferSize = soundOutput->samplesPerSecond *soundOutput->bytesPerSample;
 	soundOutput->soundIsPlaying = false;
 	soundOutput->soundIsValid = false;
@@ -372,7 +414,7 @@ static void initializeSoundBuffer(HWND window, SoundBuffer *soundOutput)
 }
 
 static void win32FillSoundBuffer(SoundBuffer* soundOutput, DWORD byteToLock, DWORD bytesToWrite,
-	s16 *samples)
+	i16 *samples)
 {
 	void* region1;
 	DWORD region1Size;
@@ -385,8 +427,8 @@ static void win32FillSoundBuffer(SoundBuffer* soundOutput, DWORD byteToLock, DWO
 	if (SUCCEEDED(globalSoundBuffer->Lock(byteToLock, bytesToWrite, &region1, &region1Size, &region2, &region2Size, 0)))
 	{
 		//TODO assert taht stuff is valid
-		s16 *sampleOut = (s16*)region1;
-		s16 *sourceSample = samples;
+		i16 *sampleOut = (i16*)region1;
+		i16 *sourceSample = samples;
 		DWORD Region1SampleCount = region1Size / soundOutput->bytesPerSample;
 		for (DWORD sampleIndex = 0; sampleIndex < Region1SampleCount; ++sampleIndex)
 		{
@@ -395,7 +437,7 @@ static void win32FillSoundBuffer(SoundBuffer* soundOutput, DWORD byteToLock, DWO
 			soundOutput->runningSampleIndex++;
 		}
 		DWORD Region2SampleCount = region2Size / soundOutput->bytesPerSample;
-		sampleOut = (s16*)region2;
+		sampleOut = (i16*)region2;
 		for (DWORD sampleIndex = 0; sampleIndex < Region2SampleCount; ++sampleIndex)
 		{
 			*sampleOut++ = *sourceSample++;
@@ -535,7 +577,6 @@ typedef BOOL WINAPI wglGetPixelFormatAttribfvARB_(HDC hdc, int iPixelFormat, int
 typedef BOOL WINAPI wglChoosePixelFormatARB_(HDC hdc, const int *piAttribIList, const FLOAT *pfAttribFList, UINT nMaxFormats, int *piFormats, UINT *nNumFormats);
 static wglChoosePixelFormatARB_ *wglChoosePixelFormatARB;
 static wgl_create_context_attribs_ARB *wglCreateContextAttribsARB;
-static glTexImage2DMultisample_ *glTexImage2DMultisample;
 
 int win32OpenGLAttribs[] =
 {
@@ -622,8 +663,6 @@ static void win32LoadWglExtensions()
 			//wglChoosePixelFormatARB = (wglChoosePixelFormatARB_ *)wglGetProcAddress("wglChoosePixelFormatARB");
 			WGLPROC(wglChoosePixelFormatARB);
 			wglCreateContextAttribsARB = (wgl_create_context_attribs_ARB *)wglGetProcAddress("wglCreateContextAttribsARB");
-			//glTexImage2DMultisample	= (glTexImage2DMultisample_ *)wglGetProcAddress("glTexImage2DMultisample");
-			WGLPROC(glTexImage2DMultisample);
 			
 		}
 		wglMakeCurrent(0, 0);
@@ -664,6 +703,7 @@ static void win32InitOpenGL(HWND window)
 			wglSwapIntervalEXT(20);
 		}
 
+		WGLPROC(glTexImage2DMultisample);
 		WGLPROC(glBufferData);
 		WGLPROC(glBindBuffer);
 		WGLPROC(glGenBuffers);
@@ -698,7 +738,10 @@ static void win32InitOpenGL(HWND window)
 		WGLPROC(glDebugMessageCallback);
 		WGLPROC(glActiveTexture);
 		WGLPROC(glUniform1i);
+		WGLPROC(glUniform1f);
+		WGLPROC(glUniform2f);
 		WGLPROC(glUniform3f);
+		WGLPROC(glUniform4f);
 		WGLPROC(glBindAttribLocation);
 
 
@@ -910,12 +953,7 @@ static void HandleWindowsMassages(KeyMessageBuffer *buffer) //todo make this buf
 	}
 }
 
-int CALLBACK WinMain(
-	HINSTANCE instance,
-	HINSTANCE prevInstance,
-	LPSTR commandLine,
-	int showCode
-)
+int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showCode)
 {
 
 #if 0
@@ -950,18 +988,25 @@ int CALLBACK WinMain(
 
 
 	int windowWidth = 1280, windowHeight = 720;
-	void *gameMemory = VirtualAlloc(0, MegaBytes(500), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-	constantArena = InitArena(gameMemory, MegaBytes(500));
-	void *frameMem = VirtualAlloc(0, MegaBytes(100), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-	frameArena = InitArena(frameMem, MegaBytes(100));
-	void *workingMemory = VirtualAlloc(0, MegaBytes(5), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-	workingArena = InitArena(workingMemory, MegaBytes(5));
 
-	alloc = PushStruct(constantArena, DynamicAllocator);
+	u32 constantMemorySize = GigaBytes(1);
+	u32 frameMemorySize = MegaBytes(100);
+	u32 workingMemorySize = MegaBytes(5);
 
+	void *constantMemory = VirtualAlloc(0, constantMemorySize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+	constantArena = InitArena(constantMemory, constantMemorySize);
+	void *frameMem = VirtualAlloc(0, frameMemorySize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+	frameArena = InitArena(frameMem, frameMemorySize);
+	void *workingMemory = VirtualAlloc(0, workingMemorySize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+	workingArena = InitArena(workingMemory, workingMemorySize);
+
+	alloc = PushStruct(constantArena, BuddyAllocator);
+	*alloc = CreateBuddyAllocator(constantArena, MegaBytes(512), KiloBytes(64));
+
+	//TestAllocator(&buddyAlloc);
 
 	void *debugMemory = VirtualAlloc(0, MegaBytes(300), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-	DWORD asd = GetLastError();
+	//DWORD asd = GetLastError();
 	globalDebugState.arena = InitArena(debugMemory, MegaBytes(300));
 	
 	const u32 inputBufferSize = 100;
@@ -983,17 +1028,6 @@ int CALLBACK WinMain(
 
 			win32InitOpenGL(window);
 
-			u32 *whitePixels = new u32[16];
-			for (u32 iWhite = 0; iWhite < 16; iWhite++)
-			{
-				whitePixels[iWhite] = 0xFFFFFFFF;
-			}
-			
-			GLuint whiteTextureID = (GLuint)OpenGLDownLoadImage(1, 1, whitePixels);
-
-			AllocateGPUTexture = OpenGLDownLoadImage;
-			UpdateGPUTexture = OpenGLUpdateBitmap;
-
 			//todo move the allocation stuff into the game?
 			u32 pushBufferSize = MegaBytes(4);
 			void* pushBuffer = VirtualAlloc(0, pushBufferSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
@@ -1014,10 +1048,10 @@ int CALLBACK WinMain(
 			*/
 			SoundBuffer soundOutput = {};
 			initializeSoundBuffer(window, &soundOutput);
-			s16 *samples = (s16 *)VirtualAlloc(0, soundOutput.secondaryBufferSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+			i16 *samples = (i16 *)VirtualAlloc(0, soundOutput.secondaryBufferSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 			soundOutput.soundSamples = samples;
-			int sampleAmount = soundOutput.secondaryBufferSize / sizeof(s16);
-			for (unsigned int i = 0; i < (soundOutput.secondaryBufferSize/sizeof(s16)); i++)
+			int sampleAmount = soundOutput.secondaryBufferSize / sizeof(i16);
+			for (unsigned int i = 0; i < (soundOutput.secondaryBufferSize/sizeof(i16)); i++)
 			{
 				samples[i] = 0;
 			}

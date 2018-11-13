@@ -21,7 +21,8 @@ enum RenderSetUpFlags
 
 struct RenderSetup
 {
-	m4x4 transform;
+	m4x4 projection;
+	m4x4 cameraTransform;
 	v3 lightPos;
 	v3 cameraPos; 
 	u32 flag;
@@ -54,7 +55,10 @@ struct EntryTriangleMesh
 {
 	RenderGroupEntryHeader header;
 	TriangleMesh mesh;
+	u32Array textureIDs;
 	Quaternion orientation;
+	v3 pos;
+	f32 scale;
 };
 
 struct EntryTexturedQuads
@@ -147,21 +151,24 @@ static void PushRenderSetup(RenderGroup *rg, Camera camera, v3 lightPos, u32 fla
 	{
 		m4x4 proj = Projection(commands->aspectRatio, commands->focalLength);
 		m4x4 cameraTransform = CameraTransform(camera.basis.d1, camera.basis.d2, camera.basis.d3, camera.pos);
-		ret.transform = proj * cameraTransform;
+		ret.projection = proj;
+		ret.cameraTransform = cameraTransform;
 
 	}break;
 	case Setup_Orthogonal:
 	{
 		m4x4 ortho = Orthogonal((f32)commands->width, (f32)commands->height);
 
-		ret.transform = Translate(ortho, V3(-1.0f, 1.0f, 0.0f));
+		ret.projection = Translate(ortho, V3(-1.0f, 1.0f, 0.0f));
+		ret.cameraTransform = Identity();
 
 	}break;
 	case Setup_ZeroToOne:
 	{
 		m4x4 ortho = Orthogonal(1.0f, 1.0f);
 
-		ret.transform = Translate(ortho, V3(-1.0f, 1.0f, 0.0f));
+		ret.projection = Translate(ortho, V3(-1.0f, 1.0f, 0.0f));
+		ret.cameraTransform = Identity();
 
 	}break;
 	default:
@@ -290,12 +297,19 @@ static void PushTriangle(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 color)
 	PushTriangle(rg, p1, p2, p3, V4(1.0f, color));
 }
 
-static void PushTriangleMesh(RenderGroup *rg, TriangleMesh mesh, Quaternion orientation)
+static void PushTriangleMesh(RenderGroup *rg, TriangleMesh mesh, Quaternion orientation, v3 pos, f32 scale)
 {
 	EntryTriangleMesh *meshHeader = PushRenderEntry(EntryTriangleMesh);
 	meshHeader->mesh = mesh;
 	meshHeader->orientation = orientation;
-
+	u32Array arr = PushArray(frameArena, u32, mesh.indexSets.amount);
+	for (u32 i = 0; i < arr.amount; i++)
+	{
+		arr[i] = GetTexture(rg->assetHandler, mesh.indexSets[i].mat.bitmapID)->textureHandle;
+	}
+	meshHeader->textureIDs = arr;
+	meshHeader->pos = pos;
+	meshHeader->scale = scale;
 }
 
 static void PushLine(RenderGroup *rg, v3 p1, v3 p2)
@@ -607,12 +621,6 @@ static void PushTexturedQuad(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, Bitmap
 	PushTexturedQuad(rg, p1, p2, p3, p4, bitmap, color, false, V2(), V2(1, 1));
 }
 
-static void PushTexturedQuad(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, AssetId assetId, u32 assetIndex, v4 color = V4(1, 1, 1, 1))
-{
-	Bitmap bitmap = *rg->assetHandler->GetAsset(assetId)->sprites[assetIndex];
-	PushTexturedQuad(rg, p1, p2, p3, p4, bitmap, color, false, V2(), V2(1, 1));
-}
-
 //Setup_BitmapsOnTop = 0x8, // for orthogonal UI stuff,	this is a general rule for now
 static void PushTexturedRect(RenderGroup *rg, v2 p1, f32 width, f32 height, Bitmap bitmap, v4 color, bool inverted, v2 minUV, v2 maxUV)
 {
@@ -637,17 +645,6 @@ static void PushTexturedRect(RenderGroup *rg, v2 p1, f32 width, f32 height, Bitm
 	v2 p4 = p1 + V2(width, height);
 	PushTexturedQuad(rg, i12(p1), i12(p2), i12(p3), i12(p4), bitmap, V4(1, 1, 1, 1), inverted, V2(), V2(1, 1));
 }
-
-static void PushTexturedRect(RenderGroup *rg, v2 p1_, f32 width, f32 height, AssetId id, u32 assetIndex = 0, v4 color = V4(1, 1, 1, 1))
-{
-	v3 p1 = i12(p1_);
-	v3 p2 = p1 + V3(width, 0, 0);
-	v3 p3 = p1 + V3(0, height, 0);
-	v3 p4 = p1 + V3(width, height, 0);
-	Bitmap bitmap = *rg->assetHandler->GetAsset(id)->sprites[assetIndex];
-	PushTexturedQuad(rg, p1, p2, p3, p4, bitmap, color);
-}
-
 
 static void PushBitmap(RenderGroup *rg, v2 pos, Bitmap bitmap, v4 color = V4(1, 1, 1, 1))
 {
@@ -701,36 +698,6 @@ static f32 PushString(RenderGroup *rg, v2 pos, const char* string, f32 size, Fon
 static f32 PushString(RenderGroup *rg, v2 pos, String string, f32 size, Font font, v4 color = V4(1, 1, 1, 1))
 {
 	return PushString(rg, pos, string.data, string.length, size, font, color);
-}
-static void PushUnit(RenderGroup *rg, v3 pos, u32 facingDirection, u32 assetId, float radius)
-{
-	AssetId id;
-	id.id = assetId;
-	Asset *unitAsset = rg->assetHandler->GetAsset(id);
-	if (unitAsset)
-	{
-
-		Bitmap bitmap = *unitAsset->sprites[facingDirection];
-		Die;
-		//PushTexturedRect(rg,  pos - V3(radius, radius, 0),  2.0f * radius, 2.0f * radius, bitmap);
-	}
-	Die;
-}
-static void PushBuilding(RenderGroup *rg, v3 pos, u32 assetId, float radius)
-{
-	AssetId id;
-	id.id = assetId;
-	Asset *unitAsset = rg->assetHandler->GetAsset(id);
-	if (unitAsset)
-	{
-		Vector3Basis basis = {};
-		basis.d1 = V3(radius, 0, 0.2f);
-		basis.d2 = V3(0, radius, 0.2f);
-		basis.d3 = V3(0, 0, 1);
-		Die;
-		//PushBitmap(rg, unitAsset->sprites[0], pos - V3(radius, radius, 0), basis);
-	}
-
 }
 
 

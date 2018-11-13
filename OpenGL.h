@@ -9,6 +9,7 @@
 
 #define GL_FRAMEBUFFER_SRGB               0x8DB9
 #define GL_SRGB8_ALPHA8                   0x8C43
+#define GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE 0x8D56
 
 #define GL_SHADING_LANGUAGE_VERSION       0x8B8C
 
@@ -97,9 +98,6 @@ typedef void WINAPI glValidateProgram_(GLuint program);
 typedef void WINAPI glGetProgramInfoLog_(GLuint program, GLsizei bufSize, GLsizei *length, GLchar *infoLog);
 typedef void WINAPI glGetProgramiv_(GLuint program, GLenum pname, GLint *params);
 typedef void WINAPI glGetShaderInfoLog_(GLuint shader, GLsizei bufSize, GLsizei *length, GLchar *infoLog);
-typedef void WINAPI glUniformMatrix4fv_(GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
-typedef void WINAPI glUniform4fv_(GLint location, GLsizei count, const GLfloat *value);
-typedef void WINAPI glUniform1iv_(GLint location, GLsizei count, const GLint *value);
 typedef GLint WINAPI glGetUniformLocation_(GLuint program, const GLchar *name);
 typedef void WINAPI glUseProgram_(GLuint program);
 typedef void WINAPI glVertexAttribPointer_(GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const GLvoid *pointer);
@@ -122,13 +120,24 @@ typedef void WINAPI glBindVertexArray_(GLuint arrayName);
 typedef void WINAPI glGenBuffers_(GLsizei n, GLuint *buffers);
 typedef void WINAPI glBindBuffer_(GLenum target, GLuint buffer);
 typedef void WINAPI glBufferData_(GLenum target, GLsizeiptr size, const GLvoid *data, GLenum usage);
+typedef void WINAPI glUniform4fv_(GLint location, GLsizei count, const GLfloat *value);
+typedef void WINAPI glUniform1iv_(GLint location, GLsizei count, const GLint *value);
+typedef void WINAPI glUniformMatrix4fv_(GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
+typedef void WINAPI glUniform1f_(GLint location, GLfloat v0);
+typedef void WINAPI glUniform2f_(GLint location, GLfloat v0, GLfloat v1);
 typedef void WINAPI glUniform3f_(GLint location, GLfloat v0, GLfloat v1, GLfloat v2);
+typedef void WINAPI glUniform4f_(GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3);
+
 
 //typedef void WINAPI glDrawElements_(GLenum mode, GLsizei count, GLenum type, const GLvoid * indices);
 
 
 //static glDrawElements_ *glDrawElements;
-static glUniform3f_ *glUniform3f;
+static glTexImage2DMultisample_ *glTexImage2DMultisample;
+static glUniform1f_ *glUniform1f;
+static glUniform2f_	*glUniform2f;
+static glUniform3f_	*glUniform3f;
+static glUniform4f_ *glUniform4f;
 static glBufferData_ *glBufferData;
 static glBindBuffer_ *glBindBuffer;
 static glGenBuffers_ *glGenBuffers;
@@ -176,9 +185,12 @@ struct OpenGLProgram
 	GLuint program;
 
 	//uniforms
-	GLuint transform;
+	GLuint projection;
+	GLuint cameraTransform;
 	GLuint shadowTransform;
 	GLuint lightPos;
+	//GLuint cameraPos;
+	GLuint specularExponent;
 
 	GLuint depthSampler;
 	GLuint textureSampler;
@@ -206,9 +218,6 @@ static GLuint renderDepth;
 
 static GLuint shadowFrameBuffer;
 static GLuint shadowTexture;
-
-static m4x4 projectionMat;
-static m4x4 shadowMat;
 
 bool CStringEquals(char *first, u64 firstSize, char* second)
 {
@@ -390,19 +399,20 @@ static void OpenGLRect3D(v3 p1, v3 p2, v3 p3, v3 p4, v4 c1, v4 c2, v4 c3, v4 c4)
 
 }
 
-static void OpenGLUpdateBitmap(Bitmap bitmap)
+static void UpdateWrapingTexture(Bitmap bitmap)
 {
-	Assert(bitmap.textureHandle);
+	//Assert(bitmap.textureHandle);
 
 	glBindTexture(GL_TEXTURE_2D, (GLuint)bitmap.textureHandle);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, bitmap.width, bitmap.height, 0, GL_BGRA_EXT, GL_UNSIGNED_BYTE, bitmap.pixels);
 
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
-	
 
 	glBindTexture(GL_TEXTURE_2D, 0);
 }
@@ -430,27 +440,18 @@ void RegisterTriangleMesh(TriangleMesh *mesh)
 	glGenBuffers(1, &mesh->vertexVBO);
 	glGenBuffers(1, &mesh->indexVBO);
 
-	Assert(mesh->amountOfVerticies < 65536); // <, because reset index
+	Assert(mesh->vertices.amount < 65536); // <, because reset index
 
-	VertexFormat *buffer = PushData(constantArena, VertexFormat, mesh->amountOfVerticies);//todo can I use Frame Arena here?
-	
-	for (u32 i = 0; i < mesh->amountOfVerticies; i++)
-	{
-		buffer[i].c  = mesh->colors[i];
-		buffer[i].uv = mesh->textCoordinates[i];
-		buffer[i].p	 = mesh->vertices[i];
-		buffer[i].n  = mesh->normals[i];
-	}
-
+	//todo look up what those GL_Stream_Draw mean?
 	glBindBuffer(GL_ARRAY_BUFFER, mesh->vertexVBO);
-	glBufferData(GL_ARRAY_BUFFER, mesh->amountOfVerticies * sizeof(VertexFormat), buffer, GL_STREAM_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, mesh->vertices.amount * sizeof(VertexFormat), mesh->vertices.data, GL_STREAM_DRAW);
 
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->indexVBO);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh->amountOfIndicies * sizeof(mesh->indecies[0]), mesh->indecies, GL_STREAM_DRAW);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh->indices.amount * sizeof(mesh->indices[0]), mesh->indices.data, GL_STREAM_DRAW);
 
 }
 
-static u32 OpenGLDownLoadImage(u32 width, u32 height, u32* pixels)
+static u32 RegisterWrapingTexture(u32 width, u32 height, u32* pixels)
 {
 	GLuint handle;
 	glGenTextures(1, &handle);
@@ -459,8 +460,11 @@ static u32 OpenGLDownLoadImage(u32 width, u32 height, u32* pixels)
 
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
 
 	glBindTexture(GL_TEXTURE_2D, 0);
 	return handle;
@@ -508,7 +512,8 @@ static void SetUpBasicZBiasProgram()
 		R"FOO(
 	//Vertex Code
 
-	uniform mat4x4 transform;
+	uniform mat4x4 cameraTransform;
+	uniform mat4x4 projection;
 
 	in vec3 vertP;
 	in vec4 vertC;
@@ -520,7 +525,7 @@ static void SetUpBasicZBiasProgram()
 	void main(void)
 	{
 		vec4 inputVertex = vec4(vertP, 1.0f);
-		gl_Position = transform * inputVertex;
+		gl_Position = projection * cameraTransform * inputVertex;
 
 		fragColor = vertC;
 		fragCoord = vertUV;
@@ -548,7 +553,8 @@ static void SetUpBasicZBiasProgram()
 
 	)FOO";
 	zBias.program = OpenGLCreateProgram(headerCodeOpenGL, vertexCodeTex, fragmentCodeTex);
-	zBias.transform = glGetUniformLocation(zBias.program, "transform");
+	zBias.cameraTransform = glGetUniformLocation(zBias.program, "cameraTransform");
+	zBias.projection = glGetUniformLocation(zBias.program, "projection");
 	zBias.depthSampler = glGetUniformLocation(zBias.program, "texSampler");
 	zBias.vertP = glGetAttribLocation(zBias.program, "vertP");
 	zBias.vertC = glGetAttribLocation(zBias.program, "vertC");
@@ -563,7 +569,8 @@ static void SetUpBasicProgram()
 		R"FOO(
 	//Vertex Code
 
-	uniform mat4x4 transform;
+	uniform mat4x4 projection;
+	uniform mat4x4 cameraTransform;
 	uniform mat4x4 shadowTransform;
 
 	in vec3 vertP;
@@ -575,7 +582,7 @@ static void SetUpBasicProgram()
 	void main(void)
 	{
 		vec4 inputVertex = vec4(vertP, 1);
-		gl_Position = transform * inputVertex;
+		gl_Position = projection * cameraTransform * inputVertex;
 		
 		fragColor = vertC;
 		shadowCoord = shadowTransform * inputVertex;
@@ -623,7 +630,8 @@ static void SetUpBasicProgram()
 	basic.vertC = glGetAttribLocation(basic.program, "vertC");
 	
 
-	basic.transform = glGetUniformLocation(basic.program, "transform");
+	basic.projection = glGetUniformLocation(basic.program, "projection");
+	basic.cameraTransform = glGetUniformLocation(basic.program, "cameraTransform");
 	basic.depthSampler = glGetUniformLocation(basic.program, "depthTexture");
 	basic.shadowTransform = glGetUniformLocation(basic.program, "shadowTransform");
 	glUseProgram(0);
@@ -636,9 +644,13 @@ static void SetUpBasicMeshProgram()
 		R"FOO(
 	//Vertex Code
 
-	uniform mat4x4 transform;
+	uniform mat4x4 projection;
+	uniform mat4x4 cameraTransform;
 	uniform mat4x4 shadowTransform;
-	uniform vec3   lightPos; // allready transfomed for now, so we do not need a third matrix, that is the transform with out the object Transform
+
+	uniform vec3 lightPos; // allready transfomed for now, so we do not need a third matrix, that is the transform with out the object Transform
+	//uniform vec3 cameraPos;
+	uniform float specularExponent;
 
 	in vec3 vertP;
 	in vec4 vertC;
@@ -649,21 +661,38 @@ static void SetUpBasicMeshProgram()
 	smooth out vec4 shadowCoord;
 	smooth out vec2 fragCoord;
 	smooth out float cosinAttenuation;
+	smooth out float specular;
 
 	void main(void)
 	{
-		vec4 inputVertex = vec4(vertP, 1);
-		vec4 outputVertex = transform * inputVertex;
-		gl_Position = outputVertex;
-		
+		//pass through
 		fragColor = vertC;
-		shadowCoord = shadowTransform * inputVertex;
 		fragCoord = vertUV;
-		
-		vec3 lightDirection = normalize(lightPos - outputVertex.xyz);
 
-		vec4 transformedNormal = transform * vec4(vertN, 0);
-		cosinAttenuation = dot(lightDirection, transformedNormal.xyz);
+		vec4 inputVertex = vec4(vertP, 1);
+		vec4 vertexInCameraSpace = cameraTransform * inputVertex;
+		gl_Position = projection * vertexInCameraSpace;
+
+		// shadow Mapping
+		shadowCoord = shadowTransform * inputVertex;
+		
+		// simple diffuse light
+		vec3 point = vertexInCameraSpace.xyz;
+		vec3 lightDirection = normalize(lightPos - point);
+
+		vec4 transformedNormal = cameraTransform * vec4(vertN, 0);
+		vec3 normal = normalize(transformedNormal.xyz);
+		float interpolationC = 0.1;
+		cosinAttenuation = (1-interpolationC) * max(dot(lightDirection, normal), 0) + interpolationC;
+		//cosinAttenuation = 1.0f;
+
+		// simple specular light
+		vec3 incomingLightDir = -lightDirection;
+		vec3 reflected = reflect(incomingLightDir, normal); //incomingLightDir - 2.0 * dot(incomingLightDir, normal) * normal;
+		vec3 viewing = normalize(-point);
+		float specularBase = max(dot(viewing, reflected),0);
+		specular = pow(specularBase, specularExponent);
+		specular = 0;
 	}
 
 	)FOO";
@@ -677,29 +706,26 @@ static void SetUpBasicMeshProgram()
 	smooth in vec4 shadowCoord;
 	smooth in vec2 fragCoord;
 	smooth in float cosinAttenuation;
+	smooth in float specular;
 
 	uniform sampler2D depthTexture;
 	uniform sampler2D texture;
 	void main(void)
 	{
+		vec3 projectedShadowCoord = shadowCoord.xyz / shadowCoord.w;
 		float visibility = 1.0f;
-		vec3 shadowCoord2 = shadowCoord.xyz / shadowCoord.w;
-		vec3 shadowCoord3 = shadowCoord2;
 		
-		float distanceLightNearestGeometry = texture2D(depthTexture, shadowCoord3.xy).r;
+		float distanceLightNearestGeometry = texture2D(depthTexture, projectedShadowCoord.xy).r;
+		float distanceFromLight = projectedShadowCoord.z;
 
-		float distanceFromLight = shadowCoord3.z;
-
-		float bias = 0.0001;
+		float bias = 0.001;
 
 		if (distanceLightNearestGeometry < distanceFromLight - bias)
 		{
 			visibility = 0.5f;
 		}
-		resultColor =  vec4(cosinAttenuation * visibility * fragColor.rgb, fragColor.a) * texture2D(texture, fragCoord);
-
-		//resultColor = vec4(vec3(distanceLightNearestGeometry), 1);
-		//resultColor = texture2D(depthTexture, shadowCoord3.xy);
+		resultColor =  vec4( cosinAttenuation * visibility * fragColor.rgb, fragColor.a) *  texture2D(texture, fragCoord) + vec4(specular);
+		//resultColor = texture2D(texture, fragCoord);
 	}
 
 	)FOO";
@@ -713,11 +739,18 @@ static void SetUpBasicMeshProgram()
 	basicMesh.vertUV = glGetAttribLocation(basicMesh.program, "vertUV");
 	basicMesh.vertN  = glGetAttribLocation(basicMesh.program, "vertN");
 
-	basicMesh.transform = glGetUniformLocation(basicMesh.program, "transform");
+	basicMesh.projection = glGetUniformLocation(basicMesh.program, "projection");
+	basicMesh.cameraTransform = glGetUniformLocation(basicMesh.program, "cameraTransform");
 	basicMesh.depthSampler = glGetUniformLocation(basicMesh.program, "depthTexture");
 	basicMesh.textureSampler = glGetUniformLocation(basicMesh.program, "texture");
 	basicMesh.shadowTransform = glGetUniformLocation(basicMesh.program, "shadowTransform");
 	basicMesh.lightPos = glGetUniformLocation(basicMesh.program, "lightPos");
+	//basicMesh.cameraPos = glGetUniformLocation(basicMesh.program, "cameraPos");
+	basicMesh.specularExponent = glGetUniformLocation(basicMesh.program, "specularExponent");
+
+	glUniform1i(basicMesh.depthSampler, 1);
+	glUniform1i(basicMesh.textureSampler, 0);
+
 	glUseProgram(0);
 }
 
@@ -728,14 +761,14 @@ static void SetUpDepthProgram()
 	
 	glGenTextures(1, &shadowTexture);
 	glBindTexture(GL_TEXTURE_2D, shadowTexture);
-	//glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16, 1024, 1024, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1024, 1024, 0, GL_BGRA_EXT, GL_FLOAT, 0 );
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16, 1024, 1024, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+	//glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1024, 1024, 0, GL_BGRA_EXT, GL_FLOAT, 0 );
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, shadowTexture, 0);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowTexture, 0);
 
 	GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
 	Assert(status == GL_FRAMEBUFFER_COMPLETE);
@@ -744,7 +777,8 @@ static void SetUpDepthProgram()
 		R"FOO(
 	//Vertex Code
 
-	uniform mat4x4 transform2;
+	uniform mat4x4 cameraTransform;
+	uniform mat4x4 projection;
 
 	in vec3 vertP;
 	in vec4 vertC;
@@ -753,7 +787,7 @@ static void SetUpDepthProgram()
 	void main(void)
 	{
 		vec4 inputVertex = vec4(vertP, 1);
-		gl_Position = transform2 * inputVertex;
+		gl_Position = projection * cameraTransform * inputVertex;
 		color = vertC;
 	}
 
@@ -782,7 +816,8 @@ static void SetUpDepthProgram()
 	shadow.vertP = glGetAttribLocation(shadow.program, "vertP");
 	shadow.vertC = glGetAttribLocation(shadow.program, "vertC");
 	
-	shadow.transform = glGetUniformLocation(shadow.program, "transform2");
+	shadow.cameraTransform = glGetUniformLocation(shadow.program, "cameraTransform");
+	shadow.projection = glGetUniformLocation(shadow.program, "projection");
 
 	GLuint error = glGetError();
 	Assert(glGetError() == GL_NO_ERROR);
@@ -811,7 +846,8 @@ static void BeginUseProgram(OpenGLProgram prog, RenderSetup setup, bool textured
 {
 	glUseProgram(prog.program);
 
-	glUniformMatrix4fv(prog.transform, 1, GL_TRUE, setup.transform.a[0]);
+	glUniformMatrix4fv(prog.cameraTransform, 1, GL_TRUE, setup.cameraTransform.a[0]);
+	glUniformMatrix4fv(prog.projection, 1, GL_TRUE, setup.projection.a[0]);
 
 	glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
 
@@ -901,14 +937,15 @@ void OpenGLInit(HGLRC modernContext)
 
 	GLuint texture_map;
 	glGenTextures(1, &texture_map);
-	glBindTexture(GL_TEXTURE_2D, texture_map);
+	glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, texture_map);
+	
+	//glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	//glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	//glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+	//glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
 
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1280, 720, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 4, GL_RGBA, 1280, 720, false);
+	//glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1280, 720, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 
 	renderTexture = texture_map;
 
@@ -917,12 +954,13 @@ void OpenGLInit(HGLRC modernContext)
 	// Build the texture that will serve as the depth attachment for the framebuffer.
 	GLuint depth_texture;
 	glGenTextures(1, &depth_texture);
-	glBindTexture(GL_TEXTURE_2D, depth_texture);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, 1280, 720, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE, NULL);
+	glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, depth_texture);
+	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	//glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, 1280, 720, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE, NULL);
+	glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 4, GL_DEPTH_COMPONENT, 1280, 720, false);
 	glBindTexture(GL_TEXTURE_2D, 0);
 	renderDepth = depth_texture;
 
@@ -930,8 +968,8 @@ void OpenGLInit(HGLRC modernContext)
 	GLuint framebuffer;
 	glGenFramebuffers(1, &framebuffer);
 	glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)framebuffer);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture_map, 0);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth_texture, 0);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D_MULTISAMPLE, texture_map, 0);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D_MULTISAMPLE, depth_texture, 0);
 	renderFrameBuffer = framebuffer;
 
 
@@ -978,9 +1016,11 @@ void RenderIntoShadowMap(RenderCommands *rg)
 	glDisable(GL_CULL_FACE);
 	//glCullFace(GL_FRONT);
 
-	glBindFramebuffer(GL_FRAMEBUFFER, renderFrameBuffer);
+	glUseProgram(shadow.program);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, shadowFrameBuffer);
 	
-	glViewport(0, 0, rg->width, rg->height);
+	glViewport(0, 0, 1024, 1024);  // todo hardcoded. this is the size of the shadow texture
 	glClearDepth(1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -989,64 +1029,63 @@ void RenderIntoShadowMap(RenderCommands *rg)
 
 		RenderGroupEntryHeader *header = (RenderGroupEntryHeader *)(rg->pushBufferBase + pBufferIt);
 		RenderSetup setup = header->setup;
-		if (!(setup.flag & Setup_ShadowMapping))
+		if (header->type != RenderGroup_EntryTriangleMesh || !(setup.flag & Setup_ShadowMapping))
 		{
 			pBufferIt += HeaderSize(header);
 			continue;
 		}
 
-		switch (header->type)
+		EntryTriangleMesh *meshHeader = (EntryTriangleMesh *)header;
+
+		Quaternion q = meshHeader->orientation;
+		m4x4 qmat = Translate(QuaternionToMatrix(q) * ScaleMatrix(meshHeader->scale), meshHeader->pos);
+
+		//todo: slow. and hardcoded
+		m4x4 projection = Projection(rg->aspectRatio, rg->focalLength);
+		m4x4 shadowMat =  CameraTransform(V3(1, 0, 0), V3(0, 1, 0), V3(0, 0, 1), setup.lightPos);
+		m4x4 mat = shadowMat * qmat;
+
+		TriangleMesh mesh = meshHeader->mesh;
+
+		glUniformMatrix4fv(shadow.cameraTransform, 1, GL_TRUE, mat.a[0]);
+		glUniformMatrix4fv(shadow.projection, 1, GL_TRUE, projection.a[0]);
+
+		glBindBuffer(GL_ARRAY_BUFFER, mesh.vertexVBO);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.indexVBO);
+
+		glEnableVertexAttribArray(shadow.vertP);
+		glEnableVertexAttribArray(shadow.vertC);
+
+		glVertexAttribPointer(shadow.vertP, 3, GL_FLOAT, false, sizeof(VertexFormat), (void *)OffsetOf(VertexFormat, p));
+		glVertexAttribPointer(shadow.vertC, 4, GL_UNSIGNED_BYTE, true, sizeof(VertexFormat), (void *)OffsetOf(VertexFormat, c));
+
+		For(mesh.indexSets)
 		{
-		case RenderGroup_EntryTriangles:
-		{
-			EntryColoredVertices *trianglesHeader = (EntryColoredVertices *)header;
-			
-			BeginUseProgram(shadow, trianglesHeader->header.setup);
 
-			glUniformMatrix4fv(shadow.transform, 1, GL_TRUE, &shadowMat.a[0][0]);
+			switch (mesh.type)
+			{
+			case TriangleMeshType_List:
+			{
+				glDrawElements(GL_TRIANGLES, it->amount, GL_UNSIGNED_SHORT, (void *)(u64)(it->offset * sizeof(u16)));
+			}break;
+			case TrianlgeMeshType_Strip:
+			{
+				glDrawElements(GL_TRIANGLE_STRIP, it->amount, GL_UNSIGNED_SHORT, (void *)((u64)it->offset * sizeof(u16)));
+			}break;
+			default:
+			{
+				Die;
+			}break;
+			}
 
-			glBufferData(GL_ARRAY_BUFFER, trianglesHeader->vertexCount * sizeof(ColoredVertex), trianglesHeader->data, GL_STREAM_COPY);
-			glDrawArrays(GL_TRIANGLES, 0, trianglesHeader->vertexCount);
-
-			EndUseProgram(shadow);
-			
-			
-			pBufferIt += sizeof(*trianglesHeader);
-		}break;
-		case RenderGroup_EntryTriangleMesh:
-		{
-			EntryTriangleMesh *meshHeader = (EntryTriangleMesh *)header;
-
-
-			pBufferIt += sizeof(*meshHeader);
-		}break;
-
-		case RenderGroup_EntryTexturedQuads:
-		{
-			EntryTexturedQuads *quadHeader = (EntryTexturedQuads *)header;
-
-			pBufferIt += sizeof(*quadHeader);
-		}break;
-		case RenderGroup_EntryClear:
-		{
-			EntryClear *clearHeader = (EntryClear *)header;
-
-			pBufferIt += sizeof(*clearHeader);
-		}break;
-		case RenderGroup_EntryLines:
-		{
-			EntryColoredVertices *lineHeader = (EntryColoredVertices*)header;
-
-
-			pBufferIt += sizeof(*lineHeader);
-		}break;
-		
-		default:
-		{
-			Die;
-
-		}break;
 		}
+
+		glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
+		glDisableVertexAttribArray(shadow.vertP);
+		glDisableVertexAttribArray(shadow.vertC);
+
+		pBufferIt += sizeof(*meshHeader);
+
 	}
 
 	glUseProgram(0);
@@ -1057,6 +1096,7 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg)
 {
 	TimedBlock;
 
+	// todo maybe put this in the init.
 	glEnable(GL_PRIMITIVE_RESTART_FIXED_INDEX);
 
 	glDepthMask(GL_TRUE);
@@ -1071,8 +1111,6 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg)
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 	
-	shadowMat = /*biasMatrix * */Projection(rg->aspectRatio, rg->focalLength) * CameraTransform(V3(1, 0, 0), V3(0, 1, 0), V3(0, 0, 1), V3(0, 0, -30));
-
 	glUseProgram(basic.program); 
 	glUniform1i(basic.depthSampler, 1);
 
@@ -1094,25 +1132,15 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg)
 			{ 0.0f, 0.0f, 0.0f, 0.0f }
 		}
 	};
-	m4x4 biasedShadowMat = biasMatrix *  shadowMat;
-
+	
 	glUseProgram(0);
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	
+	RenderIntoShadowMap(rg);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, renderFrameBuffer);
 	glViewport(0, 0, rg->width, rg->height);
 	glClearDepth(1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	GLuint err12or = glGetError();
-	Assert(!err12or);
-
-	RenderIntoShadowMap(rg);
-
-	glUseProgram(basic.program);
-
-	glActiveTexture(GL_TEXTURE1);
-	glBindTexture(GL_TEXTURE_2D, renderDepth);
-	glActiveTexture(GL_TEXTURE0);
-
-	glUseProgram(0);
 	
 	//glCullFace(GL_BACK);
 	//glDisable(GL_CULL_FACE);
@@ -1151,9 +1179,11 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg)
 
 			BeginUseProgram(basic, trianglesHeader->header.setup);
 
+
 			if (setup.flag & Setup_ShadowMapping)
 			{
-				glUniformMatrix4fv(basic.shadowTransform, 1, GL_TRUE, &biasedShadowMat.a[0][0]);
+				m4x4 shadowMat = biasMatrix * Projection(rg->aspectRatio, rg->focalLength) * CameraTransform(V3(1, 0, 0), V3(0, 1, 0), V3(0, 0, 1), setup.lightPos);
+				glUniformMatrix4fv(basic.shadowTransform, 1, GL_TRUE, shadowMat.a[0]);
 			}
 			else
 			{
@@ -1171,19 +1201,27 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg)
 		case RenderGroup_EntryTriangleMesh:
 		{
 			EntryTriangleMesh *meshHeader = (EntryTriangleMesh *)header;
-
+			
+			v3 pos = meshHeader->pos;
+			
 			Quaternion q = meshHeader->orientation;
-			m4x4 qmat = QuaternionToMatrix(q);
+			m4x4 qmat = Translate(QuaternionToMatrix(q) * ScaleMatrix(meshHeader->scale), pos);
 
-			m4x4 mat = setup.transform * qmat;
-			v3 lightP = setup.transform * setup.lightPos;
+			//todo: slow.
+			m4x4 shadowMat = biasMatrix * Projection(rg->aspectRatio, rg->focalLength) * CameraTransform(V3(1, 0, 0), V3(0, 1, 0), V3(0, 0, 1), setup.lightPos) * qmat;
+
+			m4x4 mat  = setup.cameraTransform * qmat;
+			v4 lightP = setup.cameraTransform * V4(setup.lightPos, 1.0f);
 
 			TriangleMesh mesh = meshHeader->mesh;
 
-			glUseProgram(basicMesh.program);
+ 			glUseProgram(basicMesh.program);
 
-			glUniformMatrix4fv(basicMesh.transform, 1, GL_TRUE, mat.a[0]); // todo : why is shadow transform not being set?
+			glUniformMatrix4fv(basicMesh.cameraTransform, 1, GL_TRUE, mat.a[0]);
+			glUniformMatrix4fv(basicMesh.projection, 1, GL_TRUE, setup.projection.a[0]);
+			glUniformMatrix4fv(basicMesh.shadowTransform, 1, GL_TRUE, shadowMat.a[0]);
 			glUniform3f(basicMesh.lightPos, lightP.x, lightP.y, lightP.z); 
+			
 
 			glBindBuffer(GL_ARRAY_BUFFER, mesh.vertexVBO);
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.indexVBO);
@@ -1193,29 +1231,39 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg)
 			glEnableVertexAttribArray(basicMesh.vertUV);
 			glEnableVertexAttribArray(basicMesh.vertC);
 
-			glBindTexture(GL_TEXTURE_2D, mesh.mat.bitmap.textureHandle);
+			
+			glActiveTexture(GL_TEXTURE1);
+			glBindTexture(GL_TEXTURE_2D, shadowTexture);
+			glActiveTexture(GL_TEXTURE0);
+			
 
 			glVertexAttribPointer(basicMesh.vertN, 3, GL_FLOAT, false, sizeof(VertexFormat), (void *)OffsetOf(VertexFormat, n));
 			glVertexAttribPointer(basicMesh.vertP, 3, GL_FLOAT, false, sizeof(VertexFormat), (void *)OffsetOf(VertexFormat, p));
 			glVertexAttribPointer(basicMesh.vertUV, 2, GL_FLOAT, false, sizeof(VertexFormat), (void *)OffsetOf(VertexFormat, uv));
 			glVertexAttribPointer(basicMesh.vertC, 4, GL_UNSIGNED_BYTE, true, sizeof(VertexFormat), (void *)OffsetOf(VertexFormat, c));
 
-			switch (mesh.type)
+			for(u32 i = 0; i < mesh.indexSets.amount; i++)
 			{
-			case TriangleMeshType_List:
-			{
-				glDrawElements(GL_TRIANGLES, meshHeader->mesh.amountOfIndicies, GL_UNSIGNED_SHORT, NULL);
-			}break;
-			case TrianlgeMeshType_Strip:
-			{
-				glDrawElements(GL_TRIANGLE_STRIP, meshHeader->mesh.amountOfIndicies, GL_UNSIGNED_SHORT, NULL);
-			}break;
-			default:
-			{
-				Die;
-			}break;
+				auto it = &mesh.indexSets[i];
+				glUniform1f(basicMesh.specularExponent, it->mat.spectularExponent);
+				glBindTexture(GL_TEXTURE_2D, meshHeader->textureIDs[i]);
+
+				switch (mesh.type)
+				{
+				case TriangleMeshType_List:
+				{
+					glDrawElements(GL_TRIANGLES, it->amount, GL_UNSIGNED_SHORT, (void *) ((u64)it->offset * sizeof(u16)));
+				}break;
+				case TrianlgeMeshType_Strip:
+				{
+					glDrawElements(GL_TRIANGLE_STRIP, it->amount, GL_UNSIGNED_SHORT, (void *)((u64)it->offset * sizeof(u16)));
+				}break;
+				default:
+				{
+					Die;
+				}break;
+				}
 			}
-			
 
 			glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
 			glDisableVertexAttribArray(basicMesh.vertN);
@@ -1223,10 +1271,12 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg)
 			glDisableVertexAttribArray(basicMesh.vertUV);
 			glDisableVertexAttribArray(basicMesh.vertC);
 
+			//glActiveTexture(GL_TEXTURE0);
+
 			glUseProgram(0);
 			pBufferIt += sizeof(*meshHeader);
 		}break;
-		case RenderGroup_EntryClear:
+		case RenderGroup_EntryClear: // this can probably go.
 		{
 			EntryClear *clearHeader = (EntryClear *)header;
 			glClearColor(clearHeader->color.r, clearHeader->color.g, clearHeader->color.b, clearHeader->color.a);
@@ -1255,9 +1305,19 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg)
 		}
 	}
 
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, renderFrameBuffer);
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+
+	glBlitFramebuffer(0, 0, rg->width, rg->height, 0, 0, rg->width, rg->height, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+
+
 	//flush
 	rg->pushBufferSize = 0;
 	
+	GLuint err12or = glGetError();
+	Assert(!err12or);
+
+
 }
 
 #endif

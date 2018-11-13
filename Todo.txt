@@ -1,11 +1,36 @@
 
 
-Add the standart lighting to rendering.
-Make everything an entity, like they have in Sokoban
+Make a good general purpose allocator // done?
+Add the standart lighting to rendering. // done ?
+reenable shadow mapping // done?
+do a good StoF, so that we have a better mesh. // done ? (at least for now)
+Are meshes assets? // no!
+make the meshstruct work like it does in soko? having a vertex pool, an index pool and then have list {start index, amount, materialIndex}? // yes!, and now they do.
+Make own mesh format and material format, that respects how the game wants to think of them // done ?
+Asset system has to handle materials. // no
+
+Make everything an entity, like they have in Sokoban?
 Move to front Asset system? 
-Are meshes assets?
+
 how to handle textured and untextured entities? Should there be such a thing as untextured entity, probably not.
 
-
-make the meshstruct work like it does in soko? having a vertex pool, an index pool and then have list {start index, amount, materialIndex}?
 associating data to triangles, to open gl... like normals.
+
+lets make us be able to produce entities. (ground tiles.)
+we are gonna have generation of tile, that have some values that you can tweek.
+
+
+
+Get PNG loader
+
+make debug Ui for amount of memory used.
+
+somehow the colors of that consoleTextField got mixed up.... it seems that r and b are switched, why no where else?
+
+round based stuff
+
+
+
+we want to do like space chem, "input" output, where input are things like trees, or coal, or stone and output is a zone, that gets taken
+
+

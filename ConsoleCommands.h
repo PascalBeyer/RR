@@ -180,6 +180,60 @@ static void GrisuHelper(StringArray args)
 	}
 }
 
+static void ConvertHelper(StringArray args)
+{
+	DeferRestore(frameArena);
+	Clear(workingArena);
+
+	String name = args[0];
+	String type = EatToCharFromBackRetrunTail(&name, '.');
+	if (!name.length)
+	{
+		ConsoleOutputError("No filetype found!");
+		return;
+	}
+
+	char* nameToLoad = ToNullTerminated(frameArena, args[0]);		
+	if (type == "bmp")
+	{
+		String nameToSave = FormatString("%stexture\n", name);
+		nameToSave[nameToSave.length - 1] = '\0'; // todo  hack... maybe make this a version of format string
+		Bitmap bitmap = CreateBitmap(nameToLoad);
+
+		if (!bitmap.pixels)
+		{
+			ConsoleOutputError("Could not find bitmap %c*.", nameToLoad);
+			return;
+		}
+
+		if (bitmap.height != AssetBitmapSize || bitmap.width != AssetBitmapSize)
+		{
+			ConsoleOutputError("Bitmap does not have standart bitmap size.", nameToLoad);
+			return;
+		}
+
+		WriteTexture((char *)nameToSave.data, bitmap);
+		ConsoleOutput("Converted bitmap %c* to texture %s", nameToLoad, nameToSave);
+		return;
+	} 
+	else if(type == "obj")
+	{
+		String nameToSave = FormatString("%smesh\n", name);
+		nameToSave[nameToSave.length - 1] = '\0'; // todo  hack... maybe make this a version of format string
+		TriangleMesh mesh = ReadObj(NULL, nameToLoad);
+		if (!mesh.vertices.amount)
+		{
+			ConsoleOutputError("Probably file name wrong. Might have loaded a mesh w/0 vertices.");
+			return;
+		}
+		WriteTriangleMesh(mesh, (char *)nameToSave.data);
+		ConsoleOutput("Converted .obj %c* to .mesh %s", nameToLoad, nameToSave);
+		return;
+	}
+
+	ConsoleOutputError("Unrecognized Format!");
+}
+
 
 #endif // ! RR_CONSOLECOMMANDS
 

@@ -1,235 +1,143 @@
 #ifndef RR_ASSETHANDLER
 #define RR_ASSETHANDLER
 
-#include "Bitmap.h"
-#include "Sound.h"
-
-enum
+enum AssetType
 {
-	Asset_Unit,
-	Asset_Building,
-	Asset_TileMapTiles,
-//	Asset_Map,
+	// Asset_Mesh, I have decided these are not assets, as their use depends alot of the context and there might be a lot of 'em
+	Asset_Texture,
+	Asset_Material,
 
-	Asset_White,
-
-	Asset_Count, 
-	Asset_Invalid
+	Asset_Type_Count,
 };
-
-
-struct AssetId
+#define Asset_Type_Offset 25
+#define Asset_Texture_Amount 25
+struct AssetCatalogEntry
 {
+	String name; // for now this is a c-string, not sure if that has to change
+	AssetType type;
+	bool currentlyLoaded;
 	u32 id;
+	u32 index;
 };
 
-class Asset
+DefineDynamicArray(AssetCatalogEntry);
+struct LoadedTexture
 {
-public:
-	Asset();
-	~Asset();
-	Asset(AssetId id);
-	Asset(Bitmap **sprites, AssetId id, u32 spriteCount);
-	Asset(Bitmap *sprites, AssetId id);
-
-	void Unload();
-
-	Bitmap **sprites;
-	Sound **sounds;
-
-	AssetId id;
-	u32 spriteCount;
-	u32 soundCount;
-private:
-
+	Bitmap bitmap;
+	AssetCatalogEntry *entry;
 };
 
-class AssetHandler
+DefineArray(LoadedTexture);
+
+typedef AssetCatalogEntryDynamicArray AssetCatalog;
+
+struct AssetHandler
 {
-public:
-	AssetHandler();
+	union
+	{
+		struct
+		{
+			AssetCatalog meshCatalog;
+			AssetCatalog textureCatalog;
+			AssetCatalog materialCatalog;
+		};
+		AssetCatalog catalogs[Asset_Type_Count];
+	};
+	u32 serializer;
 
-	Asset *GetAsset(AssetId id);
-	Sound **GetSounds(AssetId id);
-	Sound *GetSound(AssetId id, u32 soundIndex);
-	Bitmap **GetBitmaps(AssetId id);
-
-	Bitmap *GetWhite();
-
-	void LoadAsset(AssetId id);
-	void RemoveAsset(AssetId id);
-
-	Asset *assets;
-private:
-	//u32 *assetLookup;
-
+	LoadedTextureArray textures;
+	u32 rollingTextureId;
 };
 
-Asset::Asset()
+#define AssetBitmapSize 2048
+static AssetHandler *CreateAssetHandler(Arena *arena)
 {
-	sprites = NULL;
-	id.id = Asset_Invalid;
-}
-Asset::~Asset()
-{
+	AssetHandler *ret = PushStruct(arena, AssetHandler);
+	for (u32 i = 0; i < Asset_Type_Count; i++)
+	{
+		ret->catalogs[i] = AssetCatalogEntryCreateDynamicArray();
+	}
+	ret->serializer = 0;
+	ret->textures = PushArray(arena, LoadedTexture, Asset_Texture_Amount);
+	For(ret->textures)
+	{
+		it->bitmap.height = AssetBitmapSize;
+		it->bitmap.width  = AssetBitmapSize;
+		it->bitmap.pixels = PushData(arena, u32, it->bitmap.height * it->bitmap.width);
+		it->bitmap.textureHandle = RegisterWrapingTexture(it->bitmap.width, it->bitmap.height, it->bitmap.pixels);
+	}
 
-}
-Asset::Asset(Bitmap **sprites, AssetId id, u32 spriteCount)
-{
-	this->spriteCount = spriteCount;
-	this->sprites = sprites;
-	this->id = id;
-}
-Asset::Asset(Bitmap *sprite, AssetId id)
-{
-	sprites = new Bitmap*[1];
-	spriteCount = 1;
-	sprites[0] = sprite;
-	this->id = id;
+	return ret;
 }
 
-Asset::Asset(AssetId id)
+static u32 RegisterAsset(AssetHandler *handler, AssetType type, char *fileName)
 {
-	this->id = id;
-	switch (id.id)
+	Assert(type < Asset_Type_Count);
+	auto catalog = handler->catalogs[type];
+	For(catalog)
 	{
-	case (Asset_White):
-	{
-		u32 *whitePixels = new u32[16];
-		for (u32 iWhite = 0; iWhite < 16; iWhite++)
+		if (it->name == fileName)
 		{
-			whitePixels[iWhite] = 0xFFFFFFFF;
+			return it->id;
 		}
-		spriteCount = 1;
-		sprites = new Bitmap*[1];
-		sprites[0] = new Bitmap;
-		*sprites[0] = CreateBitmap(whitePixels, 4, 4);
+	}
 
-	}break;
-	case Asset_Building:
+	AssetCatalogEntry entry;	
+	entry.id = handler->serializer++ | (type << Asset_Type_Offset); 
+
+	Assert(handler->serializer < (1 << Asset_Type_Offset));
+
+	entry.name = S(fileName, constantArena, true);
+	entry.currentlyLoaded = false;
+	entry.type = type;
+	ArrayAdd(handler->catalogs + type, entry);
+
+	return entry.id;
+}
+
+static Bitmap *GetTexture(AssetHandler *handler, u32 id)
+{
+	u32 type = (id >> Asset_Type_Offset);
+	Assert(type == Asset_Texture);
+	AssetCatalogEntry *entry = NULL;
+	For(handler->catalogs[Asset_Texture])
 	{
-		spriteCount = 1;
-		sprites = new Bitmap*[spriteCount];
-		for (u32 spriteIndex = 0; spriteIndex < spriteCount; spriteIndex++)
+		if (it->id == id)
 		{
-			sprites[spriteIndex] = new Bitmap;
+			entry = it;
+			break;
 		}
-		*sprites[0] = CreateBitmap("../Art/Tree01.bmp");
-	}break;
-	case Asset_Unit:
+	}
+
+	Assert(entry);
+	if (entry->currentlyLoaded)
 	{
-		spriteCount = 3;
-		sprites = new Bitmap*[spriteCount];
-		for (u32 spriteIndex = 0; spriteIndex < spriteCount; spriteIndex++)
-		{
-			sprites[spriteIndex] = new Bitmap;
-		}
-		*sprites[0] = CreateBitmap("../Art/dude2/head.bmp");
-		*sprites[1] = CreateBitmap("../Art/dude2/torso.bmp");
-		*sprites[2] = CreateBitmap("../Art/dude2/leg.bmp");
+		Assert(entry->index < handler->textures.amount);
+		return &handler->textures[entry->index].bitmap;
+	}
 
-		soundCount = 1;
-		sounds = new Sound*[soundCount];
-		sounds[0] = new Sound("../Sound/bloop_00.wav");
+	// todo for now this is a rolling buffer....
 
-	}break;
-	case Asset_TileMapTiles:
+	if (handler->textures[handler->rollingTextureId].entry)
 	{
-		spriteCount = 6;
-		sprites = new Bitmap*[spriteCount];
-		for (u32 spriteIndex = 0; spriteIndex < spriteCount; spriteIndex++)
-		{
-			sprites[spriteIndex] = new Bitmap;
-		}
-		*sprites[0] = CreateBitmap("../Art/fds/Empty.bmp");
-		*sprites[1] = CreateBitmap("../Art/fds/Square.bmp");
-		*sprites[2] = CreateBitmap("../Art/Tilemap/UpperLeft.bmp");
-		*sprites[3] = CreateBitmap("../Art/Tilemap/UpperRight.bmp");
-		*sprites[4] = CreateBitmap("../Art/Tilemap/LowerLeft.bmp");
-		*sprites[5] = CreateBitmap("../Art/Tilemap/LowerRight.bmp");
+		handler->textures[handler->rollingTextureId].entry->currentlyLoaded = false;
+	}
+		
 
-
-	}break;
-#if 0 
-	case Asset_Map:
-	{
-		spriteCount = 1;
-		sprites = new Bitmap*[spriteCount];
-		soundCount = 1;
-		sounds = new Sound*[soundCount];
-		sounds[0] = new Sound("../Sound/music_test.wav");
-	}break;
-#endif
+	handler->textures[handler->rollingTextureId].entry = entry;
+	entry->index = handler->rollingTextureId;
+	handler->rollingTextureId = (handler->rollingTextureId + 1) % handler->textures.amount;
 	
-	}
-}
-void Asset::Unload()
-{
-	id.id = Asset_Invalid;
-	for (u32 i = 0; i < spriteCount; i++)
-	{
-		FreeBitmap(sprites[i]);
-	}
+	File file = LoadFile((char *)entry->name.data, handler->textures[entry->index].bitmap.pixels, AssetBitmapSize * AssetBitmapSize * sizeof(u32));
+	Assert(file.fileSize);
+	entry->currentlyLoaded = true;
+	UpdateWrapingTexture(handler->textures[entry->index].bitmap);
+
+	return &handler->textures[entry->index].bitmap;
 }
 
 
-AssetHandler::AssetHandler()
-{
-	assets = new Asset[Asset_Count];
-	this->LoadAsset({ Asset_White });
-}
+#undef Asset_Type_Offset
+#undef Asset_Texture_Amount 
 
-struct LoadAssetWork
-{
-	AssetId id;
-	Asset *asset;
-};
-void LoadAssetsCallback(void *data)
-{
-	LoadAssetWork *work = (LoadAssetWork *)data;
-	if (!work->asset)
-	{
-		work->asset = new Asset(work->id);
-	}
-}
-void AssetHandler::LoadAsset(AssetId id)
-{
-	assets[id.id] = Asset(id);
-}
-Bitmap *AssetHandler::GetWhite()
-{
-	return this->GetAsset({ Asset_White })->sprites[0];
-}
-
-Asset *AssetHandler::GetAsset(AssetId id)
-{
-	return (assets + id.id);
-}
-Bitmap **AssetHandler::GetBitmaps(AssetId id)
-{
-	return GetAsset(id)->sprites;
-}
-
-Sound **AssetHandler::GetSounds(AssetId id)
-{
-	return GetAsset(id)->sounds;
-}
-Sound *AssetHandler::GetSound(AssetId id, u32 soundIndex)
-{
-	Asset *asset = GetAsset(id);
-	if (soundIndex < asset->soundCount)
-	{
-		return asset->sounds[soundIndex];
-	}
-	else
-	{
-		return NULL;
-	}
-
-}
-
-void AssetHandler::RemoveAsset(AssetId id)
-{
-	assets[id.id].Unload();
-}
 #endif

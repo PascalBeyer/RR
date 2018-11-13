@@ -41,11 +41,9 @@ struct Bitmap
 	//BitmapFileHeader *header;
 };
 
+static u32 RegisterWrapingTexture(u32 width, u32 height, u32 *pixels);
+static void UpdateWrapingTexture(Bitmap bitmap);
 
-extern u32 (*AllocateGPUTexture)(u32 width, u32 height, u32 *pixels);
-extern void (*UpdateGPUTexture)(Bitmap bitmap);
-
-static u32 RegisterWrapingImage(u32 width, u32 height, u32 *pixels);
 static u32 *GetPixel(Bitmap bitmap, u32 x, u32 y)
 {
 	u32 shift = y * bitmap.width + x;
@@ -60,16 +58,17 @@ static Bitmap CreateBitmap(u32* pixels, u32 width, u32 height)
 	ret.pixels = pixels;
 	ret.width = width;
 	ret.height = height;
-	ret.textureHandle = AllocateGPUTexture(width, height, pixels);
+	ret.textureHandle = RegisterWrapingTexture(width, height, pixels);
 	return ret;
 }
 
 static Bitmap CreateBitmap(char* fileName, bool wrapping = false)
 {
-	Bitmap ret;
+	Bitmap ret = {};
 	//TODO: maybe check if its actually a bmp
 	File tempFile = LoadFile(fileName);
 	void *memPointer = tempFile.memory;
+	if (!memPointer) return ret;
 	ret.textureHandle = NULL;
 	BitmapFileHeader *header = (BitmapFileHeader *)memPointer;
 
@@ -86,10 +85,10 @@ static Bitmap CreateBitmap(char* fileName, bool wrapping = false)
 	u32 greenMask = header->greenMask;
 	u32 alphaMask = ~(redMask | blueMask | greenMask);
 
-	u32 redShift = BitScanForward(redMask);
-	u32 blueShift = BitScanForward(blueMask);
-	u32 greenShift = BitScanForward(greenMask);
-	u32 alphaShift = BitScanForward(alphaMask);
+	u32 redShift = BitwiseScanForward(redMask);
+	u32 blueShift = BitwiseScanForward(blueMask);
+	u32 greenShift = BitwiseScanForward(greenMask);
+	u32 alphaShift = BitwiseScanForward(alphaMask);
 
 	u32 *tempPixels = ret.pixels;
 	for (i32 x = 0; x < header->biWidth; x++)
@@ -113,12 +112,7 @@ static Bitmap CreateBitmap(char* fileName, bool wrapping = false)
 		}
 	}
 
-	if (wrapping)
-	{
-		ret.textureHandle = RegisterWrapingImage(ret.width, ret.height, ret.pixels);
-		return ret;
-	}
-	ret.textureHandle = AllocateGPUTexture(ret.width, ret.height, ret.pixels);
+	ret.textureHandle = RegisterWrapingTexture(ret.width, ret.height, ret.pixels);
 	return ret;
 }
 

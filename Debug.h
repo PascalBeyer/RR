@@ -94,10 +94,10 @@ static Tweeker *ArrayAdd(TweekerDynamicArray *arr, Tweeker t)
 	
 	u32 newCapacity = 2 * arr->capacity + 1;
 
-	Tweeker *newData = DynamicAlloc(alloc, Tweeker,  2 * arr->capacity + 1);
+	Tweeker *newData = DynamicAlloc(Tweeker,  2 * arr->capacity + 1);
 	memcpy(newData, arr->data, arr->capacity * sizeof(Tweeker));
 	arr->capacity = 2 * arr->capacity + 1;
-	DynamicFree(alloc, arr->data);
+	DynamicFree(arr->data);
 	arr->data = newData;
 	arr->data[arr->amount++] = t;
 
@@ -107,7 +107,7 @@ static Tweeker *ArrayAdd(TweekerDynamicArray *arr, Tweeker t)
 static TweekerDynamicArray CreateDynamicArray(Arena *arena, u32 capacity = 8)
 {
 	TweekerDynamicArray ret;
-	ret.data = DynamicAlloc(alloc, Tweeker, capacity);;
+	ret.data = DynamicAlloc(Tweeker, capacity);
 	ret.arena = arena;
 	ret.amount = 0;
 	ret.capacity = capacity;

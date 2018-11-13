@@ -12,7 +12,6 @@ struct MarkingRect
 struct Player
 {
 	MarkingRect markingRect;
-	EntitySelection entitySelection;
 
 	u8 playerIndex;
 	u32 minerals;
@@ -22,10 +21,6 @@ struct Player
 };
 
 Player InitPlayer(u32 screenPixelWidth, u32 screenPixelHeight, float screenWidth, TileMap *tileMap, float screenScrollSpeed);
-
-void HandleRightClick(Player *player, EntitySelection *entitys, v2 targetPos, TileMap tileMap);
-
-void Update(Player *player, Input *input, TileMap tileMap, EntitySelection *entitys);
 
 #if 0
 void UpdateMarkingRect(MarkingRect *rect, EntitySelection *entitySelection, Input *input, Screen * screen, EntitySelection *entitys)
@@ -121,11 +116,10 @@ void UpdateMarkingRect(MarkingRect *rect, EntitySelection *entitySelection, Inpu
 Player InitPlayer(u32 screenPixelWidth, u32 screenPixelHeight, float screenTileWidth, TileMap *tileMap, float screenScrollSpeed)
 {
 	Player ret;
-	ret.entitySelection = EntitySelection();
 	ret.steeringGroupingIndex = 0;
 	float focalLength = 1.0f;
 	float screenScrollAreaWidth = 20.0f;
-	ret.markingRect = MarkingRect();
+	ret.markingRect = {};
 	return ret;
 }
 
@@ -156,6 +150,7 @@ v2 AdjustTargetPos(v2 targetPos, TileMap tileMap, v2 unitPos)
 	}
 }
 
+#if 0
 void HandleRightClick(Player *player, EntitySelection *entities, v2 targetPos, TileMap tileMap)
 {
 	v2 centerOfMass = v2();
@@ -227,7 +222,7 @@ void Update(Player *player, Input *input, TileMap tileMap, EntitySelection *enti
 	}
 }
 
-
+#endif
 
 
 #endif

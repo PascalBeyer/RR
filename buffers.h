@@ -48,9 +48,7 @@ saucy_defer<F> defer_func(F f) {
 #define DEFER_3(x)    DEFER_2(x, __LINE__)
 #define defer(code)   auto DEFER_3(_defer_) = defer_func([&](){code;})
 
-
 #define RR_Internal 1
-
 
 struct ColoredVertex
 {
@@ -59,6 +57,9 @@ struct ColoredVertex
 };
 
 DefineArray(ColoredVertex);
+DefineArray(bool);
+DefineArray(u32);
+
 
 struct TexturedVertex
 {
@@ -91,7 +92,7 @@ struct ImageBuffer
 
 struct SoundBuffer
 {
-	s16 toneVolume;
+	i16 toneVolume;
 	int samplesPerSecond;
 	int runningSampleIndex;
 	int bytesPerSample;
@@ -99,7 +100,7 @@ struct SoundBuffer
 	int latencySampleCount;
 	bool soundIsPlaying;
 	bool soundIsValid;
-	s16 *soundSamples;
+	i16 *soundSamples;
 	int sampleAmount;
 };
 

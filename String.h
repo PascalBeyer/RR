@@ -103,14 +103,15 @@ static String S(char c, Arena *arena = frameArena)
 	return ret;
 }
 
-static String S(char *nullTerminatedString, Arena *arena)
+static String S(char *nullTerminatedString, Arena *arena, bool keepNullterminated = false)
 {
 	String ret;
-	u32 length = NullTerminatedStringLength(nullTerminatedString);
+	u32 length = NullTerminatedStringLength(nullTerminatedString) + keepNullterminated;
 	ret = PushArray(arena, Char, length);
 	
-	memcpy(ret.data, nullTerminatedString, length * sizeof(Char));
+	memcpy(ret.data, nullTerminatedString, (length + keepNullterminated) * sizeof(Char));
 
+	ret.length -= keepNullterminated;
 	return ret;
 }
 
@@ -552,7 +553,7 @@ static String CreateString(Arena *arena, bool val)
 
 static char* ToNullTerminated(Arena *arena, String string)
 {
-	char *ret = PushData(arena, char, string.length);
+	char *ret = PushData(arena, char, string.length + 1);
 	for (u32 i = 0; i < string.length; i++)
 	{
 		ret[i] = string.data[i];
@@ -562,11 +563,13 @@ static char* ToNullTerminated(Arena *arena, String string)
 }
 
 
-static void Eat1(String *s)
+static Char Eat1(String *s)
 {
 	Assert(s->length);
+	Char ret = *s->data;
 	s->data++;
 	s->length--;
+	return ret;
 }
 
 static void EatSpaces(String *string)
@@ -629,6 +632,25 @@ static String EatToCharReturnHead(String *string, Char c)
 	return ret;
 }
 
+static String EatToCharFromBackRetrunTail(String *string, Char c)
+{
+	String ret = *string;
+
+	for (u32 i = ret.length - 1; i < ret.length; i--)
+	{
+		if (ret[i] == c)
+		{
+			ret.data = ret.data + (i + 1);
+			ret.length = ret.length - (i + 1);
+			return ret;
+		}
+		string->length--;
+	}
+
+	return ret;
+}
+
+
 static String EatToCharReturnHead(String *string, Char c1, Char c2)
 {
 	String ret = *string;
@@ -676,45 +698,57 @@ static b32 StoB(String string, b32 *success)
 	return -1;
 }
 
-static f32 StoF(String string, b32 *success) // todo : maybe make these good or use ryans stuff?
+
+//float : 1 sign 8 exponent 23 mantisse (+ 1 hidden bit)
+static f32 StoF(String string, b32 *success)
 {
+	if (!string.length)
+	{
+		*success = false;
+		return 0.0f;
+	}
+	bool negative = false;
+
 	if (string[0] == '-')
 	{
 		Eat1(&string);
-		return (- StoF(string, success));
+		negative = true;
 	}
 
-	f32 sum = 0;
-	f32 exp = 1.0f;
+	u64 sum = 0u;
+	u64 exp = 1u;
 
-	u32 j = string.length;
-
-	for (u32 i = 0; i < string.length; i++)
+	while (string.length && string[0] == '0') 
 	{
-		u32 charToUInt = string[i] - '0';
+		Eat1(&string);
+	}
+
+	while(string.length && string[0] != '.')
+	{
+		u32 charToUInt = Eat1(&string) - '0';
 		if (charToUInt < 10)
 		{
 			sum = 10 * sum + charToUInt;
 		}
 		else
 		{
-			if (string[i] == '.')
-			{
-				j = i + 1;
-				break;
-			}
 			*success = false;
 			return 0.0f;
 		}
 	}
 
-	for (u32 i = j; i < string.length; i++)
+	if (string.length)
 	{
-		u32 charToUInt = string[i] - '0';
+		Eat1(&string);
+	}
+
+	while(string.length)
+	{
+		u32 charToUInt = Eat1(&string) - '0';
 		if (charToUInt < 10)
 		{
-			exp /= 10.0f;
-			sum = sum + (f32)charToUInt * exp;
+			sum = 10 * sum + charToUInt;
+			exp *= 10;
 		}
 		else
 		{
@@ -723,7 +757,32 @@ static f32 StoF(String string, b32 *success) // todo : maybe make these good or 
 		}
 	}
 
-	return sum;
+#if 0
+	posExp /= 10;
+	i8 exponent = posExp ? (i8)IntegerLogarithm(posExp) : -(i8)IntegerLogarithm(negExp); 
+	u32 firstNonZero = BitwiseScanReverse(sum);
+	i32 diff = 23 - firstNonZero;
+	if (diff < 0)
+	{
+		*success = false;
+		return 0.0f;
+	}
+
+	//exponent += diff;
+	//exponent *= -1;
+	
+	exponent += 127;
+	sum <<= diff;
+
+	hexFloat |= ((u8)exponent << 23) | (sum & 0x7FFFFF);
+#endif
+
+	f64 mantissa = (f64)sum;
+	f32 ret = (f32)(mantissa / (f64)exp); // this is exact for any exponents we care about.
+
+	if (negative) ret *= -1.0f;
+
+	return ret;
 }
 
 
@@ -1197,5 +1256,16 @@ static String FormatString(char *format, ...)
 	va_end(argList);
 	return ret;
 }
+
+static String FormatCString(char *format, ...)
+{
+	va_list argList;
+	va_start(argList, format);
+	String ret = StringFormatHelper(frameArena, format, argList);
+	PushZeroStruct(frameArena, char);
+	va_end(argList);
+	return ret;
+}
+
 
 #endif

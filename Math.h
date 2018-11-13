@@ -1,11 +1,11 @@
 #ifndef RR_MATH
 #define RR_MATH
 
-#define PI 3.14159265359f
+#define PI		3.14159265359f
+#define pi32	3.14159265359f
 
 #include <math.h>
 
-#include "BasicTypes.h"
 
 struct Interval
 {
@@ -278,7 +278,12 @@ static v3 FastNormalize(v3 a)
 	return a * FastInvSqrt(a.x * a.x + a.y * a.y + a.z * a.z);
 }
 
-static v3 Lerp(v3 a, float t, v3 b)
+static v2 Lerp(v2 a, f32 t, v2 b)
+{
+	return a*(1.0f - t) + b*t;
+}
+
+static v3 Lerp(v3 a, f32 t, v3 b)
 {
 	return a*(1.0f - t) + b*t;
 }
@@ -585,25 +590,44 @@ static m4x4 operator*(m4x4 A, m4x4 B)
 	return R;
 }
 
-static v3 Transform(m4x4 A, v3 P, float Pw)
+#if 0
+static m4x4 operator*(f32 f, m4x4 B)
 {
-	v3 r;
+	m4x4 R = {};
 
-	r.x = P.x*A.a[0][0] + P.y*A.a[0][1] + P.z*A.a[0][2] + Pw*A.a[0][3];
-	r.y = P.x*A.a[1][0] + P.y*A.a[1][1] + P.z*A.a[1][2] + Pw*A.a[1][3];
-	r.z = P.x*A.a[2][0] + P.y*A.a[2][1] + P.z*A.a[2][2] + Pw*A.a[2][3];
-	f32 w = P.x*A.a[3][0] + P.y*A.a[3][1] + P.z*A.a[3][2] + Pw*A.a[3][3];
+	for (int r = 0; r <= 3; ++r)
+	{
+		for (int c = 0; c <= 3; ++c)
+		{
+			R.a[r][c] = B.a[r][c] * f;
+		}
+	}
+	return R;
+}
+#endif
 
-	r /= w;
+
+
+static v4 operator*(m4x4 A, v4 P)
+{
+	v4 r;
+
+	r.x = P.x*A.a[0][0] + P.y*A.a[0][1] + P.z*A.a[0][2] + P.w*A.a[0][3];
+	r.y = P.x*A.a[1][0] + P.y*A.a[1][1] + P.z*A.a[1][2] + P.w*A.a[1][3];
+	r.z = P.x*A.a[2][0] + P.y*A.a[2][1] + P.z*A.a[2][2] + P.w*A.a[2][3];
+	r.w = P.x*A.a[3][0] + P.y*A.a[3][1] + P.z*A.a[3][2] + P.w*A.a[3][3];
 
 	return r;
 }
 
 static v3 operator*(m4x4 A, v3 P)
 {
-	v3 R = Transform(A, P, 1.0f);
-	return(R);
+	v4 R = A * V4(P, 1.0f);
+
+
+	return (R.xyz / R.w);
 }
+
 
 static m4x4 Identity(void)
 {
@@ -937,6 +961,16 @@ static m4x4 InvOrId(m4x4 mat)
 
 }
 
+static m4x4 ScaleMatrix(f32 f)
+{
+	//return Identity();
+	m4x4 ret = {};
+	ret.a[0][0] = f;
+	ret.a[1][1] = f;
+	ret.a[2][2] = f;
+	ret.a[3][3] = 1.0f;
+	return ret;
+}
 
 static m4x4 QuaternionToMatrix(Quaternion a)
 {

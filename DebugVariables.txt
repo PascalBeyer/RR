@@ -4,7 +4,7 @@
 debugCam false
 DrawWholeMap true 
 selectedPoint (0.00000,0.00000)
-consoleTextFieldColor (1.00000,0.40614,0.53918,0.79166)
+consoleTextFieldColor (1.00000,0.40784,0.43570,1.00000)
 consoleCommandTextColor (1.00000,0.62239,0.86968,1.00000)
 consoleErrorTextColor (1.00000,0.59341,0.17481,0.67129)
 consoleDefaultTextColor (1.00000,0.12011,0.16945,0.56944)
@@ -21,4 +21,6 @@ sliderSlider 0.00999
 pickerFontSize 0.01299
 pickerFontXIncrease 6.00000 
 consoleSelectionColor (1.00000,0.03315,0.03315,0.57870)
-lightPos (20.00000,-20.00000,0.00000)
+lightPos (4.00000,2.00000,-5.00000)  
+cameraMoveSpeed 0.10000
+girlPos (0.40000,4.69999) 

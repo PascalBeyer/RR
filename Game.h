@@ -4,13 +4,17 @@
 #include "BasicTypes.h"
 
 #include "buffers.h"
+
+#include "Intrinsics.h"
+#include "Math.h"
+
 #include "Arena.h"
 #include "String.h"
 
+#include "Array.h"
 #include "Debug.h"
 
 #include "WorkHandler.h"
-#include "Math.h"
 #include "Color.h"
 #include "File.h"
 
@@ -19,10 +23,11 @@
 #include "SIMD.h"
 #include "Random.h"
 #include "Input.h"
-#include "Intrinsics.h"
+
 #include "Bitmap.h"
-#include "Sound.h"
 #include "Fonts.h"
+#include "AssetHandler.h"
+
 #include "World.h"
 
 #include "TileMap.h"
@@ -32,22 +37,17 @@
 #include "Animation.h"
 #include "Button.h"
 #include "KdTree.h"
-#include "Entity.h"
-
-#include "AssetHandler.h"
 
 #include "SoundMixer.h"
 #include "Renderer.h"
-#include "Unit.h"
+
+#include "Entity.h"
 
 #include "Lighting.h"
-#include "EntitySelection.h"
-
-#include "Building.h"
 
 #include "Player.h"
 
-#include "MovementHandler.h"
+//#include "MovementHandler.h"
 #include "Editor.h" // todo rank this once we know more.
 
 
@@ -61,8 +61,6 @@ struct Partical
 
 struct GameState
 {
-	EntitySelection *entities;
-	UnitSelection *units;
 	TileMap *tileMap;
 	World *world;
 
@@ -70,8 +68,11 @@ struct GameState
 	Player *player;	
 	WorkHandler *workHandler;
 	AssetHandler *assetHandler;
+	UnitHandler unitHandler;
 	SoundMixer *soundMixer;
 	Editor editor;
+
+	TriangleMesh testMesh;
 
 	Font font;
 
@@ -82,10 +83,6 @@ struct GameState
 #include "ConsoleCommands.h"
 #include "Console.h"
 #include "DebugBody.h"
-
-
-
-#define pi32 3.14159265359f
 
 static bool viewLighting = false;
 
@@ -121,86 +118,69 @@ static GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHa
 	GameState ret = {};
 	ret.workHandler = workHandler;
 
-	u16 newTileSize = 50;
-	int tileMapHeight = 20;
-	int tileMapWidth = 25;
+	int tileMapHeight = 10;
+	int tileMapWidth = 10;
 
-	//tileMap = TileMap("map.tm");
 	ret.font = LoadFont("consola.ttf");
 
 	globalFont = ret.font;
 
 	InitConsole(ret.font);
 	
+	ret.assetHandler = PushStruct(constantArena, AssetHandler);
+	ret.assetHandler = CreateAssetHandler(constantArena);
+
 	ret.tileMap = PushStruct(constantArena, TileMap);
-	*ret.tileMap = InitTileMap(tileMapWidth, tileMapHeight, newTileSize, constantArena);
+	*ret.tileMap = InitTileMap(ret.assetHandler, tileMapWidth, tileMapHeight, constantArena);
+
 	ret.player = PushStruct(constantArena, Player);
 	*ret.player = InitPlayer((u32)screenWidth, (u32)screenHeight, 5.0f, ret.tileMap, 0.1f);
-	ret.assetHandler = new AssetHandler();
-	ret.assetHandler->LoadAsset({ Asset_Building });
-	ret.assetHandler->LoadAsset({ Asset_Unit });
-	ret.assetHandler->LoadAsset({ Asset_TileMapTiles });
 
 	ret.soundMixer = PushStruct(constantArena, SoundMixer);
-	*ret.soundMixer = SoundMixer(ret.assetHandler);
-	//soundMixer.PlaySound({ Asset_Map }, 0);
+	*ret.soundMixer = {};
 
 	i32 skyRadius = 40;
 	TriangleArray t = CreateSkyBoxAndPush({ V3(-skyRadius, -skyRadius, -skyRadius), V3(skyRadius, skyRadius, skyRadius) }, RGBAfromHEX(0x87CEEB), constantArena);
 
+	f32 pifac = 6.0f * 0.25f * pi32;
+	Quaternion standartRotation = QuaternionFromAngleAxis(pifac, V3(1, 0, 0));
 	AABB groundaabb = { V3(-20, -20, -0.25f), V3(20, 20, 0) };
-	//amountOfTriangles += GenerateAndPushTriangleFloor(groundaabb, constantArena).amount;
 
-	//TriangleMesh mesh = GenerateAndPushTriangleFloorMesh(groundaabb, constantArena);
-	
 	World *world = PushZeroStruct(constantArena, World);
 	ret.world = world;
 	world->lightSource = V3(20, 0, -20);
 	world->triangles = t;
-	world->camera.pos = V3(0, 0, -2.5f);
-	world->camera.basis = v3StdBasis;
+	world->camera.pos = V3(0, -1.3f, -2.5f);
+	Quaternion r = QuaternionFromAngleAxis(-0.1f, V3(0, 1, 0));
+	world->camera.basis = TransformBasis(v3StdBasis, QuaternionToMatrix(r));
 
 	world->debugCamera.pos = V3(0, 0, -10);
 	world->debugCamera.basis = v3StdBasis;
+	world->placedMeshes = PlacedMeshCreateDynamicArray();
 
-	world->testMeshes = ReadObj("obj/maja/howDoTheyDoIt.obj");
-	
-	//InitLighting(world);
+	TriangleMesh treeMesh = LoadMesh(ret.assetHandler, "obj/tree.mesh");
+
+	ArrayAdd(&world->placedMeshes, CreatePlacedMesh(treeMesh, 0.1f, standartRotation, V3(5, 1, 0)));
+	//ArrayAdd(&world->placedMeshes, CreatePlacedMesh(treeMesh, 0.1f, standartRotation, V3(5, 6, 0)));
+	//ArrayAdd(&world->placedMeshes, CreatePlacedMesh(treeMesh, 0.1f, standartRotation, V3(3, 1, 0)));
+	//ArrayAdd(&world->placedMeshes, CreatePlacedMesh(treeMesh, 0.1f, standartRotation, V3(5, 2, 0)));
+	//ArrayAdd(&world->placedMeshes, CreatePlacedMesh(treeMesh, 0.1f, standartRotation, V3(2, 1, 0)));
+	//ArrayAdd(&world->placedMeshes, CreatePlacedMesh(treeMesh, 0.1f, standartRotation, V3(5, 4, 0)));
+	//ArrayAdd(&world->placedMeshes, CreatePlacedMesh(treeMesh, 0.1f, standartRotation, V3(0, 10, 0)));
+
 
 	ret.screen = PushStruct(constantArena, Screen);
 	*ret.screen = CreateScreen((f32)screenWidth, (f32)screenHeight, (float)ret.tileMap->width, (float)ret.tileMap->height, 10, 1);
 
+	ret.editor.elements = EditorUIElementCreateDynamicArray();
 
-#if 0
-	ret.entities = new EntitySelection();
-	ret.units = new UnitSelection();
 
-	float expectedSecondsPerFrame = (1.0f / 60.0f);
+	ret.unitHandler = CreateUnitHandler(constantArena, ret.assetHandler);
 
-	Unit *unit1 = new Unit(V2(25, 25), 4.0f, 4.0f, expectedSecondsPerFrame, 0.5f);
-	Unit *unit2 = new Unit(V2(4, 8), 4.0f, 4.0f, expectedSecondsPerFrame, 0.5f);
-	Unit *unit3 = new Unit(V2(7, 8), 4.0f, 4.0f, expectedSecondsPerFrame, 0.5f);
-	Unit *unit4 = new Unit(V2(4, 6), 4.0f, 4.0f, expectedSecondsPerFrame, 0.5f);
-
-	//unit1->way.push_back(v3(6.5f, 6.5f, 0.0f));
-	//unit1->way.push_back(v3(4.5f, 6.5f, 0.0f));
-	ret.entities->PushBack(unit1);
-	ret.entities->PushBack(unit2);
-	ret.entities->PushBack(unit3);
-	ret.entities->PushBack(unit4);
-	ret.units->PushBack(unit1);
-	ret.units->PushBack(unit2);
-	ret.units->PushBack(unit3);
-	ret.units->PushBack(unit4);
-
-	ret.player->entitySelection.PushBack(unit2);
-	HandleRightClick(ret.player, ret.entities, V2(45, 30), *ret.tileMap);
-
-	ret.player->entitySelection.PushBack(unit3);
-	HandleRightClick(ret.player, ret.entities, V2(25, 25), *ret.tileMap);
-#endif
-
-	ret.editor.elements = EditorUIElementCreateDynamicArray(constantArena);
+	CreateUnit(&ret.unitHandler, V2(0, 0), standartRotation);
+	CreateUnit(&ret.unitHandler, V2(1, 0), QuaternionFromAngleAxis(pifac, V3(1, 0, 0)));
+	CreateUnit(&ret.unitHandler, V2(0, 1), QuaternionFromAngleAxis(pifac, V3(1, 0, 0)));
+	CreateUnit(&ret.unitHandler, V2(0, 1), QuaternionFromAngleAxis(pifac, V3(1, 0, 0)));
 
 	return ret;
 }
@@ -211,13 +191,11 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 
 	TileMap *tileMap = gameState->tileMap;
 	Player *player = gameState->player;
-	EntitySelection *entities = gameState->entities;
-	UnitSelection *units = gameState->units;
 	Screen *screen = gameState->screen;
-
-	u16 tileSize = tileMap->tileSize;
+	auto unitHandler = &gameState->unitHandler;
+	auto assetHandler = gameState->assetHandler;
 	//Update(*gameState->player, input, *tileMap, gameState->entities);
-
+	f32 dt = input.secondsPerFrame;
 	// HandleInput
 	{
 		KeyMessageBuffer buffer = input.buffer;
@@ -226,7 +204,7 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 			KeyStateMessage message = buffer.messages[i];
 
 			ConsoleHandleKeyMessage(message, &input);
-			
+
 			if (ConsoleActive())
 			{
 				continue;
@@ -266,11 +244,12 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 
 	Tweekable(v3, lightPos);
 
+	world->debugCamera.pos = lightPos;
+
 	UpdateCamGodMode(&input, &gameState->world->camera, gameState->keyTracker); // cam?
 	PushRenderSetup(rg, *cam, lightPos/*world->lightSource*/, (Setup_Projective | Setup_ShadowMapping));
 	PushClear(rg, V4(1.0f, 0.1f, 0.1f, 0.1f));
 
-	//MoveUnits(units, *tileMap);
 	float screenWidth = (f32)renderCommands->width;
 	float screenHeight = (f32)renderCommands->height;
 
@@ -305,33 +284,45 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 		maxScreenYi = tileMap->height;
 	}
 
-#if 0
+	UpdateUnits(unitHandler, dt);
+	Tweekable(v2, girlPos);
+	unitHandler->infos[3].pos = girlPos;
+	RenderUnits(rg, unitHandler);
+	
 	for (u32 x = minScreenXi; x < maxScreenXi; x++)
 	{
 		for (u32 y = minScreenYi; y < maxScreenYi; y++)
 		{
 			Tile *tile = GetTile(*tileMap, x, y);
-			PushTriangleMesh(rg, tile->mesh);
+			Quaternion q = { 1, 0, 0, 0 };
+			PushTriangleMesh(rg, tile->mesh, q, V3(0, 0, 0), 1.0f);
 		}
 	}
-#else
+
+	For(world->placedMeshes)
+	{
+		PushTriangleMesh(rg, it->mesh, it->orientation, it->pos, it->scale);
+		PushDebugPointCuboid(rg, it->pos);
+	}
+
+
+
+
+#if 0
+	Tile *tile = GetTile(*tileMap, 0u, 0u);
+	for (u32 i = 0; i < tile->mesh.amountOfVerticies; i++)
+	{
+		PushLine(rg, tile->mesh.normals[i] + tile->mesh.vertices[i], tile->mesh.vertices[i]);
+	}
+#endif
 
 	PushDebugPointCuboid(rg, lightPos);
-
-	static u32 angleIt = 0;
-	angleIt++;
-	Quaternion q = QuaternionFromAngleAxis(0.01f * angleIt, V3(0,1,0));
-	For(world->testMeshes)
-	{
-		PushTriangleMesh(rg, *it, q);
-	}
-#endif 
 
 	v4 allColorsOfTheRainbow[] =
 	{
 		V4(1, 1, 1, 1), //white = 0
 		V4(1, 1, 1, 0), //yellow = 1
-		V4(1, 1, 0, 0), //red = 2
+		V4(1, 1, 0, 0), //red = 2o
 		V4(1, 1, 0, 1), //purple = 3
 		V4(1, 0, 1, 1), //cyan = 4
 		V4(1, 0, 0, 1), //blue = 5
@@ -347,113 +338,6 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 		V4(1, 0.5f, 0.5f, 0.5f)
 
 	};
-
-
-	static KdNode *selectedLeaf;
-	Tweekable(v2, selectedPoint);
-#if 0
-	if (input->mouse.leftButtonPressedThisFrame)
-	{
-		v2 clickedPoint = ScreenZeroToOneToInGame(*cam, input->mouseZeroToOne, aspectRatio, focalLength);
-		KdNode* clickedLeaf = GetLeaf(world->kdTree, i12(clickedPoint));
-		if (selectedLeaf && selectedLeaf != clickedLeaf)
-		{
-			LightingTriangle **selectedTs = selectedLeaf->triangles;
-			for (u32 i = 0; i < selectedLeaf->amountOfTriangles; i++)
-			{
-				selectedTs[i]->color = 0.5f * (selectedTs[i]->normal + V3(1, 1, 1));
-			}
-
-			LightingTriangle **clickedTs = clickedLeaf->triangles;
-			for (u32 i = 0; i < clickedLeaf->amountOfTriangles; i++)
-			{
-				clickedTs[i]->color = V3(0, 0, 0);
-			}
-		}
-		selectedLeaf = clickedLeaf;
-		selectedPoint = clickedPoint;
-
-	}
-	if (selectedLeaf)
-	{
-		PushAABBOutLine(rg, selectedLeaf->aabb.minDim, selectedLeaf->aabb.maxDim);
-		PushDebugPointCuboid(rg, i12(selectedPoint));
-	}
-#endif
-
-
-	if (viewLighting)
-	{
-		PushLightingImage(rg);
-	}
-	else
-	{
-		/*
-		Triangle *t = world->triangles.data;
-		for (u32 triI = 0; triI < world->triangles.amount; triI++)
-		{
-			PushTriangle(rg, t[triI].cv1, t[triI].cv2, t[triI].cv3);
-		}
-		*/
-		//todo make key binidings for console commands
-
-		//gameState->world->testMesh.amountOfIndicies = amountToRender;
-		//PushTriangleMesh(rg, gameState->world->testMesh);
-#if 0
-		for (u32 triI = 0; triI < 40; triI++)
-		{
-			Triangle sd = t[triI];
-			v3 pos = 0.3333f * (sd.p1 + sd.p2 + sd.p3);
-			//PushCuboid(rg, pos, 0.3f * v3StdBasis, V4(1, 1, 0, 0));
-			PushLine(rg, pos, pos + sd.normal);
-		}
-#endif
-	}
-
-	//PushUnit(rg, V3(0, 0, 0), 0, Asset_Unit, 1.0f);
-#if 0
-	for (u32 i = 0; i < entities->amountSelected; i++)
-	{
-		Entity *entityPtr = entities->Get(i);
-
-		Unit *unitPtr;
-		unitPtr = dynamic_cast<Unit*> (entityPtr);
-		if (unitPtr)
-		{
-			//TODO: Get Entities in reachable region
-			//unitPtr->Update(&entities, &tileMap);
-
-			renderGroup.PushUnit(v3(unitPtr->GetPos(), -tileMap.GetHeight(unitPtr->GetPos())) + 1, unitPtr->facingDirection, Asset_Unit, unitPtr->GetSize());
-			renderGroup.PushDebugString(i12(unitPtr->GetPos() + v2(-0.1f, -0.1f)), String(unitPtr->facingDirection), 1);
-			if (!unitPtr->way.empty())
-			{
-				v2 wayVector = unitPtr->pos;
-				for (int i = unitPtr->way.size() - 1; i >= 0; i--)
-				{
-					v2 toVector = unitPtr->way.at(i);
-					//renderGroup.PushLine(Shape::Line(wayVector, toVector)); 
-					wayVector = toVector;
-				}
-			}
-			if (unitPtr->idle)
-			{
-				//renderGroup.PushRectangle(Shape::Rectangle(unitPtr->pos, 0.1f, 0.1f, v4(1.0f, 0.5f, 0, 0.5f)), 0.0f);
-			}
-
-		}
-
-		Building *buildingPtr;
-		buildingPtr = dynamic_cast<Building*> (entityPtr);
-		if (buildingPtr)
-		{
-			buildingPtr->Update(tileSize, entities);
-			renderGroup.PushBuilding(i12(buildingPtr->GetPos()), Asset_Building, buildingPtr->GetSize());
-
-		}
-#endif
-	//renderGroup.PushUnit(v3(unit1->pos, -tileMap.GetHeight(unit1->GetPos()) + 1), unit1->facingDirection, Asset_Unit, unit1->radius);
-
-	float unitBoxSize = 0.2f;
 
 	cam = &world->camera;
 
@@ -498,14 +382,15 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 	//PushTexturedRect(rg, V2(0.1f, 0.1f), 0.5f, 0.5f, gameState->font.bitmap);
 #if 0
 	u32 it_index = 0;
-	For(world->testMeshes)
+	For(gameState->assetHandler->textures)
 	{
 		//if (it_index == 3) break;
-		PushTexturedRect(rg, V2(0.1f + 0.2f * it_index++, 0.1f), 0.2f, 0.2f, it->mat.bitmap);
+		PushTexturedRect(rg, V2(0.1f + 0.2f * it_index++, 0.1f), 0.2f, 0.2f, it->bitmap);
 	}
 #endif
 	
-
+	u32 id = RegisterAsset(assetHandler, Asset_Texture, "obj/stone.texture");
+	//PushTexturedRect(rg, V2(0.1f + 0.2f, 0.1f), 0.2f, 0.2f, *GetTexture(assetHandler, id));
 	//PushString(rg, V2(0.1f, 0.5f), CreateString("asd"), 0.1f, gameState->font);
 
 	UpdateEditor(&gameState->editor, input);
@@ -514,7 +399,7 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 	UpdateConsole(input);
 	DrawConsole(rg);
 
-	gameState->soundMixer->ToOutput(soundBuffer);
+	ToOutput(gameState->soundMixer, soundBuffer);
 
 }
 #endif

@@ -19,7 +19,7 @@ static bool WriteEntireFile(char *fileName, File file);
 static File LoadFile(char *fileName, Arena *arena);
 static File LoadFile(char *fileName);
 static void FreeFile(File file);
-
+static File LoadFile(char *fileName, void *dest, u32 destSize);
 
 
 #endif

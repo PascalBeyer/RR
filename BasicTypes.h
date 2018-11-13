@@ -31,7 +31,6 @@ struct type##Array				\
 struct type##DynamicArray														\
 {																				\
 	type *data;																	\
-	Arena *arena;																\
 	u32 amount;																	\
 	u32 capacity;																\
 																				\
@@ -51,21 +50,20 @@ static type *ArrayAdd(type##DynamicArray *arr, type t)							\
 																				\
 	u32 newCapacity = 2 * arr->capacity + 1;									\
 																				\
-	type *newData = DynamicAlloc(alloc, type, 2 * arr->capacity + 1);			\
+	type *newData = DynamicAlloc(type, 2 * arr->capacity + 1);			\
 	memcpy(newData, arr->data, arr->capacity * sizeof(type));					\
 	arr->capacity = 2 * arr->capacity + 1;										\
-	DynamicFree(alloc, arr->data);												\
+	DynamicFree(arr->data);												\
 	arr->data = newData;														\
 	arr->data[arr->amount++] = t;												\
 																				\
 	return (arr->data + (arr->amount - 1));										\
 }																				\
 																				\
-static type##DynamicArray type##CreateDynamicArray(Arena *arena, u32 capacity = 8)	\
+static type##DynamicArray type##CreateDynamicArray(u32 capacity = 8)	\
 {																				\
 	type##DynamicArray ret;														\
-	ret.data = DynamicAlloc(alloc, type, capacity);								\
-	ret.arena = arena;															\
+	ret.data = DynamicAlloc(type, capacity);								\
 	ret.amount = 0;																\
 	ret.capacity = capacity;													\
 	return ret;																	\
@@ -87,8 +85,8 @@ typedef uint8_t u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
-typedef int8_t s8;
-typedef int16_t s16;
+typedef int8_t i8;
+typedef int16_t i16;
 typedef int32_t	i32;
 typedef int64_t	i64;
 typedef i32 b32;
@@ -99,48 +97,55 @@ typedef uintptr_t uintptr;
 typedef uintptr_t umm;
 typedef intptr_t smm;
 
+
+struct v2i
+{
+	i32 x;
+	i32 y;
+};
+
 struct v2
 {
-	float x;
-	float y;
+	f32 x;
+	f32 y;
 };
 
 union v3
 {
 	struct
 	{
-		float x, y, z;
+		f32 x, y, z;
 	};
 	struct
 	{
-		float r, g, b;
+		f32 r, g, b;
 	};
 	struct
 	{
 		v2 xy;
-		float z;
+		f32 z;
 	};
 	struct
 	{
-		float x;
+		f32 x;
 		v2 yz;
 	};
-	float v[3];
+	f32 v[3];
 };
 
 union v4
 {
 	struct
 	{
-		float a;
-		float r;
-		float g;
-		float b;
+		f32 a;
+		f32 r;
+		f32 g;
+		f32 b;
 	};
 
 	struct
 	{
-		float a;
+		f32 a;
 		v3 rgb;
 	};
 	struct
@@ -149,15 +154,26 @@ union v4
 		{
 			struct
 			{
-				float x;
-				float y;
-				float z;
+				f32 x;
+				f32 y;
+				f32 z;
 			};
 			v3 xyz;
 		};
-		float w;
+		f32 w;
 	};
 };
+
+static v2i V2i(v2 a)
+{
+	return { (i32)a.x, (i32)a.y };
+}
+
+
+static v2 V2(v2i a)
+{
+	return { (f32)a.x, (f32)a.y };
+}
 
 static v2 V2()
 {
@@ -166,76 +182,53 @@ static v2 V2()
 	ret.y = 0;
 	return ret;
 }
-#if 0
-static v2 V2(int i)
-{
-	v2 ret;
-	ret.x = (float)i;
-	ret.y = (float)i;
-	return ret;
-}
-static v2 V2(u32 n)
-{
-	v2 ret;
-	ret.x = (float)n;
-	ret.y = (float)n;
-	return ret;
-}
-static v2 V2(float f)
-{
-	v2 ret;
-	ret.x = f;
-	ret.y = f;
-	return ret;
-}
-#endif
 
-static v2 V2(float x, float y)
+static v2 V2(f32 x, f32 y)
 {
 	v2 ret;
 	ret.x = x;
 	ret.y = y;
 	return ret;
 }
-static v2 V2(float x, int y)
+static v2 V2(f32 x, int y)
 {
 	v2 ret;
 	ret.x = x;
-	ret.y = (float)y;
+	ret.y = (f32)y;
 	return ret;
 }
-static v2 V2(int x, float y)
+static v2 V2(int x, f32 y)
 {
 	v2 ret;
-	ret.x = (float)x;
+	ret.x = (f32)x;
 	ret.y = y;
 	return ret;
 }
 static v2 V2(int x, int y)
 {
 	v2 ret;
-	ret.x = (float)x;
-	ret.y = (float)y;
+	ret.x = (f32)x;
+	ret.y = (f32)y;
 	return ret;
 }
 static v2 V2(u32 x, u32 y)
 {
 	v2 ret;
-	ret.x = (float)x;
-	ret.y = (float)y;
+	ret.x = (f32)x;
+	ret.y = (f32)y;
 	return ret;
 }
-static v2 V2(float x, u32 y)
+static v2 V2(f32 x, u32 y)
 {
 	v2 ret;
 	ret.x = x;
-	ret.y = (float)y;
+	ret.y = (f32)y;
 	return ret;
 }
-static v2 V2(u32 x, float y)
+static v2 V2(u32 x, f32 y)
 {
 	v2 ret;
-	ret.x = (float)x;
+	ret.x = (f32)x;
 	ret.y = y;
 	return ret;
 }
@@ -265,28 +258,28 @@ static v2& operator-=(v2 &a, v2 b)
 	return a;
 }
 
-static v2 operator*(v2 a, float f)
+static v2 operator*(v2 a, f32 f)
 {
 	v2 ret;
 	ret.x = a.x * f;
 	ret.y = a.y * f;
 	return ret;
 }
-static v2 operator*(float f, v2 a)
+static v2 operator*(f32 f, v2 a)
 {
 	v2 ret;
 	ret.x = a.x * f;
 	ret.y = a.y * f;
 	return ret;
 }
-static v2& operator*=(v2& a, float f)
+static v2& operator*=(v2& a, f32 f)
 {
 	a = a * f;
 
 	return a;
 }
 
-static v2 operator/(v2 a, float f)
+static v2 operator/(v2 a, f32 f)
 {
 	v2 ret;
 	ret.x = a.x / f;
@@ -294,7 +287,7 @@ static v2 operator/(v2 a, float f)
 	return ret;
 }
 
-static v2& operator/=(v2 &a, float f)
+static v2& operator/=(v2 &a, f32 f)
 {
 	a = a / f;
 	return a;
@@ -321,6 +314,112 @@ static bool operator!=(v2 a, v2 b)
 	return !(a == b);
 }
 
+
+static v2i V2i()
+{
+	v2i ret;
+	ret.x = 0;
+	ret.y = 0;
+	return ret;
+}
+static v2i V2i(i32 x, u32 y)
+{
+	v2i ret;
+	ret.x = x;
+	ret.y = y;
+	return ret;
+}
+static v2i V2i(u32 x, u32 y)
+{
+	v2i ret;
+	ret.x = (i32)x;
+	ret.y = (i32)y;
+	return ret;
+}
+static v2i operator+(v2i a, v2i b)
+{
+	v2i ret;
+	ret.x = a.x + b.x;
+	ret.y = a.y + b.y;
+	return ret;
+}
+static v2i& operator+=(v2i &a, v2i b)
+{
+	a = a + b;
+
+	return a;
+}
+static v2i operator-(v2i a, v2i b)
+{
+	v2i ret;
+	ret.x = a.x - b.x;
+	ret.y = a.y - b.y;
+	return ret;
+}
+static v2i& operator-=(v2i &a, v2i b)
+{
+	a = a - b;
+	return a;
+}
+
+static v2i operator*(v2i a, i32 f)
+{
+	v2i ret;
+	ret.x = a.x * f;
+	ret.y = a.y * f;
+	return ret;
+}
+static v2i operator*(i32 f, v2i a)
+{
+	v2i ret;
+	ret.x = a.x * f;
+	ret.y = a.y * f;
+	return ret;
+}
+static v2i& operator*=(v2i& a, i32 f)
+{
+	a = a * f;
+
+	return a;
+}
+
+static v2i operator/(v2i a, i32 f)
+{
+	v2i ret;
+	if (f == 0) return V2i();
+	ret.x = a.x / f;
+	ret.y = a.y / f;
+	return ret;
+}
+
+static v2i& operator/=(v2i &a, i32 f)
+{
+	a = a / f;
+	return a;
+}
+
+static v2i operator*(v2i a, v2i b)
+{
+	v2i ret;
+	ret.x = a.x * b.x;
+	ret.y = a.y * b.y;
+	return ret;
+}
+
+static bool operator==(v2i a, v2i b)
+{
+	return (
+		a.x == b.x &&
+		a.y == b.y
+		);
+}
+
+static bool operator!=(v2i a, v2i b)
+{
+	return !(a == b);
+}
+
+
 static v3 V3()
 {
 	v3 ret;
@@ -329,7 +428,7 @@ static v3 V3()
 	ret.z = 0;
 	return ret;
 }
-static v3 V3(float _x)
+static v3 V3(f32 _x)
 {
 	v3 ret;
 	ret.x = _x;
@@ -338,7 +437,7 @@ static v3 V3(float _x)
 	return ret;
 }
 
-static v3 V3(float _x, float _y, float _z)
+static v3 V3(f32 _x, f32 _y, f32 _z)
 {
 	v3 ret;
 	ret.x = _x;
@@ -349,147 +448,147 @@ static v3 V3(float _x, float _y, float _z)
 static v3 V3(int _x, int _y, int _z)
 {
 	v3 ret;
-	ret.x = (float)_x;
-	ret.y = (float)_y;
-	ret.z = (float)_z; return ret;
+	ret.x = (f32)_x;
+	ret.y = (f32)_y;
+	ret.z = (f32)_z; return ret;
 }
-static v3 V3(float _x, float _y, int _z)
+static v3 V3(f32 _x, f32 _y, int _z)
 {
 	v3 ret;
 	ret.x = _x;
 	ret.y = _y;
-	ret.z = (float)_z; return ret;
+	ret.z = (f32)_z; return ret;
 }
-static v3 V3(float _x, int _y, float _z)
+static v3 V3(f32 _x, int _y, f32 _z)
 {
 	v3 ret;
 	ret.x = _x;
-	ret.y = (float)_y;
+	ret.y = (f32)_y;
 	ret.z = _z; return ret;
 }
-static v3 V3(int _x, float _y, float _z)
+static v3 V3(int _x, f32 _y, f32 _z)
 {
 	v3 ret;
-	ret.x = (float)_x;
+	ret.x = (f32)_x;
 	ret.y = _y;
 	ret.z = _z; return ret;
 }
 
-static v3 V3(int _x, float _y, int _z)
+static v3 V3(int _x, f32 _y, int _z)
 {
 	v3 ret;
-	ret.x = (float)_x;
+	ret.x = (f32)_x;
 	ret.y = _y;
-	ret.z = (float)_z; return ret;
+	ret.z = (f32)_z; return ret;
 }
-static v3 V3(float _x, int _y, int _z)
+static v3 V3(f32 _x, int _y, int _z)
 {
 	v3 ret;
 	ret.x = _x;
-	ret.y = (float)_y;
-	ret.z = (float)_z; return ret;
+	ret.y = (f32)_y;
+	ret.z = (f32)_z; return ret;
 }
-static v3 V3(int _x, int _y, float _z)
+static v3 V3(int _x, int _y, f32 _z)
 {
 	v3 ret;
-	ret.x = (float)_x;
-	ret.y = (float)_y;
+	ret.x = (f32)_x;
+	ret.y = (f32)_y;
 	ret.z = _z; return ret;
 }
 static v3 V3(u32 _x, u32 _y, u32 _z)
 {
 	v3 ret;
-	ret.x = (float)_x;
-	ret.y = (float)_y;
-	ret.z = (float)_z; return ret;
+	ret.x = (f32)_x;
+	ret.y = (f32)_y;
+	ret.z = (f32)_z; return ret;
 }
-static v3 V3(float _x, float _y, u32 _z)
+static v3 V3(f32 _x, f32 _y, u32 _z)
 {
 	v3 ret;
 	ret.x = _x;
 	ret.y = _y;
-	ret.z = (float)_z; return ret;
+	ret.z = (f32)_z; return ret;
 }
-static v3 V3(float _x, u32 _y, float _z)
+static v3 V3(f32 _x, u32 _y, f32 _z)
 {
 	v3 ret;
 	ret.x = _x;
-	ret.y = (float)_y;
+	ret.y = (f32)_y;
 	ret.z = _z; return ret;
 }
-static v3 V3(u32 _x, float _y, float _z)
+static v3 V3(u32 _x, f32 _y, f32 _z)
 {
 	v3 ret;
-	ret.x = (float)_x;
+	ret.x = (f32)_x;
 	ret.y = _y;
 	ret.z = _z; return ret;
 }
-static v3 V3(u32 _x, float _y, u32 _z)
+static v3 V3(u32 _x, f32 _y, u32 _z)
 {
 	v3 ret;
-	ret.x = (float)_x;
-	ret.y = (float)_y;
-	ret.z = (float)_z; return ret;
+	ret.x = (f32)_x;
+	ret.y = (f32)_y;
+	ret.z = (f32)_z; return ret;
 }
-static v3 V3(float _x, u32 _y, u32 _z)
+static v3 V3(f32 _x, u32 _y, u32 _z)
 {
 	v3 ret;
-	ret.x = (float)_x;
-	ret.y = (float)_y;
-	ret.z = (float)_z; return ret;
+	ret.x = (f32)_x;
+	ret.y = (f32)_y;
+	ret.z = (f32)_z; return ret;
 }
-static v3 V3(u32 _x, u32 _y, float _z)
+static v3 V3(u32 _x, u32 _y, f32 _z)
 {
 	v3 ret;
-	ret.x = (float)_x;
-	ret.y = (float)_y;
-	ret.z = (float)_z; return ret;
+	ret.x = (f32)_x;
+	ret.y = (f32)_y;
+	ret.z = (f32)_z; return ret;
 }
 static v3 V3(int _x, int _y, u32 _z)
 {
 	v3 ret;
-	ret.x = (float)_x;
-	ret.y = (float)_y;
-	ret.z = (float)_z; return ret;
+	ret.x = (f32)_x;
+	ret.y = (f32)_y;
+	ret.z = (f32)_z; return ret;
 }
 static v3 V3(int _x, u32 _y, int _z)
 {
 	v3 ret;
-	ret.x = (float)_x;
-	ret.y = (float)_y;
-	ret.z = (float)_z; return ret;
+	ret.x = (f32)_x;
+	ret.y = (f32)_y;
+	ret.z = (f32)_z; return ret;
 }
 static v3 V3(u32 _x, int _y, int _z)
 {
 	v3 ret;
-	ret.x = (float)_x;
-	ret.y = (float)_y;
-	ret.z = (float)_z; return ret;
+	ret.x = (f32)_x;
+	ret.y = (f32)_y;
+	ret.z = (f32)_z; return ret;
 }
 static v3 V3(u32 _x, int _y, u32 _z)
 {
 	v3 ret;
-	ret.x = (float)_x;
-	ret.y = (float)_y;
-	ret.z = (float)_z; return ret;
+	ret.x = (f32)_x;
+	ret.y = (f32)_y;
+	ret.z = (f32)_z; return ret;
 }
 static v3 V3(int _x, u32 _y, u32 _z)
 {
 	v3 ret;
-	ret.x = (float)_x;
-	ret.y = (float)_y;
-	ret.z = (float)_z;
+	ret.x = (f32)_x;
+	ret.y = (f32)_y;
+	ret.z = (f32)_z;
 	return ret;
 }
 static v3 V3(u32 _x, u32 _y, int _z)
 {
 	v3 ret;
-	ret.x = (float)_x;
-	ret.y = (float)_y;
-	ret.z = (float)_z;
+	ret.x = (f32)_x;
+	ret.y = (f32)_y;
+	ret.z = (f32)_z;
 	return ret;
 }
-static v3 V3(v2 xy, float z)
+static v3 V3(v2 xy, f32 z)
 {
 	v3 ret;
 	ret.x = xy.x;
@@ -497,7 +596,7 @@ static v3 V3(v2 xy, float z)
 	ret.z = z;
 	return ret;
 }
-static v3 V3(float x, v2 yz)
+static v3 V3(f32 x, v2 yz)
 {
 	v3 ret;
 	ret.x = x;
@@ -531,7 +630,7 @@ static v3& operator-=(v3 &a, v3 b)
 	a = a - b;
 	return a;
 }
-static v3 operator*(v3 a, float f)
+static v3 operator*(v3 a, f32 f)
 {
 	v3 ret;
 	ret.x = a.x * f;
@@ -539,7 +638,7 @@ static v3 operator*(v3 a, float f)
 	ret.z = a.z * f;
 	return ret;
 }
-static v3& operator*=(v3& a, float f)
+static v3& operator*=(v3& a, f32 f)
 {
 	a = a * f;
 	return a;
@@ -558,7 +657,7 @@ static v3& operator*=(v3 &a, v3 b)
 	return a;
 }
 
-static v3 operator/(v3 a, float f)
+static v3 operator/(v3 a, f32 f)
 {
 	v3 ret;
 	ret.x = a.x / f;
@@ -567,7 +666,7 @@ static v3 operator/(v3 a, float f)
 	return ret;
 }
 
-static v3& operator/=(v3& a, float f)
+static v3& operator/=(v3& a, f32 f)
 {
 	a = a / f;
 	return a;
@@ -587,7 +686,7 @@ static bool operator!=(v3 a, v3 b)
 	return !(a == b);
 }
 
-static v3 operator*(float scalar, v3 a)
+static v3 operator*(f32 scalar, v3 a)
 {
 	v3 ret;
 	ret.x = scalar * a.x;
@@ -611,7 +710,7 @@ static v4 V4()
 	return ret;
 }
 
-static v4 V4(float a, float x, float y, float z)
+static v4 V4(f32 a, f32 x, f32 y, f32 z)
 {
 	v4 ret;
 	ret.a = a;
@@ -620,14 +719,14 @@ static v4 V4(float a, float x, float y, float z)
 	ret.b = z;
 	return ret;
 }
-static v4 V4(float a, v3 rgb)
+static v4 V4(f32 a, v3 rgb)
 {
 	v4 ret;
 	ret.a = a;
 	ret.rgb = rgb;
 	return ret;
 }
-static v4 V4(v3 xyz, float w)
+static v4 V4(v3 xyz, f32 w)
 {
 	v4 ret;
 	ret.w = w;
@@ -668,7 +767,7 @@ static v4& operator-=(v4 &a, v4 b)
 	return a;
 }
 
-static v4 operator*(float f, v4 other)
+static v4 operator*(f32 f, v4 other)
 {
 	v4 ret;
 	ret.a = f*other.a;
@@ -678,7 +777,7 @@ static v4 operator*(float f, v4 other)
 	return ret;
 }
 
-static v4 operator*(v4 a, float f)
+static v4 operator*(v4 a, f32 f)
 {
 	v4 ret;
 	ret.a = a.a * f;
@@ -688,7 +787,7 @@ static v4 operator*(v4 a, float f)
 	return ret;
 }
 
-static v4& operator*=(v4 &a, float f)
+static v4& operator*=(v4 &a, f32 f)
 {
 	a = a * f;
 	return a;
@@ -710,7 +809,7 @@ static v4& operator*=(v4 &a, v4 b)
 	return a;
 }
 
-static v4 operator/(v4 a, float f)
+static v4 operator/(v4 a, f32 f)
 {
 	v4 ret;
 	ret.a = a.a / f;
@@ -720,7 +819,7 @@ static v4 operator/(v4 a, float f)
 	return ret;
 }
 
-static v4& operator/= (v4 &a, float f)
+static v4& operator/= (v4 &a, f32 f)
 {
 	a = a / f;
 	return a;

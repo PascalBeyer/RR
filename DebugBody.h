@@ -668,35 +668,32 @@ static void WriteDebugVariables()
 	frameArena->current = data;
 }
 
-#if 0 // welp this kind of allocator is really terrible I guess
-static void TestAllocator()
+// welp this kind of allocator is really terrible I guess (fixedSizePool)
+// this one is fine
+#if 1
+static void TestAllocator(BuddyAllocator *buddyAlloc)
 {
 	RandomSeries series = { RandomSeed() };
-	const u32 sizeOfTest = 1;
+	const u32 sizeOfTest = 100;
 	u8 *allocated[sizeOfTest];
 	u32 numberOfAllocatedBytes = 0;
 	for (u32 i = 0; i < sizeOfTest; i++)
 	{
-		u32 a = RandomU32(&series) % ((1 << 23) - 1);
-		allocated[i] = DynamicAlloc(alloc, u8, a);
+		u32 a = (RandomU32(&series) % MegaBytes(3)) + 1;
+		allocated[i] = (u8 *)BuddyAlloc(buddyAlloc, a);
 		numberOfAllocatedBytes += a;
 	}
-
+#if 1
 	for (u32 i = 0; i < 1000000000; i++)
 	{
-		u32 index = RandomU32(&series) % sizeOfTest;
+		u32 index = (RandomU32(&series) % sizeOfTest);
 
-		DynamicFree(alloc, allocated[index]);
+		BuddyFree(buddyAlloc, allocated[index]);
 
-		u32 allocatorSpill = 0;
-		for (u32 k = 0; k < 256; k++)
-		{
-			for (auto it = alloc->pools[k]; it; it = it->next) allocatorSpill += ((k + 1) << 15);
-		}
-
-		u32 a = RandomU32(&series) % ((1 << 23) - 1);
-		allocated[index] = DynamicAlloc(alloc, u8, a);
+		u32 a = (RandomU32(&series) % MegaBytes(3)) + 1;
+		allocated[index] = (u8 *)BuddyAlloc(buddyAlloc, a);
 	}
+#endif
 }
 #endif 
 
