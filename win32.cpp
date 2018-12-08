@@ -41,18 +41,11 @@ static ImageBuffer globalImageBuffer;
 static LPDIRECTSOUNDBUFFER globalSoundBuffer;
 static MouseInput globalMouseInput;
 static BITMAPINFO globalInfo;
-static GameState gameState;
+
 static WorkHandler workHandler;
 static i64 globalPerformanceCountFrequency;
 static HANDLE semaphoreHandle;
-static GLuint globalTextureHandle;
-static OpenGLInfo openGLInfo;
 static HWND window;
-
-Arena *constantArena;
-Arena *frameArena;
-Arena *workingArena;
-BuddyAllocator *alloc;
 
 static void FreeFile(File file)
 {
@@ -99,7 +92,7 @@ static File LoadFile(char *fileName)
 
 	File result;
 	result.fileSize = size;
-	result.memory = memory;
+	result.memory = (u8 *)memory;
 	return result;
 }
 
@@ -140,7 +133,7 @@ static File LoadFile(char *fileName, void *dest, u32 destSize)
 
 	File result;
 	result.fileSize = size;
-	result.memory = memory;
+	result.memory = (u8 *)memory;
 	return result;
 }
 
@@ -176,7 +169,7 @@ static File LoadFile(char *fileName, Arena *arena)
 	}
 	File result;
 	result.fileSize = size;
-	result.memory = memory;
+	result.memory = (u8 *)memory;
 	return result;
 }
 
@@ -206,6 +199,31 @@ static bool WriteEntireFile(char * fileName, File file) //zero terminated
 	}
 	return result;
 
+}
+
+// note path ending in '/' filetype includes '.'. Strings get loaded into arenaForStrings
+static StringArray FindAllFiles(char *path, char *fileType, Arena *arenaForStrings)
+{
+	String searchString = FormatCString("%c**%c*", path, fileType);
+
+	Arena *arena = PushArena(frameArena, 8000);
+
+	BeginArray(arena, String, ret);
+	WIN32_FIND_DATAA data = {};
+	HANDLE handle = FindFirstFile((char *)searchString.data, &data);
+	if (handle != INVALID_HANDLE_VALUE)
+	{
+		*PushStruct(arena, String) = S(data.cFileName, arenaForStrings);
+		
+		while (FindNextFile(handle, &data))
+		{
+			*PushStruct(arena, String) = S(data.cFileName, arenaForStrings);
+		}
+	}
+
+	EndArray(arena, String, ret);
+
+	return ret;
 }
 
 static void initializeImageBuffer(BITMAPINFO *info, ImageBuffer *buffer, int width, int height)
@@ -835,8 +853,6 @@ static void HandleWindowsMassages(KeyMessageBuffer *buffer) //todo make this buf
 			KeyStateMessage keyMessage;
 			keyMessage.flag = KeyState_Down | KeyState_PressedThisFrame;
 			keyMessage.key = Key_rightMouse;
-
-			
 			DispatchKeyMessage(buffer, keyMessage);
 		}break;
 		case WM_RBUTTONUP:
@@ -846,14 +862,27 @@ static void HandleWindowsMassages(KeyMessageBuffer *buffer) //todo make this buf
 			keyMessage.key = Key_rightMouse;
 			DispatchKeyMessage(buffer, keyMessage);
 		}break;
-
+		case WM_MBUTTONDOWN:
+		{
+			KeyStateMessage keyMessage;
+			keyMessage.flag = KeyState_Down | KeyState_PressedThisFrame;
+			keyMessage.key = Key_middleMouse;
+			DispatchKeyMessage(buffer, keyMessage);
+		}break;
+		case WM_MBUTTONUP:
+		{
+			KeyStateMessage keyMessage;
+			keyMessage.flag = KeyState_Up | KeyState_ReleasedThisFrame;
+			keyMessage.key = Key_middleMouse;
+			DispatchKeyMessage(buffer, keyMessage);
+		}break;
 		case WM_MOUSEWHEEL:
 		{
 			u32 fwKeys = GET_KEYSTATE_WPARAM(message.wParam);
 			int zDelta = GET_WHEEL_DELTA_WPARAM(message.wParam);
 
 			KeyStateMessage keyMessage;
-			keyMessage.flag = KeyState_PressedThisFrame;
+			keyMessage.flag = KeyState_PressedThisFrame | KeyState_Down;
 			keyMessage.key = (zDelta > 0) ? Key_mouseWheelForward : Key_mouseWheelBack;
 
 			DispatchKeyMessage(buffer, keyMessage);
@@ -994,11 +1023,9 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
 	u32 workingMemorySize = MegaBytes(5);
 
 	void *constantMemory = VirtualAlloc(0, constantMemorySize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-	constantArena = InitArena(constantMemory, constantMemorySize);
+	Arena *constantArena = InitArena(constantMemory, constantMemorySize);
 	void *frameMem = VirtualAlloc(0, frameMemorySize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 	frameArena = InitArena(frameMem, frameMemorySize);
-	void *workingMemory = VirtualAlloc(0, workingMemorySize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-	workingArena = InitArena(workingMemory, workingMemorySize);
 
 	alloc = PushStruct(constantArena, BuddyAllocator);
 	*alloc = CreateBuddyAllocator(constantArena, MegaBytes(512), KiloBytes(64));
@@ -1006,7 +1033,6 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
 	//TestAllocator(&buddyAlloc);
 
 	void *debugMemory = VirtualAlloc(0, MegaBytes(300), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-	//DWORD asd = GetLastError();
 	globalDebugState.arena = InitArena(debugMemory, MegaBytes(300));
 	
 	const u32 inputBufferSize = 100;
@@ -1032,7 +1058,6 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
 			u32 pushBufferSize = MegaBytes(4);
 			void* pushBuffer = VirtualAlloc(0, pushBufferSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 			RenderCommands renderCommands = {};
-			renderCommands.focalLength = 1.0f;
 			renderCommands.maxBufferSize = pushBufferSize;
 			renderCommands.pushBufferSize = 0;
 			renderCommands.pushBufferBase = (u8 *)pushBuffer;
@@ -1071,12 +1096,10 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
 			LARGE_INTEGER timeCounter;
 			QueryPerformanceCounter(&timeCounter);
 
-			gameState = InitGame(windowWidth, windowHeight, &workHandler);
-
-			console.state = &gameState;
-
 			InitDebug();
-			
+
+			gameState = InitGame(windowWidth, windowHeight, &workHandler, constantArena);
+
 			while (running)
 			{	
 				if (globalGamePaused)
@@ -1138,7 +1161,7 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
 				}
 				
 #if 1
-				RenderGroup renderGroup = InitRenderGroup(gameState.assetHandler, &renderCommands);
+				RenderGroup renderGroup = InitRenderGroup(&gameState.assetHandler, &renderCommands);
 				RenderGroup *rg = &renderGroup;
 				Font font = gameState.font;
 
@@ -1157,8 +1180,9 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
 
 				PushString(rg, V2(20.1f, 10.1f), s, 20, font);
 				
+				PushRenderSetup(rg, {}, V3(), Setup_Orthogonal | Setup_ZeroToOne);
 				
-				//DrawDebugRecords(rg, gameState.font, targetSecondsPerFrame, input);
+				DrawDebugRecords(rg, gameState.font, targetSecondsPerFrame, input);
 				//DrawTweekers(rg, font);
 
 #endif
@@ -1169,8 +1193,9 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
 				dim = win32GetWindowDimension(window);
 				displayImageBuffer(deviceContext);
 
+				globalDebugState.firstFrame = false;
+
 				Clear(frameArena);
-				Clear(workingArena);
 			}
 
 			//ClipCursor(NULL);
@@ -1179,6 +1204,6 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
 }
 //todo clean this file up really good....
 
-static u32 const DebugRecordsAmount = __COUNTER__;
-static DebugBlockInfo debugInfoArray[DebugRecordsAmount];
+static u32 const debugRecordsAmount = __COUNTER__;
+static DebugBlockInfo debugInfoArray[debugRecordsAmount];
 

@@ -494,6 +494,13 @@ static Quaternion operator*(Quaternion a, Quaternion b)
 	ret.v = a.r * b.v + b.r * a.v + CrossProduct(a.v, b.v);
 	return ret;
 }
+
+static Quaternion &operator*=(Quaternion &a, Quaternion b)
+{
+	a = a * b;
+	return a;
+}
+
 static Quaternion operator+(Quaternion a, Quaternion b)
 {
 	Quaternion ret;
@@ -567,9 +574,150 @@ static Quaternion Inverse(Quaternion a)
 	return ret;
 }
 
+struct m3x3
+{
+	f32 a[3][3];
+};
+
+static m3x3 Invert(m3x3 m)
+{
+	double det =	m.a[0][0] * (m.a[1][1] * m.a[2][2] - m.a[2][1] * m.a[1][2]) -
+					m.a[0][1] * (m.a[1][0] * m.a[2][2] - m.a[1][2] * m.a[2][0]) +
+					m.a[0][2] * (m.a[1][0] * m.a[2][1] - m.a[1][1] * m.a[2][0]);
+
+	if (det == 0.0) return {};
+
+	double invdet = 1.0 / det;
+
+	m3x3 minv;
+	minv.a[0][0] = (f32)((m.a[1][1] * m.a[2][2] - m.a[2][1] * m.a[1][2]) * invdet);
+	minv.a[0][1] = (f32)((m.a[0][2] * m.a[2][1] - m.a[0][1] * m.a[2][2]) * invdet);
+	minv.a[0][2] = (f32)((m.a[0][1] * m.a[1][2] - m.a[0][2] * m.a[1][1]) * invdet);
+	minv.a[1][0] = (f32)((m.a[1][2] * m.a[2][0] - m.a[1][0] * m.a[2][2]) * invdet);
+	minv.a[1][1] = (f32)((m.a[0][0] * m.a[2][2] - m.a[0][2] * m.a[2][0]) * invdet);
+	minv.a[1][2] = (f32)((m.a[1][0] * m.a[0][2] - m.a[0][0] * m.a[1][2]) * invdet);
+	minv.a[2][0] = (f32)((m.a[1][0] * m.a[2][1] - m.a[2][0] * m.a[1][1]) * invdet);
+	minv.a[2][1] = (f32)((m.a[2][0] * m.a[0][1] - m.a[0][0] * m.a[2][1]) * invdet);
+	minv.a[2][2] = (f32)((m.a[0][0] * m.a[1][1] - m.a[1][0] * m.a[0][1]) * invdet);
+
+	return minv;
+}
+
+
+static m3x3 Rows3x3(v3 X, v3 Y, v3 Z) // zeilen
+{
+	m3x3 R =
+	{
+		{
+			{ X.x, X.y, X.z},
+			{ Y.x, Y.y, Y.z},
+			{ Z.x, Z.y, Z.z},
+		}
+	};
+
+	return(R);
+}
+
+static m3x3 Columns3x3(v3 X, v3 Y, v3 Z) // spalten
+{
+	m3x3 R =
+	{
+		{
+			{ X.x, Y.x, Z.x},
+			{ X.y, Y.y, Z.y },
+			{ X.z, Y.z, Z.z },
+		}
+	};
+
+	return(R);
+}
+
+
+static v3 operator*(m3x3 a, v3 p)
+{
+	v3 r;
+	// second one is row 
+	r.x = p.x*a.a[0][0] + p.y*a.a[0][1] + p.z*a.a[0][2];
+	r.y = p.x*a.a[1][0] + p.y*a.a[1][1] + p.z*a.a[1][2];
+	r.z = p.x*a.a[2][0] + p.y*a.a[2][1] + p.z*a.a[2][2];
+
+	return r;
+}
+
+
+static m3x3 operator*(m3x3 A, m3x3 B)
+{
+	m3x3 R = {};
+
+	for (int r = 0; r < 3; ++r)
+	{
+		for (int c = 0; c < 3; ++c)
+		{
+			for (int i = 0; i < 3; ++i)
+			{
+				R.a[r][c] += A.a[r][i] * B.a[i][c];
+			}
+		}
+	}
+	return R;
+}
+
+
+static m3x3 XRotation3x3(float Angle)
+{
+	float c = cosf(Angle);
+	float s = sinf(Angle);
+
+	m3x3 R =
+	{
+		{ 
+			{ 1, 0, 0},
+			{ 0, c,-s},
+			{ 0, s, c},
+		},
+	};
+
+	return(R);
+}
+
+static m3x3 YRotation3x3(float Angle)
+{
+	float c = cosf(Angle);
+	float s = sinf(Angle);
+
+	m3x3 R =
+	{
+		{ 
+			{ c, 0, s },
+			{ 0, 1, 0 },
+			{ -s, 0, c },
+		},
+	};
+
+	return(R);
+}
+
+static m3x3 ZRotation3x3(float Angle)
+{
+	float c = cosf(Angle);
+	float s = sinf(Angle);
+
+	m3x3 R =
+	{
+		{
+			{ c,-s, 0 },
+			{ s, c, 0 },
+			{ 0, 0, 1 },
+		},
+	};
+
+	return(R);
+}
+
+
 struct m4x4
 {
-	float a[4][4];
+	f32 a[4][4];
 };
 
 
@@ -628,6 +776,13 @@ static v3 operator*(m4x4 A, v3 P)
 	return (R.xyz / R.w);
 }
 
+
+static v3 TransformDirection(m4x4 a, v3 d)
+{
+	v4 R = a * V4(d, 0.0f);
+
+	return (R.xyz);
+}
 
 static m4x4 Identity(void)
 {
@@ -746,7 +901,7 @@ static m4x4 Projection(float aspectWidthOverHeight, float focalLength)
 	return(R);
 }
 
-static m4x4 Columns3x3(v3 X, v3 Y, v3 Z)
+static m4x4 Columns4x4(v3 X, v3 Y, v3 Z)
 {
 	m4x4 R =
 	{
@@ -759,14 +914,16 @@ static m4x4 Columns3x3(v3 X, v3 Y, v3 Z)
 	return(R);
 }
 
-static m4x4 Rows3x3(v3 X, v3 Y, v3 Z)
+static m4x4 Rows4x4(v3 X, v3 Y, v3 Z)
 {
 	m4x4 R =
 	{
-		{ { X.x, X.y, X.z, 0 },
+		{ 
+		{ X.x, X.y, X.z, 0 },
 		{ Y.x, Y.y, Y.z, 0 },
 		{ Z.x, Z.y, Z.z, 0 },
-		{ 0,   0,   0, 1 } }
+		{ 0,   0,   0,	 1 } 
+		}
 	};
 
 	return(R);
@@ -797,7 +954,7 @@ static v3 GetRow(m4x4 A, u32 R)
 
 static m4x4 CameraTransform(v3 X, v3 Y, v3 Z, v3 P)
 {
-	m4x4 R = Rows3x3(X, Y, Z);
+	m4x4 R = Rows4x4(X, Y, Z);
 	R = Translate(R, -(R*P));
 	return(R);
 }
@@ -972,6 +1129,103 @@ static m4x4 ScaleMatrix(f32 f)
 	return ret;
 }
 
+static v3 SolveLinearSystem(v3 column1, v3 column2, v3 column3, v3 c)
+{
+	m3x3 m = Columns3x3(column1, column2, column3);
+	m3x3 inv = Invert(m);
+	m3x3 id = m * inv;
+
+	return inv * c;
+}
+
+
+
+#if 0
+static v3 SolveLinearSystem(v3 row1, v3 row2, v3 row3, v3 c, b32 *success)
+{
+	v3 ret;
+
+	v3 c1 = V3(row1.x, row2.x, row3.x);
+	v3 c2 = V3(row1.y, row2.y, row3.y);
+	v3 c3 = V3(row1.z, row2.z, row3.z);
+
+LinearSystemReset3:
+	if (c1.x)
+	{
+		f32 c1Inv = 1.0f / c1.x;
+
+		c.x *= c1Inv;
+		c.y -= (c2.x * c.x);
+		c.z -= (c3.x * c.x);
+
+		c1 *= c1Inv;
+		c2 -= c2.x * c1;
+		c3 -= c3.x * c1;
+
+	} 
+	else if (c2.x)
+	{
+		f32 tempf = c.x;
+		c.x = c.y;
+		c.y = tempf;
+
+		v3 temp = c1;
+		c1 = c2;
+		c2 = temp;
+		goto LinearSystemReset3;
+	}
+	else if(c3.x)
+	{
+		f32 tempf = c.x;
+		c.x = c.z;
+		c.z = tempf;
+
+		v3 temp = c1;
+		c1 = c3;
+		c3 = temp;
+		goto LinearSystemReset3;
+	}
+	else
+	{
+		//...
+	}
+
+LinearSystemReset2:
+	if (c2.y)
+	{
+		f32 c2Inv = 1.0f / c2.y;
+
+		c.y *= c2Inv;
+		c.z -= (c3.x * c.y);
+
+		c2 *= c2Inv;
+		c3 -= c3.x * c2;
+	}
+	else if (c3.y)
+	{
+		f32 tempf = c.y;
+		c.y = c.z;
+		c.z = tempf;
+
+		v3 temp = c2;
+		c2 = c3;
+		c3 = temp;
+		goto LinearSystemReset2;
+	}
+	else
+	{
+		//...
+	}
+
+	if (c3.z)
+	{
+		f32 c3Inv = 1.0f / c3.z;
+		c3.z = 1.0f;
+		c.z *= c3Inv;
+	}
+
+}
+#endif
 static m4x4 QuaternionToMatrix(Quaternion a)
 {
 

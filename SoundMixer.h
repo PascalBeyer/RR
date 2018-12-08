@@ -205,7 +205,7 @@ void PlaySound(SoundMixer *mixer, Sound sound, u32 soundIndex)
 	Add(&mixer->list, 1.0f, 1.0f, 0, sound, soundIndex);
 }
 
-void ToOutput(SoundMixer *mixer, SoundBuffer *buffer)
+void ToOutput(SoundMixer *mixer, SoundBuffer *buffer, Arena *workingArena)
 {
 	Clear(workingArena);
 

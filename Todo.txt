@@ -1,36 +1,42 @@
 
 
 Make a good general purpose allocator // done?
-Add the standart lighting to rendering. // done ?
 reenable shadow mapping // done?
 do a good StoF, so that we have a better mesh. // done ? (at least for now)
-Are meshes assets? // no!
 make the meshstruct work like it does in soko? having a vertex pool, an index pool and then have list {start index, amount, materialIndex}? // yes!, and now they do.
 Make own mesh format and material format, that respects how the game wants to think of them // done ?
-Asset system has to handle materials. // no
+do tileMap editor // done?
+somehow the colors of that consoleTextField got mixed up.... it seems that r and b are switched, why no where else? // done?
+Make everything an entity, like they have in Sokoban? // no.
+Maybe make a catalog system, which looks at whats there on startup // done?
+Move to front Asset system? // done?
+Make meshes assets again. // done?
 
-Make everything an entity, like they have in Sokoban?
-Move to front Asset system? 
-
+Asset:
 how to handle textured and untextured entities? Should there be such a thing as untextured entity, probably not.
-
-associating data to triangles, to open gl... like normals.
-
-lets make us be able to produce entities. (ground tiles.)
-we are gonna have generation of tile, that have some values that you can tweek.
-
-
-
+Asset system has to handle materials. // no, well maybe
 Get PNG loader
+make font into asset, would also make the draw String call way better, also solves the problem where I do not currently know where it is supposed to be stored
+
+
+
+Tweekers:
+make tweek search the file, if no loaded tweeker variable is found. maybe write out the tweekerfile instead of writing out all tweeker values.
+make tweeker work based on filenames as well I.e. tweek editor meshSelectColor instead of having to use editorMeshSelectColor
+maybe load all tweekers on startup?
+
+MISC:
+Do the "start" of a level and make it so we can save levels. Should we do like a place units sequence?
+maybe we place the goals
+reduce api calls in opengl
+associating data to triangles, to open gl... like normals.
 
 make debug Ui for amount of memory used.
 
-somehow the colors of that consoleTextField got mixed up.... it seems that r and b are switched, why no where else?
 
-round based stuff
-
-
-
-we want to do like space chem, "input" output, where input are things like trees, or coal, or stone and output is a zone, that gets taken
-
-
+EDITOR : 
+save (crtl-s)
+copy paste
+undo, redo, 
+camera for tilemap editor, 
+(brightness/ negative colors?)

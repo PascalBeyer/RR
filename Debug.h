@@ -6,7 +6,7 @@
 
 #define TimedBlock TimedBlock_ ___timed##__FILE__##__LINE__ = TimedBlock_(__FILE__, __LINE__, __FUNCTION__, __COUNTER__)
 
-#define MAX_DEBUG_EVENT_COUNT (65536)
+#define MAX_DEBUG_EVENT_COUNT (655356)
 
 //todo make debug stuff thread local?
 enum DebugEvenType
@@ -19,7 +19,7 @@ enum DebugEvenType
 struct DebugEvent //todo : make this more of a tagged union?
 {
 	u32 cycles;
-	u32 hitCount;
+	u32 hitMultiplicity;
 	u16 debugRecordIndex;
 	u16 type;
 };
@@ -30,10 +30,24 @@ struct DebugBlockInfo
 	char *file;
 	u32 line;
 	u32 color;
+}; 
+extern u32 const debugRecordsAmount;
+extern DebugBlockInfo debugInfoArray[];
+
+#define DEBUG_AMOUNT_OF_DEBUG_FRAMES 30
+
+struct FrameTimeInfo
+{
+	u32 cycles;
+	u32 hitCount;
 };
 
-struct SplittBlock;
-struct DebugFrameList;
+DefineArray(FrameTimeInfo);
+struct DebugFrame
+{
+	FrameTimeInfoArray times;
+};
+
 
 enum TweekerType
 {
@@ -48,6 +62,58 @@ enum TweekerType
 
 };
 
+union TweekerValue
+{
+	u32 u;
+	f32 f;
+	v2 vec2;
+	v3 vec3;
+	v4 vec4;
+	b32 b;
+};
+
+static TweekerValue CreateTweekerValue()
+{
+	return {};
+}
+static TweekerValue CreateTweekerValue(u32 u)
+{
+	TweekerValue ret = {};
+	ret.u = u;
+	return ret;
+}
+static TweekerValue CreateTweekerValue(f32 f)
+{
+	TweekerValue ret = {};
+	ret.f = f;
+	return ret;
+}
+static TweekerValue CreateTweekerValue(v2 vec2)
+{
+	TweekerValue ret = {};
+	ret.vec2 = vec2;
+	return ret;
+}
+static TweekerValue CreateTweekerValue(v3 vec3)
+{
+	TweekerValue ret = {};
+	ret.vec3 = vec3;
+	return ret;
+}
+static TweekerValue CreateTweekerValue(v4 vec4)
+{
+	TweekerValue ret = {};
+	ret.vec4 = vec4;
+	return ret;
+}
+static TweekerValue CreateTweekerValue(b32 b)
+{
+	TweekerValue ret = {};
+	ret.b = b;
+	return ret;
+}
+
+
 struct Tweeker //todo stupid way for now, if this is to slow hash table. @scope speedup, part3 minute 30
 {
 	TweekerType type;
@@ -56,6 +122,7 @@ struct Tweeker //todo stupid way for now, if this is to slow hash table. @scope 
 
 	union // could make this not a union, but its okay like this we can have an array and maybe hash easier later
 	{
+		TweekerValue value;
 		u32 u;
 		f32 f;
 		v2 vec2;
@@ -65,54 +132,28 @@ struct Tweeker //todo stupid way for now, if this is to slow hash table. @scope 
 	};
 };
 
-#define Tweekable(type, name) type name = *(type *)MaybeAddTweekerReturnValue(#name, Tweeker_##type, __FUNCTION__);
-static void *MaybeAddTweekerReturnValue(char *_name, TweekerType type, char *function);
-
-struct Arena;
-
-struct TweekerDynamicArray
+static Tweeker CreateTweeker(TweekerType type, char *name, TweekerValue value)
 {
-	Tweeker *data;
-	Arena *arena;
-	u32 amount;
-	u32 capacity;
+	Tweeker ret;
+	//ret.function;
+	ret.name = CreateString(name);
+	ret.type = type;
+	ret.value = value;
 
-	Tweeker operator[] (u32 i)
-	{
-		Assert(i < amount);
-		return data[i];
-	}
-};
-
-static Tweeker *ArrayAdd(TweekerDynamicArray *arr, Tweeker t)
-{
-	if (arr->amount + 1 < arr->capacity)
-	{
-		(arr->data)[arr->amount++] = t;
-		return arr->data + (arr->amount - 1);
-	}
-	
-	u32 newCapacity = 2 * arr->capacity + 1;
-
-	Tweeker *newData = DynamicAlloc(Tweeker,  2 * arr->capacity + 1);
-	memcpy(newData, arr->data, arr->capacity * sizeof(Tweeker));
-	arr->capacity = 2 * arr->capacity + 1;
-	DynamicFree(arr->data);
-	arr->data = newData;
-	arr->data[arr->amount++] = t;
-
-	return (arr->data + (arr->amount - 1));
-}
-
-static TweekerDynamicArray CreateDynamicArray(Arena *arena, u32 capacity = 8)
-{
-	TweekerDynamicArray ret;
-	ret.data = DynamicAlloc(Tweeker, capacity);
-	ret.arena = arena;
-	ret.amount = 0;
-	ret.capacity = capacity;
 	return ret;
 }
+
+
+#define Tweekable1(type, name, initalValue) type name = *(type *)MaybeAddTweekerReturnValue(#name, Tweeker_##type, __FUNCTION__, CreateTweekerValue(initalValue));
+#define Tweekable2(type, name) type name = *(type *)MaybeAddTweekerReturnValue(#name, Tweeker_##type, __FUNCTION__);
+
+
+#define Tweekable(...) Expand(GET_MACRO3(__VA_ARGS__, Tweekable1, Tweekable2, Die)(__VA_ARGS__))
+
+static void *MaybeAddTweekerReturnValue(char *_name, TweekerType type, char *function);
+static void *MaybeAddTweekerReturnValue(char *_name, TweekerType type, char *function, TweekerValue value);
+
+DefineDynamicArray(Tweeker);
 
 
 struct File;
@@ -144,30 +185,25 @@ DefineArray(DebugUIElement);
 
 struct DebugState
 {
-	DebugEvent events[2][MAX_DEBUG_EVENT_COUNT]; // reseting double buffer
+	b32 paused;
+	b32 firstFrame;
+	b32 drawDebug;
 
+	u32 eventIndex;
+	u32 amountOfEventsLastFrame;
+	DebugEvent events[DEBUG_AMOUNT_OF_DEBUG_FRAMES][MAX_DEBUG_EVENT_COUNT]; // reseting double buffer
 	Arena *arena;
 
 	File *tweekerFile;
 	TweekerDynamicArray tweekers;
 	
-	u32 eventIndex;
-	u32 eventArrayIndex;
-	u32 lastFramesEventIndex;
-
-	b32 paused;
-
 	DebugUIElementArray uiElements;
 
-	DebugFrameList *frameHead; // inserting into Tail, so tail is the newest
-	DebugFrameList *frameTail; // todo : make this an array again?
-	DebugFrameList *frameFree;
+	DebugFrame debugFrames[DEBUG_AMOUNT_OF_DEBUG_FRAMES];
+	u32 rollingFrameIndex;
 };
 
-
 static DebugState globalDebugState;
-extern u32 const DebugRecordsAmount;
-extern DebugBlockInfo debugInfoArray[];
 
 static Tweeker *GetTweeker(String name)
 {
@@ -238,20 +274,25 @@ static String TweekerToString(Tweeker t, Arena *arena = frameArena)
 
 inline void ResetDebugState()
 {
-	globalDebugState.lastFramesEventIndex = globalDebugState.eventIndex;
+	if (globalDebugState.paused)
+	{
+		globalDebugState.eventIndex = 0;
+		return;
+	}
+	globalDebugState.amountOfEventsLastFrame = globalDebugState.eventIndex;
 	globalDebugState.eventIndex = 0;
-	globalDebugState.eventArrayIndex = (globalDebugState.eventArrayIndex + 1) % 2;
+	globalDebugState.rollingFrameIndex = (globalDebugState.rollingFrameIndex + 1) % DEBUG_AMOUNT_OF_DEBUG_FRAMES;
 }
 
 inline void RecordDebugEvent(u32 index, DebugEvenType type, u32 hitCounter)
 {
-	DebugEvent *event = globalDebugState.events[globalDebugState.eventArrayIndex] + globalDebugState.eventIndex;
+	DebugEvent *event = &globalDebugState.events[globalDebugState.rollingFrameIndex][globalDebugState.eventIndex];
 	++globalDebugState.eventIndex;
 	Assert(globalDebugState.eventIndex < MAX_DEBUG_EVENT_COUNT);
 	event->cycles = (u32)__rdtsc();
 	event->debugRecordIndex = index;
 	event->type = type;
-	event->hitCount = hitCounter;
+	event->hitMultiplicity = hitCounter;
 }
 
 struct TimedBlock_

@@ -3,13 +3,13 @@
 
 enum KeyStateFlag
 {
-	KeyState_Up = 0x0,
-	KeyState_Down = 0x1,
-	KeyState_ReleasedThisFrame = 0x2,
-	KeyState_PressedThisFrame = 0x4,
-	KeyState_Repeaded = 0x8,
-	KeyState_ShiftDown = 0x10,
-	KeyState_ControlDown = 0x20
+	KeyState_Up = 0x1,
+	KeyState_Down = 0x2,
+	KeyState_ReleasedThisFrame = 0x4,
+	KeyState_PressedThisFrame = 0x8,
+	KeyState_Repeaded = 0x10,
+	KeyState_ShiftDown = 0x20,
+	KeyState_ControlDown = 0x40
 };
 
 
@@ -18,6 +18,8 @@ enum KeyEnum
 	Key_invalid = 0x0,
 	Key_leftMouse = 0x1,
 	Key_rightMouse,
+
+	Key_middleMouse = 0x04,
 
 	Key_backSpace = 0x8,
 	Key_tab = 0x9,
@@ -70,11 +72,22 @@ enum KeyEnum
 	Key_y,
 	Key_z,
 
-	Key_plus = 0xBB,
-	Key_comma = 0xBC,
-	Key_minus = 0xBD,
-	Key_dot = 0xBE,
-
+	Key_num0 = 0x60,
+	Key_num1,
+	Key_num2,
+	Key_num3,
+	Key_num4,
+	Key_num5,
+	Key_num6,
+	Key_num7,
+	Key_num8,
+	Key_num9,
+	Key_numMultiply,
+	Key_numAdd,
+	Key_numSeperator,
+	Key_numSubtract,
+	Key_numDot,
+	key_numDivide,
 
 	Key_F1 = 0x70,
 	Key_F2,
@@ -89,6 +102,12 @@ enum KeyEnum
 	Key_F11,
 	Key_F12,
 
+	Key_plus = 0xBB,
+	Key_comma = 0xBC,
+	Key_minus = 0xBD,
+	Key_dot = 0xBE,
+
+	
 	//non keyBord Key events
 	 Key_mouseWheelForward = 0xFF,
 	 Key_mouseWheelBack,
@@ -123,6 +142,9 @@ struct DEBUGKeyTracker
 	b32 dDown = false;
 	b32 aDown = false;
 	b32 spaceDown = false;
+	b32 middleDown = false;
+	b32 middleBack = false;
+	b32 middleForward = false;
 };
 
 struct Input
@@ -153,9 +175,108 @@ static void UpdateInput(Input *input, MouseInput mouseInput, int windowWidth, in
 	input->buffer = messages;
 }
 
-static char GetPressedChar(Input *input)
+static Char KeyToChar(u32 keyCode, bool shiftDown)
 {
-	Die;
+	if (shiftDown)
+	{
+		switch (keyCode)
+		{
+		case Key_0:
+		{
+			return '=';
+		}break;
+		case Key_1:
+		{
+			return '!';
+		}break;
+		case Key_2:
+		{
+			return '"';
+		}break;
+		case Key_3:
+		{
+			return '§';
+		}break;
+		case Key_4:
+		{
+			return '$';
+		}break;
+		case Key_5:
+		{
+			return '%';
+		}break;
+		case Key_6:
+		{
+			return '&';
+		}break;
+		case Key_7:
+		{
+			return '/';
+		}break;
+		case Key_8:
+		{
+			return '(';
+		}break;
+		case Key_9:
+		{
+			return ')';
+		}break;
+		case Key_dot:
+		{
+			return ':';
+		}break;
+		case Key_comma:
+		{
+			return ';';
+		}break;
+		case Key_minus:
+		{
+			return '_';
+		}break;
+		}
+
+	}
+	else
+	{
+		switch (keyCode)
+		{
+		case Key_dot:
+		{
+			return '.';
+		}break;
+		case Key_comma:
+		{
+			return ',';
+		}break;
+		case Key_minus:
+		{
+			return '-';
+		}break;
+		}
+	}
+
+	if (Key_a <= keyCode && keyCode <= Key_z)
+	{
+		u32 shiftedKeyCode = keyCode - Key_a;
+		if (shiftDown)
+		{
+			return (shiftedKeyCode + 'A');
+		}
+		else
+		{
+			return (shiftedKeyCode + 'a');
+		}
+	}
+	else if (Key_0 <= keyCode &&  keyCode <= Key_9)
+	{
+		u32 shiftedKeyCode = keyCode - Key_0;
+		return (shiftedKeyCode + 0x30);
+	}
+	else if (keyCode == Key_space)
+	{
+		return ' ';
+	}
+	return 0;
 }
 
 #endif

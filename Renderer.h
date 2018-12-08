@@ -59,6 +59,7 @@ struct EntryTriangleMesh
 	Quaternion orientation;
 	v3 pos;
 	f32 scale;
+	v4 scaleColor;
 };
 
 struct EntryTexturedQuads
@@ -149,7 +150,7 @@ static void PushRenderSetup(RenderGroup *rg, Camera camera, v3 lightPos, u32 fla
 	{
 	case Setup_Projective:
 	{
-		m4x4 proj = Projection(commands->aspectRatio, commands->focalLength);
+		m4x4 proj = Projection(commands->aspectRatio, camera.focalLength);
 		m4x4 cameraTransform = CameraTransform(camera.basis.d1, camera.basis.d2, camera.basis.d3, camera.pos);
 		ret.projection = proj;
 		ret.cameraTransform = cameraTransform;
@@ -223,19 +224,61 @@ static TexturedQuad GetTexturedQuadMemory(RenderGroup *rg)
 
 static ColoredVertex *GetVertexMemory(RenderGroup *rg, RenderGroupEntryType type)
 { 
-	u32 amount = 0;
-	EntryColoredVertices *currentVertices = NULL;
 	switch (type)
 	{
 	case RenderGroup_EntryLines:
 	{
-		amount = 2;
-		currentVertices = rg->currentLines;
+		if (!rg->currentLines)
+		{
+			EntryColoredVertices *lines = PushRenderEntryType(EntryColoredVertices, EntryLines);
+			lines->maxAmount = 65536;
+			lines->data = PushData(frameArena, ColoredVertex, lines->maxAmount);
+			lines->vertexCount = 0;
+
+			rg->currentLines = lines;
+		}
+
+		u32 amount = 2;
+		auto currentVertices = rg->currentLines;
+		if (currentVertices->vertexCount + amount < currentVertices->maxAmount)
+		{
+			ColoredVertex *ret = currentVertices->data + currentVertices->vertexCount;
+			currentVertices->vertexCount += amount;
+			return ret;
+		}
+		else
+		{
+			rg->currentLines = NULL;
+			return GetVertexMemory(rg, type);
+		}
+
 	}break;
 	case RenderGroup_EntryTriangles:
 	{
-		amount = 3;
-		currentVertices = rg->currentTriangles;
+		if (!rg->currentTriangles)
+		{
+			EntryColoredVertices *triangles = PushRenderEntryType(EntryColoredVertices, EntryTriangles);
+			triangles->maxAmount = 65536;
+			triangles->data = PushData(frameArena, ColoredVertex, triangles->maxAmount);
+			triangles->vertexCount = 0;
+
+			rg->currentTriangles = triangles;
+		}
+
+		u32 amount = 3;
+		auto currentVertices = rg->currentTriangles;
+		if (currentVertices->vertexCount + amount < currentVertices->maxAmount)
+		{
+			ColoredVertex *ret = currentVertices->data + currentVertices->vertexCount;
+			currentVertices->vertexCount += amount;
+			return ret;
+		}
+		else
+		{
+			rg->currentTriangles = NULL;
+			return GetVertexMemory(rg, type);
+		}
+
 	}break;
 	default:
 	{
@@ -243,32 +286,11 @@ static ColoredVertex *GetVertexMemory(RenderGroup *rg, RenderGroupEntryType type
 	}break;
 	}
 
-	if (currentVertices->vertexCount + amount < currentVertices->maxAmount)
-	{
-		ColoredVertex *ret = currentVertices->data + currentVertices->vertexCount;
-		currentVertices->vertexCount += amount;
-		return ret;
-	}
-	else
-	{
-		//todo: allocate new array, send the old one off
-		Die;
-	}
-
 	return NULL;
 }
 static void PushTriangle(RenderGroup *rg, v3 p1, v3 p2, v3 p3, u32 c1, u32 c2, u32 c3)
 {
-	if (!rg->currentTriangles)
-	{
-		EntryColoredVertices *triangles = PushRenderEntryType(EntryColoredVertices, EntryTriangles);
-		triangles->maxAmount = 65536;
-		triangles->data = PushData(frameArena, ColoredVertex, triangles->maxAmount);
-		triangles->vertexCount = 0;
-		
-		rg->currentTriangles = triangles;
-	}
-
+	
 	ColoredVertex *vert = GetVertexMemory(rg, RenderGroup_EntryTriangles);
 	vert[0].pos = p1;
 	vert[1].pos = p2;
@@ -297,41 +319,36 @@ static void PushTriangle(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 color)
 	PushTriangle(rg, p1, p2, p3, V4(1.0f, color));
 }
 
-static void PushTriangleMesh(RenderGroup *rg, TriangleMesh mesh, Quaternion orientation, v3 pos, f32 scale)
+static void PushTriangleMesh(RenderGroup *rg, u32 meshId, Quaternion orientation, v3 pos, f32 scale, v4 scaleColor)
 {
+	TriangleMesh *mesh = GetMesh(rg->assetHandler, meshId);
+
+	if (!mesh) return; // todo think about this, we want this if we redo our mesh write
+
 	EntryTriangleMesh *meshHeader = PushRenderEntry(EntryTriangleMesh);
-	meshHeader->mesh = mesh;
+	meshHeader->mesh = *mesh;
 	meshHeader->orientation = orientation;
-	u32Array arr = PushArray(frameArena, u32, mesh.indexSets.amount);
+	u32Array arr = PushArray(frameArena, u32, mesh->indexSets.amount);
 	for (u32 i = 0; i < arr.amount; i++)
 	{
-		arr[i] = GetTexture(rg->assetHandler, mesh.indexSets[i].mat.bitmapID)->textureHandle;
+		arr[i] = GetTexture(rg->assetHandler, mesh->indexSets[i].mat.bitmapID)->textureHandle;
 	}
 	meshHeader->textureIDs = arr;
 	meshHeader->pos = pos;
 	meshHeader->scale = scale;
+	meshHeader->scaleColor = scaleColor;
 }
 
-static void PushLine(RenderGroup *rg, v3 p1, v3 p2)
+static void PushLine(RenderGroup *rg, v3 p1, v3 p2, u32 color = 0xFFFFFFFF)
 {
-	if (!rg->currentLines)
-	{
-		EntryColoredVertices *lines = PushRenderEntryType(EntryColoredVertices, EntryLines);
-		lines->maxAmount = 1000;
-		lines->data = PushData(frameArena, ColoredVertex, lines->maxAmount);
-		lines->vertexCount = 0;
-
-		rg->currentLines = lines;
-	}
-
 	ColoredVertex *vert = GetVertexMemory(rg, RenderGroup_EntryLines);
 	if (vert)
 	{
 		vert[0].pos = p1;
 		vert[1].pos = p2;
 
-		vert[0].color = 0xFFFFFFFF;
-		vert[1].color = 0xFFFFFFFF;
+		vert[0].color = color;
+		vert[1].color = color;
 	}
 }
 static void PushLine(RenderGroup *rg, v2 p1, v2 p2)
@@ -477,7 +494,7 @@ static void PushRectangle(RenderGroup *rg, v3 pos, v3 vec1, v3 vec2, v4 color)
 	PushQuadrilateral(rg, pos, pos + vec1, pos + vec2, pos + vec1 + vec2, color);
 }
 
-#define Orthogonal_Rectangle_OFFSET 0.5f
+#define Orthogonal_Rectangle_OFFSET 0.0000001f
 
 // note : these are a bit "back" so they render behind the "text" / all bit maps
 static void PushRectangle(RenderGroup *rg, v2 pos, v2 vec1, v2 vec2, v4 color)

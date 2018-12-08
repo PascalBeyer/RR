@@ -8,9 +8,7 @@ struct Arena
 	u32 capacity;
 };
 
-extern Arena *constantArena;
-extern Arena *frameArena;
-extern Arena *workingArena;
+static Arena *frameArena;
 
 #define PushStruct(arena, type) (type *)PushStruct_(arena, sizeof(type))
 #define PushZeroStruct(arena, type) (type *)PushZeroStruct_(arena, sizeof(type))
@@ -18,8 +16,15 @@ extern Arena *workingArena;
 #define PushZeroArray(arena, type, size) {(type *)PushZeroStruct_(arena, (size) * sizeof(type)), (size)}
 #define PushData(arena, type, size) (type *)PushStruct_(arena, (size) * sizeof(type))
 #define PushZeroData(arena, type, size) (type *)PushZeroStruct_(arena, (size) * sizeof(type))
+#define PopStruct(arena, type) *(type *)PopStruct_(arena, sizeof(type))
 
 #define DeferRestore(arena) u8* saveCurrentArenaPtr = arena->current; defer(arena->current = saveCurrentArenaPtr);
+
+static u8 *PopStruct_(Arena *arena, u32 sizeOfType)
+{
+	arena->current -= sizeOfType;
+	return arena->current;
+}
 
 static u8 *PushStruct_(Arena *arena, u32 sizeOfType)
 {
@@ -60,6 +65,12 @@ static Arena *InitArena(void *memory, u32 capacity)
 	return ret;
 }
 
+static Arena *PushArena(Arena *arena, u32 capacity)
+{
+	u32 size = capacity + sizeof(Arena);
+	u8 *data = PushData(arena, u8, size);
+	return InitArena(data, capacity);
+}
 
 static bool IsPowerOfTwo(u32 value)
 {
@@ -135,8 +146,8 @@ static void *BuddyAlloc(BuddyAllocator *alloc, u32 size)
 
 	void *ret = NULL;
 	// todo maybe make this stackless.
-	Clear(workingArena);
-	u32Array stack = PushZeroArray(workingArena, u32, 1);
+	DeferRestore(frameArena);
+	u32Array stack = PushZeroArray(frameArena, u32, 1);
 	while (stack.amount)
 	{
 		u32 currentIndex = stack[stack.amount - 1]; stack.amount--;
@@ -151,8 +162,8 @@ static void *BuddyAlloc(BuddyAllocator *alloc, u32 size)
 			//push left and right neighboor
 			u32 relativeIndex = currentIndex - (1 << depth) + 1; // this is the index in the "row" in the binary tree.
 			u32 childrenIndex = ((1 << (depth + 1)) - 1) + relativeIndex * 2;
-			BuildStaticArray(workingArena, stack, childrenIndex);
-			BuildStaticArray(workingArena, stack, childrenIndex + 1);
+			BuildStaticArray(frameArena, stack, childrenIndex);
+			BuildStaticArray(frameArena, stack, childrenIndex + 1);
 			continue;
 		}
 		
@@ -175,8 +186,8 @@ static void *BuddyAlloc(BuddyAllocator *alloc, u32 size)
 		u32 childrenIndex = ((1 << (depth + 1)) - 1) + relativeIndex * 2;
 
 		alloc->implicitBinaryTree[currentIndex] = Buddy_SplitNode;
-		BuildStaticArray(workingArena, stack, childrenIndex);
-		BuildStaticArray(workingArena, stack, childrenIndex + 1);
+		BuildStaticArray(frameArena, stack, childrenIndex);
+		BuildStaticArray(frameArena, stack, childrenIndex + 1);
 	};
 	Assert(ret);
 
@@ -242,9 +253,10 @@ struct PooledFixedSizeAllocator
 {
 	MemoryPage *pools[DynamicAllocatorRange];
 	ReferanceCountedArena *smallStuffArena;
+	Arena *arena;
 };
 
-extern BuddyAllocator *alloc;
+static BuddyAllocator *alloc;
 
 
 // gives Pages between 2^DynamicAllocatorMinimum to 2^(DynamicAllocatorMinimum) * DynamicAllocatorRange
@@ -286,7 +298,7 @@ static void *PooledFixedSizeAlloc_(PooledFixedSizeAllocator *alloc, u32 size)
 		else
 		{
 			Assert(pageSize >= actualSize);
-			mem = PushData(constantArena, u8, pageSize);
+			mem = PushData(alloc->arena, u8, pageSize);
 		}
 
 		alloc->smallStuffArena = (ReferanceCountedArena *)mem;
@@ -320,7 +332,7 @@ static void *PooledFixedSizeAlloc_(PooledFixedSizeAllocator *alloc, u32 size)
 	{
 		u32 pageSize = ((shrinked + 1) << DynamicAllocatorMinimum);
 		Assert(pageSize > size); // we need one extra
-		u8 *mem = PushData(constantArena, u8, pageSize);
+		u8 *mem = PushData(alloc->arena, u8, pageSize);
 		*mem++ = (u8)shrinked;
 		return (void *)mem;
 	}

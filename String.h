@@ -18,8 +18,18 @@ static void memcpy(u8 *dest, u8 *source, u64 amount)
 */
 struct String
 {
-	Char *data;
-	u32 length;
+	union
+	{
+		Char *data;
+		char *cstr;
+	};
+	
+	union
+	{
+		u32 amount;
+		u32 length;
+	};
+
 	Char& operator[](u32 i)
 	{
 		return data[i];
@@ -37,7 +47,7 @@ static String BeginConcatenate(Arena *arena)
 }
 static void EndConcatenate(String *s, Arena *arena)
 {
-	s->length = (u32)(arena->current - s->data);
+	s->length = (u32)((Char *)arena->current - s->data);
 }
 
 
@@ -473,16 +483,15 @@ static void Grisu(Arena *arena, f64 f) // todo does not work.
 // floats : 32bit, 1 sign bit, 8 exponent 23 mantisse (all normalized, i.e there is a "hidden bit" for mantisse)
 static String FtoS(float rational, u32 numberOfDigits, Arena *arena = frameArena)
 {
-	FloatSpread f0 = SpreadFloat(0.5f);
-	FloatSpread f1 = SpreadFloat(1.0f);
-	FloatSpread f2 = SpreadFloat(11.0f);
-	FloatSpread f3 = SpreadFloat(F32MAX);
-	FloatSpread f4 = SpreadFloat(16.0f);
-
-	FloatSpread f5 = Mult(f0, f1);
-	FloatSpread f6 = Mult(f0, f2);
-	FloatSpread f7 = Mult(f0, f3);
-	FloatSpread f8 = Mult(f0, f4);
+	//FloatSpread f0 = SpreadFloat(0.5f);
+	//FloatSpread f1 = SpreadFloat(1.0f);
+	//FloatSpread f2 = SpreadFloat(11.0f);
+	//FloatSpread f3 = SpreadFloat(F32MAX);
+	//FloatSpread f4 = SpreadFloat(16.0f);
+	//FloatSpread f5 = Mult(f0, f1);
+	//FloatSpread f6 = Mult(f0, f2);
+	//FloatSpread f7 = Mult(f0, f3);
+	//FloatSpread f8 = Mult(f0, f4);
 
 	int intPart = (int)rational;
 	float ratPart = rational - intPart;
@@ -491,15 +500,19 @@ static String FtoS(float rational, u32 numberOfDigits, Arena *arena = frameArena
 		ratPart *= -1.0f;
 	}
 
-	String s = Append(ItoS(intPart, workingArena), CreateString("."), workingArena);
-	for (u32 i = 0; i < numberOfDigits; i++)
+	String ret = PushArray(arena, Char, 0);
+	ItoS(intPart, arena);
+	*PushStruct(arena, Char) = '.';
+	for (u32 i = 0; i < numberOfDigits; i++) // todo table lookup?
 	{
-		ratPart *= 10;
-		intPart = (int)ratPart;
-		s = Append(s, ItoS(intPart, workingArena), workingArena);
-		ratPart -= intPart;
+		ratPart *= 10.0f;
+		u32 upart = (u32)ratPart;
+		*PushStruct(arena, Char) = '0' + upart;
+		ratPart -= (f32)upart;
 	}
-	return CopyString(s, arena);
+
+	ret.length = (u32)((Char *)arena->current - ret.data);
+	return ret;
 }
 
 static String FtoS(float rational, Arena *arena = frameArena)
@@ -562,6 +575,17 @@ static char* ToNullTerminated(Arena *arena, String string)
 	return ret;
 }
 
+static char* ToNullTerminated(String string)
+{
+	char *ret = PushData(frameArena, char, string.length + 1);
+	for (u32 i = 0; i < string.length; i++)
+	{
+		ret[i] = string.data[i];
+	}
+	ret[string.length] = '\0';
+	return ret;
+}
+
 
 static Char Eat1(String *s)
 {
@@ -615,6 +639,7 @@ static String EatToNextSpaceReturnHead(String *string)
 	return ret;
 }
 
+//not including char
 static String EatToCharReturnHead(String *string, Char c)
 {
 	String ret = *string;
@@ -632,7 +657,23 @@ static String EatToCharReturnHead(String *string, Char c)
 	return ret;
 }
 
-static String EatToCharFromBackRetrunTail(String *string, Char c)
+static String GetToChar(String s, Char c)
+{
+	String ret = s;
+
+	for (u32 i = 0; i < ret.length; i++)
+	{
+		if (ret[i] == c)
+		{
+			ret.length = i;
+			return ret;
+		}
+	}
+	return ret;
+}
+
+// does not include the searched char
+static String EatToCharFromBackReturnTail(String *string, Char c)
 {
 	String ret = *string;
 
@@ -645,6 +686,23 @@ static String EatToCharFromBackRetrunTail(String *string, Char c)
 			return ret;
 		}
 		string->length--;
+	}
+
+	return ret;
+}
+
+static String GetBackToChar(String string, Char c) // #zerg
+{
+	String ret = string;
+
+	for (u32 i = ret.length - 1; i < ret.length; i--)
+	{
+		if (ret[i] == c)
+		{
+			ret.data = ret.data + (i + 1);
+			ret.length = ret.length - (i + 1);
+			return ret;
+		}
 	}
 
 	return ret;
@@ -1038,13 +1096,13 @@ static String V4toS(v4 vec, Arena *arena = frameArena)
 	String ret = BeginConcatenate(arena);
 
 	S("(", arena);
-	FtoS(vec.w, arena);
+	FtoS(vec.a, arena);
 	S(",", arena);
-	FtoS(vec.x, arena);
+	FtoS(vec.r, arena);
 	S(",", arena);
-	FtoS(vec.y, arena);
+	FtoS(vec.g, arena);
 	S(",", arena);
-	FtoS(vec.z, arena);
+	FtoS(vec.b, arena);
 	S(")", arena);
 
 	EndConcatenate(&ret, arena);

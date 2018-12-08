@@ -1,18 +1,48 @@
 #ifndef RR_WORLD
 #define RR_WORLD
 
-
-
 struct AABB
 {
 	v3 minDim;
 	v3 maxDim;
 };
 
+
+static AABB CreateAABB(v3 minDim, v3 maxDim)
+{
+	// todo assert if we have volume?
+
+	return { minDim, maxDim };
+}
+
+static AABB InvertedInfinityAABB()
+{
+	AABB ret;
+	ret.maxDim = V3(MINF32, MINF32, MINF32);
+	ret.minDim = V3(MAXF32, MAXF32, MAXF32);
+	return ret;
+}
+
+static b32 PointInAABB(AABB target, v3 point)
+{
+	return 
+		(
+			target.minDim.x <= point.x + 0.001f &&
+			target.minDim.y <= point.y + 0.001f &&
+			target.minDim.z <= point.z + 0.001f &&
+			target.maxDim.x + 0.001f >= point.x &&
+			target.maxDim.y + 0.001f >= point.y &&
+			target.maxDim.z + 0.001f >= point.z
+		);
+}
 //Righthanded coordinates, +Z going into the screen, +Y is "down" ? , +X is to the right
+//todo just store the projection matrix instead of aspectratio and focal length?
 struct Camera
 {
 	v3 pos;
+	f32 aspectRatio;
+	f32 focalLength;
+
 	union
 	{
 		Vector3Basis basis;
@@ -25,6 +55,66 @@ struct Camera
 		};
 	};
 };
+
+
+static v2 ScreenZeroToOneToInGame(Camera cam, v2 point)
+{
+
+	m4x4 proj = Projection(cam.aspectRatio, cam.focalLength) * CameraTransform(cam.basis.d1, cam.basis.d2, cam.basis.d3, cam.pos);
+	m4x4 inv = InvOrId(proj);
+
+	v3 p1 = inv * V3(-1, -1, -1);
+	v3 p2 = inv * V3(1, -1, -1);
+	v3 p3 = inv * V3(-1, 1, -1);
+	//v3 p4 = inv * V3(1, 1, -1);
+
+	f32 posXinGame = point.x;
+	f32 posYinGame =  1.0f - point.y;
+
+	// this works as the screen in game is again a Rectangle
+	v3 inGameP = p1 + posXinGame * (p2 - p1) + posYinGame * (p3 - p1);
+
+	float ctPos = -cam.pos.z / (inGameP.z - cam.pos.z);
+	return p12(ctPos * (inGameP - cam.pos) + cam.pos);
+}
+
+static v3 ScreenZeroToOneToScreenInGame(Camera cam, v2 point)
+{
+
+	m4x4 proj = Projection(cam.aspectRatio, cam.focalLength) * CameraTransform(cam.basis.d1, cam.basis.d2, cam.basis.d3, cam.pos);
+	m4x4 inv = InvOrId(proj);
+
+	v3 p1 = inv * V3(-1, -1, -1);
+	v3 p2 = inv * V3(1, -1, -1);
+	v3 p3 = inv * V3(-1, 1, -1);
+	//v3 p4 = inv * V3(1, 1, -1);
+
+	f32 posXinGame = point.x;
+	f32 posYinGame = 1.0f - point.y;
+
+	// this works as the screen in game is again a Rectangle
+	v3 inGameP = p1 + posXinGame * (p2 - p1) + posYinGame * (p3 - p1);
+
+	return inGameP;
+}
+
+static v3 ScreenZeroToOneToDirecion(Camera cam, v2 point)
+{
+	m4x4 proj = Projection(cam.aspectRatio, cam.focalLength) * CameraTransform(cam.basis.d1, cam.basis.d2, cam.basis.d3, cam.pos);
+	m4x4 inv = InvOrId(proj);
+
+	v3 p1 = inv * V3(-1, -1, -1);
+	v3 p2 = inv * V3(1, -1, -1);
+	v3 p3 = inv * V3(-1, 1, -1);
+	v3 p4 = inv * V3(1, 1, -1);
+
+	f32 posXinGame = point.x;
+	f32 posYinGame = 1.0f - point.y;
+
+	v3 inGameP = p1 + posXinGame * (p2 - p1) + posYinGame * (p3 - p1);
+
+	return (inGameP - cam.pos);
+}
 
 
 struct Triangle
@@ -81,6 +171,7 @@ struct Material
 	u32 illuminationModel;		// illum					0 - 10
 	u32 bitmapID;
 	String name;
+	String texturePath;
 };
 
 DefineDynamicArray(Material);
@@ -103,6 +194,8 @@ struct TriangleMesh
 	VertexFormatArray vertices;
 	u16Array indices;
 	IndexSetArray indexSets;
+
+	AABB aabb;
 	
 	u32 vertexVBO; // to init this call glBufferData and glBindData
 	u32 indexVBO;
@@ -113,109 +206,6 @@ DefineDynamicArray(TriangleMesh);
 
 void RegisterTriangleMesh(TriangleMesh *mesh);
 
-static void WriteTriangleMesh(TriangleMesh mesh, char *fileName) // todo : when we feel bored, we can make this a bit mor efficient
-{
-	File file;
-	// begin of daisy chain
-	file.memory = PushData(frameArena, u8, 0);
-	*PushStruct(frameArena, u32) = mesh.type;
-	*PushStruct(frameArena, u32) = mesh.vertices.amount;
-	For(mesh.vertices)
-	{
-		/*
-		*PushStruct(frameArena, v3) = it->p;
-		*PushStruct(frameArena, v2) = it->uv;
-		*PushStruct(frameArena, v3) = it->n;
-		*PushStruct(frameArena, u32) = it->c;
-		*/
-		*PushStruct(frameArena, VertexFormat) = *it;
-	}
-
-	*PushStruct(frameArena, u32) = mesh.indices.amount;
-	For(mesh.indices)
-	{
-		*PushStruct(frameArena, u16) = *it;
-	}
-
-	*PushStruct(frameArena, u32) = mesh.indexSets.amount;
-	For(mesh.indexSets)
-	{
-		*PushStruct(frameArena, IndexSet) = *it;
-#if 0
-		*PushStruct(frameArena, u32) = it->offset;
-		Material mat = it->mat;
-		*PushStruct(frameArena, f32) = mat.spectularExponent;
-
-		*PushStruct(frameArena, v3) = mat.ambientColor;
-		*PushStruct(frameArena, v3) = mat.diffuseColor;
-		*PushStruct(frameArena, v3) = mat.specularColor;
-		*PushStruct(frameArena, v3) = mat.ke;
-
-		*PushStruct(frameArena, f32) = mat.indexOfReflection;
-		*PushStruct(frameArena, f32) = mat.dissolved;
-
-		*PushStruct(frameArena, u32) = mat.illuminationModel;
-
-		*PushStruct(frameArena, String);
-#endif
-	}
-
-	For(mesh.indexSets)
-	{
-		Material mat = it->mat;
-		*PushStruct(frameArena, u32) = mat.name.length;
-		Char *dest = PushData(frameArena, Char, mat.name.length);
-		memcpy(dest, mat.name.data, mat.name.length * sizeof(Char));
-		PushZeroStruct(frameArena, Char); // to get it zero Terminated
-		
-	}
-
-	file.fileSize = (u32)(frameArena->current - (u8 *)file.memory);
-	WriteEntireFile(fileName, file);
-}
-
-static TriangleMesh LoadMesh(AssetHandler *assetHandler, char *fileName)
-{
-	TriangleMesh ret;
-
-	File file = LoadFile(fileName);
-	if (!file.fileSize) return {};
-	u8 *cur = (u8 *)file.memory;
-	ret.type = *(u32 *)cur;
-	cur += sizeof(u32);
-	ret.vertices.amount = *(u32 *)cur;
-	cur += sizeof(u32);
-	ret.vertices.data = (VertexFormat *)cur;
-	cur += ret.vertices.amount * sizeof(VertexFormat);
-
-	ret.indices.amount = *(u32 *)cur;
-	cur += sizeof(u32);
-	ret.indices.data = (u16 *)cur;
-	cur += ret.indices.amount * sizeof(u16);
-
-	ret.indexSets.amount = *(u32 *)cur;
-	cur += sizeof(u32);
-	ret.indexSets.data = (IndexSet *)cur;
-	cur += ret.indexSets.amount * sizeof(IndexSet);
-
-	For(ret.indexSets)
-	{
-		it->mat.name.length = *(u32 *)cur;
-		cur += sizeof(u32);
-		it->mat.name.data = (Char *)cur;
-		cur += it->mat.name.length * sizeof(Char);
-		cur++; // to get it zero Terminated
-		String name = FormatString("obj/maja/%s.texture%c1", it->mat.name, '\0'); // todo hard coded. this should probably come out of the "name"
-
-		it->mat.bitmapID = RegisterAsset(assetHandler, Asset_Texture, (char *)name.data);
-	}
-
-	RegisterTriangleMesh(&ret);
-
-
-	return ret;
-}
-
 struct LightingSolution
 {
 	struct IrradianceCache *cache;
@@ -225,23 +215,52 @@ struct LightingSolution
 
 };
 
+enum TileMapType
+{
+	Tile_Empty,
+	Tile_Spawner,
+	Tile_Goal,
+	Tile_Blocked,
+};
+
+struct Tile
+{
+	TileMapType type;
+	u32 meshIndex;
+};
+
+DefineArray(Tile);
+
+struct TileMap
+{
+	Tile *tiles;
+	u32 height, width;
+	//u16 tileSize;
+};
+
 struct PlacedMesh
 {
-	TriangleMesh mesh;
+	u32 meshId;
 	f32 scale;
 	Quaternion orientation;
 	v3 pos;
+	v4 color;
+	v4 frameColor;
+	AABB untransformedAABB;
 };
 
 DefineDynamicArray(PlacedMesh);
 
-static PlacedMesh CreatePlacedMesh(TriangleMesh mesh, f32 scale, Quaternion orientation, v3 pos)
+static PlacedMesh CreatePlacedMesh(u32 meshID, f32 scale, Quaternion orientation, v3 pos, v4 color, AABB aabb)
 {
 	PlacedMesh ret;
-	ret.mesh = mesh;
+	ret.meshId = meshID;
 	ret.scale = scale;
 	ret.orientation = orientation;
 	ret.pos = pos;
+	ret.color = color;
+	ret.frameColor = V4(1, 1, 1, 1);
+	ret.untransformedAABB = aabb;
 	return ret;
 };
 
@@ -253,7 +272,338 @@ struct World
 	Camera debugCamera;
 	v3 lightSource;
 	PlacedMeshDynamicArray placedMeshes;
+
+	TileMap tileMap;
 };
+
+
+static bool InBounds(TileMap tileMap, v2 vec)
+{
+	return (0.0f <= vec.x + 0.5f) && (vec.x + 0.5f < (f32)tileMap.width) && (0.0f <= vec.y + 0.5f) && (vec.y + 0.5f < (f32)tileMap.height);
+}
+
+static Tile* GetTile(TileMap tileMap, v2 pos)
+{
+	if (!InBounds(tileMap, pos))
+	{
+		return NULL;
+	}
+
+	u32 x = (u32)(pos.x + 0.5f);
+	u32 y = (u32)(pos.y + 0.5f);
+
+	return (tileMap.tiles + x + y * tileMap.width);
+}
+
+
+static bool InBounds(TileMap tileMap, v2i vec)
+{
+	return (0 <= vec.x) && (vec.x < (i32)tileMap.width) && (0 <= vec.y) && (vec.y < (i32)tileMap.height);
+}
+
+
+static Tile* GetTile(TileMap tileMap, v2i pos)
+{
+	if (!InBounds(tileMap, pos))
+	{
+		return NULL;
+	}
+
+	u32 x = pos.x;
+	u32 y = pos.y;
+
+	return (tileMap.tiles + x + y * tileMap.width);
+}
+
+
+static Tile* GetTile(TileMap tileMap, float x, float y)
+{
+	return GetTile(tileMap, V2(x, y));
+}
+
+static Tile* GetTile(TileMap tileMap, u32 x, u32 y)
+{
+	return GetTile(tileMap, V2(x, y));
+}
+
+static void LinearIntersectionOneDim(float *input, float speedX, float speedY, float minX, float posX, float posY, float minY, float maxY)
+{
+	if (!(speedX == 0))
+	{
+		float intersection = (minX - posX) / speedX;
+		if ((0 <= intersection && intersection < *input))
+		{
+			float newY = posY + speedY * intersection;
+			if (minY < newY && newY < maxY)
+			{
+				*input = intersection;
+			}
+		}
+	}
+}
+
+static float LineToFunctCapped(v2 a, v2 b, u32 x)
+{
+	float t = ((float)x - b.x) / a.x;
+	if (t > 0.0f)
+	{
+		if (t < 1.0f)
+		{
+			return (a.y * t + b.y);
+		}
+		else
+		{
+			return a.y + b.y;
+		}
+
+	}
+	else
+	{
+		return b.y;
+	}
+
+}
+
+static Tile *GetFirstTileWithType(TileMap tilemap, v2 pos, v2 goal, u16 type)
+{
+	TileMap *tileMap = &tilemap;
+	v2 a = goal - pos;
+	if (a.x != 0) {
+		int signx;
+		if (a.x > 0)
+		{
+			signx = 1;
+		}
+		else
+		{
+			signx = -1;
+		}
+
+		int signy;
+		if (a.y > 0)
+		{
+			signy = 1;
+		}
+		else
+		{
+			signy = -1;
+		}
+
+		u32 xBegin = (u32)pos.x;
+		u32 xEnd = ((u32)goal.x + signx);
+
+		for (u32 x = xBegin; x != xEnd; x += signx)
+		{
+			float yx = LineToFunctCapped(a, pos, x);
+			float yx1 = LineToFunctCapped(a, pos, (x + 1));
+
+			u32 yBegin;
+			u32 yEnd;
+
+
+			if ((signy > 0))
+			{
+				if (yx > yx1)
+				{
+
+					yEnd = (u32)ceilf(yx);
+					yBegin = (u32)yx1;
+				}
+				else
+				{
+					yEnd = (u32)ceilf(yx1);
+					yBegin = (u32)yx;
+				}
+			}
+			else
+			{
+
+				if (yx > yx1)
+				{
+					yBegin = (u32)yx;
+					yEnd = (u32)floorf(yx1 - 1.0f);
+				}
+				else
+				{
+					yBegin = (u32)yx1;
+					yEnd = (u32)floorf(yx - 1.0f);
+				}
+			}
+
+			if (yBegin == yEnd)
+			{
+				int asda = 123;
+			}
+
+			for (u32 y = yBegin; y != yEnd; y += signy)
+			{
+				Tile *tile = GetTile(tilemap, x, y);
+				if (tile->type == type)
+				{
+					return tile;
+				}
+			}
+		}
+	}
+	else
+	{
+		int signy;
+		if (a.y > 0)
+		{
+			signy = 1;
+		}
+		else
+		{
+			signy = -1;
+		}
+		float ybegin = pos.y;
+		float yend = a.y + pos.y;
+
+		for (u32 y = (u32)ybegin; y != (u32)yend; y += signy)
+		{
+			Tile* tile = GetTile(tilemap, V2(pos.x, y));
+			if (tile->type == type)
+			{
+				return tile;
+			}
+		}
+	}
+
+	return NULL;
+}
+
+
+/*
+static Tile* RectIsCollidingWithTileMap(TileMap *tileMap, rr::Rectangle *rect)
+{
+unsigned int xmin = (int)rect->GetPos().x / tileMap->tileSize - 1;
+if (xmin < 0) xmin = 0;
+unsigned int ymin = (int)rect->GetPos().y / tileMap->tileSize - 1;
+if (ymin < 0) ymin = 0;
+
+unsigned int xmax = (int)rect->GetPos().x / tileMap->tileSize + 1;
+if (xmax > tileMap->width) xmax = tileMap->width;
+unsigned int ymax = (int)rect->GetPos().y / tileMap->tileSize + 1;
+if (ymax > tileMap->height) ymax = tileMap->height;
+
+
+for (unsigned int x = xmin; x <= xmax; x++)
+{
+for (unsigned int y = ymin; y <= ymax; y++)
+{
+
+Tile *tile = &tileMap->tiles[x][y];
+//tile->type = 2;
+if ((tile->type == 0) || (tile->type == 3))
+{
+tile->type = 3;
+
+rr::Rectangle tileRect = rr::Rectangle(tile->pos, tileMap->tileSize, tileMap->tileSize);
+if (rr::Rectangle::Colliding(*rect, tileRect))
+return tile;
+}
+}
+}
+return NULL;
+}*/
+/*
+struct RelativeTile
+{
+Tile *tile;
+float lengthFromPos;
+RelativeTile *prev;
+};
+static bool FindTileInVector(std::vector<RelativeTile*> *tileVector, Tile* tile)
+{
+for (unsigned int i = 0; i < tileVector->size(); i++)
+if (tile == (*tileVector)[i]->tile)
+return true;
+return false;
+}
+static bool FindV3InVector(std::vector<v2> *v3Vector, v2 v)
+{
+for (unsigned int i = 0; i < v3Vector->size(); i++)
+if (v == (*v3Vector)[i])
+return true;
+return false;
+}
+static void AStarAlgorithm(std::vector<v2> *outputWay, v2 goalVector, v2 position, TileMap *tileMap)
+{
+outputWay->clear();
+//find Way
+std::vector<v2> closedSet;
+std::vector<RelativeTile*> openSet;
+
+RelativeTile goal;
+goal.tile = tileMap->GetTile(goalVector);
+
+RelativeTile start;
+start.tile = tileMap->GetTile(position);
+start.lengthFromPos = 0;
+start.prev = NULL;
+openSet.push_back(&start);
+
+while (!openSet.empty())
+{
+RelativeTile* current = openSet.front();
+std::vector<RelativeTile*>::iterator cur = openSet.begin();
+for (std::vector<RelativeTile*>::iterator i = openSet.begin(); i != openSet.end(); i++)
+{
+if (current->lengthFromPos + v2::Dist(current->tile->pos, goal.tile->pos) > (*i)->lengthFromPos + v2::Dist((*i)->tile->pos, goal.tile->pos))
+{
+current = *i;
+cur = i;
+}
+}
+if (current->tile == goal.tile)
+{
+//find way back
+while (current)
+{
+outputWay->push_back(current->tile->pos);
+current = current->prev;
+}
+
+break;
+}
+else
+{
+
+v2 currPos = current->tile->pos;
+
+
+openSet.erase(cur);
+closedSet.push_back(currPos);
+
+std::vector<Tile*> neighboors;
+neighboors.push_back(tileMap->GetTile(currPos + v2(tileMap->tileSize, 0)));
+neighboors.push_back(tileMap->GetTile(currPos + v2(-tileMap->tileSize, 0)));
+neighboors.push_back(tileMap->GetTile(currPos + v2(0, tileMap->tileSize)));
+neighboors.push_back(tileMap->GetTile(currPos + v2(0, -tileMap->tileSize)));
+
+for (std::vector<Tile*>::iterator i = neighboors.begin(); i != neighboors.end(); i++)
+{
+if ((*i)->type != 0)
+{
+if (!(FindV3InVector(&closedSet, (*i)->pos)))
+{
+if (!(FindTileInVector(&openSet, *i)))
+{
+RelativeTile *neighboorTile = new RelativeTile;
+neighboorTile->tile = *i;
+neighboorTile->lengthFromPos = current->lengthFromPos + 1;
+neighboorTile->prev = current;
+openSet.push_back(neighboorTile);
+}
+}
+}
+}
+}
+}
+}
+*/
+
+
 
 struct RockCorner
 {
@@ -286,19 +636,6 @@ struct RockCornerList
 };
 
 static u32 globalCornerIndex = 0;
-
-static AABB CreateAABB(v3 minDim, v3 maxDim)
-{
-	return { minDim, maxDim };
-}
-
-static AABB InvertedInfinityAABB()
-{
-	AABB ret;
-	ret.maxDim = V3(MINF32, MINF32, MINF32);
-	ret.minDim = V3(MAXF32, MAXF32, MAXF32);
-	return ret;
-}
 
 inline bool v3InAABB(v3 pos, AABB aabb)
 {
@@ -393,40 +730,134 @@ static RockCorner CreateRockCorner(v3 p, u32 colorSeed)
 	return ret;
 }
 
-static void UpdateCamFocus(Input *input, v3 focusPoint, Camera *camera, f32 aspectRatio, DEBUGKeyTracker tracker)
+static void ColorForTileMap(World *world)
 {
-	f32 mouseXRot = 0.0f;
-	f32 mouseZRot = 0.0f;
-	f32 camZoffSet = 0.0f;
+	v3 screenPos = world->camera.pos;
 
-	Die;
-	//todo : you know
-	if (tracker.aDown)
+	v2 screenUL = ScreenZeroToOneToInGame(world->camera, V2(0.0f, 0.0f));
+	v2 screenUR = ScreenZeroToOneToInGame(world->camera, V2(1.0f, 0.0f));
+	v2 screenBL = ScreenZeroToOneToInGame(world->camera, V2(0.0f, 1.0f));
+	v2 screenBR = ScreenZeroToOneToInGame(world->camera, V2(1.0f, 1.0f));
+
+	float minScreenX = Min(Min(screenUL.x, screenUR.x), Min(screenBL.x, screenBR.x));
+	float minScreenY = Min(Min(screenUL.y, screenUR.y), Min(screenBL.y, screenBR.y));
+
+	float maxScreenX = Max(Max(screenUL.x, screenUR.x), Max(screenBL.x, screenBR.x));
+	float maxScreenY = Max(Max(screenUL.y, screenUR.y), Max(screenBL.y, screenBR.y));
+
+	u32 minScreenXi = (u32)Max((int)floorf(minScreenX) - 1.0f, 0.0f);
+	u32 minScreenYi = (u32)Max((int)floorf(minScreenY) - 1.0f, 0.0f);
+
+	u32 maxScreenXi = (u32)Min((int)ceilf(maxScreenX) + 1.0f, (float)world->tileMap.width);
+	u32 maxScreenYi = (u32)Min((int)ceilf(maxScreenY) + 1.0f, (float)world->tileMap.height);
+
+	Tweekable(b32, DrawWholeMap);
+	if (DrawWholeMap)
 	{
-		v2 mouseDelta = input->mouseDelta;
-		float rotSpeed = 0.001f * 3.141592f;
-		mouseZRot += mouseDelta.x * rotSpeed;
-		mouseXRot += mouseDelta.y * rotSpeed;
+		minScreenXi = 0;
+		minScreenYi = 0;
+		maxScreenXi = world->tileMap.width;
+		maxScreenYi = world->tileMap.height;
+	}
+	for (u32 x = minScreenXi; x < maxScreenXi; x++)
+	{
+		for (u32 y = minScreenYi; y < maxScreenYi; y++)
+		{
+			Tile *tile = GetTile(world->tileMap, V2(x, y));
+			
+			v4 slightlyRed = V4(1.0f, 1.0f, 0.55f, 0.55f);
+			v4 slightlyGreen = V4(1.0f, 0.55f, 1.0f, 0.55f);
+			v4 slightlyYellow = V4(1.0f, 1.0f, 1.0f, 0.55f);
+			v4 slightlyBlue = V4(1.0f, 0.55f, 0.55f, 1.0f);
+
+			if (tile)
+			{
+				switch (tile->type)
+				{
+				case Tile_Blocked:
+				{
+					world->placedMeshes[tile->meshIndex].frameColor *= slightlyRed;
+				}break;
+				case Tile_Empty:
+				{
+					world->placedMeshes[tile->meshIndex].frameColor *= slightlyGreen;
+				}break;
+				case Tile_Goal:
+				{
+					world->placedMeshes[tile->meshIndex].frameColor *= slightlyYellow;
+				}break;
+				case Tile_Spawner:
+				{
+					world->placedMeshes[tile->meshIndex].frameColor *= slightlyBlue;
+				}break;
+
+				}
+			}
+		}
+	}
+}
+
+
+static void UpdateCamGame(Input *input, Camera *camera)
+{
+	Tweekable(f32, screenScrollBorder, 0.05f);
+	Tweekable(f32, screenScrollSpeed, 1.0f);
+
+	v2 asd = input->mouseZeroToOne - V2(0.5f, 0.5f);
+
+	f32 boxNorm = BoxNorm(asd) + screenScrollBorder;
+
+	if (boxNorm > 0.5f)
+	{
+		camera->pos += 2.0f * boxNorm * screenScrollSpeed * i12(asd);
 	}
 
-	if (tracker.sDown)
+}
+
+static void UpdateCamFocus(Input *input, Camera *camera, DEBUGKeyTracker *tracker)
+{
+	v3 focusPoint = V3(ScreenZeroToOneToInGame(*camera, V2(0.5f, 0.5f)), 0.0f);
+
+	f32 factor = 1.0f + tracker->middleBack * 0.1f - tracker->middleForward * 0.1f;
+
+	tracker->middleForward = false;
+	tracker->middleBack = false;
+
+	camera->pos = focusPoint + factor * (camera->pos - focusPoint);
+
+	if (!tracker->middleDown)
 	{
-		v2 mouseDelta = input->mouseDelta;
-		float zoomSpeed = 0.008f;
-		camZoffSet += (Abs(camera->pos.z) + camZoffSet) * mouseDelta.y * zoomSpeed;
+		return;
+		
 	}
 
-	m4x4 rotX = XRotation(mouseXRot);
-	m4x4 rot = rotX * ZRotation(mouseZRot);
-	m4x4 cam = CameraTransform(V3(1, 0, 0), V3(0, 1, 0), V3(0, 0, 1), camZoffSet * camera->basis.d3) * rot;
+	v2 mouseDelta = input->mouseDelta;
+	
+	float rotSpeed = 0.001f * 3.141592f;
+	
+	f32 mouseZRot = -mouseDelta.y * rotSpeed; // this should rotate around the z axis
+	f32 mouseCXRot = mouseDelta.x * rotSpeed; // this should rotate around the camera x axis
 
-	camera->pos = cam * camera->pos;
+	m3x3 cameraT = Rows3x3(camera->b1, camera->b2, camera->b3);
+	m3x3 cameraTInv = Invert(cameraT);
+
+	m3x3 id = cameraT * cameraTInv;
+	m3x3 rotX = XRotation3x3(mouseZRot);
+	m3x3 rotZ = ZRotation3x3(mouseCXRot);
+	m3x3 rot = cameraTInv * rotX * cameraT * rotZ;
+
+	v3 delta = camera->pos - focusPoint;
+
+	camera->pos = focusPoint + rot * delta;
+
 	camera->basis = TransformBasis(camera->basis, rot);
 }
 
 static void UpdateCamGodMode(Input *input, Camera *cam, DEBUGKeyTracker tracker)
 {
 	Tweekable(f32, cameraMoveSpeed);
+	//GET_MACRO3(f32, cameraMoveSpeed, Tweekable1, Tweekable2)(f32, cameraMoveSpeed);
+	//Tweekable2(f32, cameraMoveSpeed);
 #if 0
 	if (input->keybord[Key_shift].flag & KeyState_Down)
 	{
@@ -637,7 +1068,7 @@ static TriangleArray CreateSkyBoxAndPush(AABB aabb, u32 color, Arena *arena)
 
 }
 
-static TriangleArray CreateStoneAndPush(AABB aabb, f32 desiredVolume, Arena *arena, u32 iterations)
+static TriangleArray CreateStoneAndPush(AABB aabb, f32 desiredVolume, Arena *arena, u32 iterations, Arena *workingArena)
 {
 	Clear(workingArena);
 

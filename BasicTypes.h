@@ -40,30 +40,30 @@ struct type##DynamicArray														\
 		return data[i];															\
 	}																			\
 };																				\
-static type *ArrayAdd(type##DynamicArray *arr, type t)							\
+static u32 ArrayAdd(type##DynamicArray *arr, type t)							\
 {																				\
 	if (arr->amount + 1 < arr->capacity)										\
 	{																			\
 		(arr->data)[arr->amount++] = t;											\
-		return arr->data + (arr->amount - 1);									\
+		return (arr->amount - 1);												\
 	}																			\
 																				\
 	u32 newCapacity = 2 * arr->capacity + 1;									\
 																				\
-	type *newData = DynamicAlloc(type, 2 * arr->capacity + 1);			\
+	type *newData = DynamicAlloc(type, newCapacity);							\
 	memcpy(newData, arr->data, arr->capacity * sizeof(type));					\
-	arr->capacity = 2 * arr->capacity + 1;										\
-	DynamicFree(arr->data);												\
+	arr->capacity = newCapacity;												\
+	DynamicFree(arr->data);														\
 	arr->data = newData;														\
 	arr->data[arr->amount++] = t;												\
 																				\
-	return (arr->data + (arr->amount - 1));										\
+	return (arr->amount - 1);													\
 }																				\
 																				\
-static type##DynamicArray type##CreateDynamicArray(u32 capacity = 8)	\
+static type##DynamicArray type##CreateDynamicArray(u32 capacity = 8)			\
 {																				\
 	type##DynamicArray ret;														\
-	ret.data = DynamicAlloc(type, capacity);								\
+	ret.data = DynamicAlloc(type, capacity);									\
 	ret.amount = 0;																\
 	ret.capacity = capacity;													\
 	return ret;																	\
@@ -72,12 +72,32 @@ static void Clear(type##DynamicArray *arr)										\
 {																				\
 	arr->amount = 0;															\
 }																				\
+static void Reserve(type##DynamicArray *arr, u32 capacity)						\
+{																				\
+	if (capacity < arr->capacity)												\
+	{																			\
+		return;																	\
+	}																			\
+																				\
+	type *newData = DynamicAlloc(type, capacity);								\
+	memcpy(newData, arr->data, arr->capacity * sizeof(type));					\
+	arr->capacity = capacity;													\
+	DynamicFree(arr->data);														\
+	arr->data = newData;														\
+	return;																		\
+}																				\
 
 
+#define GET_MACRO3(_1,_2,_3, NAME,...) NAME
+#define Expand(x) x
 
 #define BuildStaticArray(arena, arr, item) PushData(arena, u8, sizeof(item)); arr.data[arr.amount++] = item;
 
-#define For(arr) for(auto it = arr.data; it < arr.data + arr.amount; it++)
+#define ForArr(arr) for(auto it = arr.data; it < arr.data + arr.amount; it++)
+#define ForMultiArr(arr, member) for(auto it = arr.member; it < arr.member + arr.amount; it++)
+
+
+#define For(...) Expand(GET_MACRO3(__VA_ARGS__, Ignored, ForMultiArr, ForArr)(__VA_ARGS__))
 
 #include <stdint.h>
 
@@ -154,8 +174,15 @@ union v4
 		{
 			struct
 			{
-				f32 x;
-				f32 y;
+				union
+				{
+					struct
+					{
+						f32 x;
+						f32 y;					
+					};
+					v2 xy;
+				};
 				f32 z;
 			};
 			v3 xyz;
@@ -710,13 +737,13 @@ static v4 V4()
 	return ret;
 }
 
-static v4 V4(f32 a, f32 x, f32 y, f32 z)
+static v4 V4(f32 a, f32 r, f32 g, f32 b)
 {
 	v4 ret;
 	ret.a = a;
-	ret.r = x;
-	ret.g = y;
-	ret.b = z;
+	ret.r = r;
+	ret.g = g;
+	ret.b = b;
 	return ret;
 }
 static v4 V4(f32 a, v3 rgb)
@@ -803,9 +830,32 @@ static v4 operator*(v4 a, v4 b)
 	return ret;
 }
 
+static v4 operator/(v4 a, v4 b) // todo do we do this in a _safe_ way later?
+{
+	v4 ret;
+	ret.a = a.a / b.a;
+	ret.r = a.r / b.r;
+	ret.g = a.g / b.g;
+	ret.b = a.b / b.b;
+#if 0
+	ret.a = Min(a.a / b.a, 1.0f);
+	ret.r = Min(a.r / b.r, 1.0f);
+	ret.g = Min(a.g / b.g, 1.0f);
+	ret.b = Min(a.b / b.b, 1.0f);
+#endif
+	return ret;
+}
+
 static v4& operator*=(v4 &a, v4 b)
 {
 	a = a*b;
+	return a;
+}
+
+
+static v4& operator/=(v4 &a, v4 b)
+{
+	a = a/b;
 	return a;
 }
 

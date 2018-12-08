@@ -42,12 +42,18 @@ static Vector3Basis operator*(float f, Vector3Basis basis)
 
 static Vector3Basis TransformBasis(Vector3Basis basis, m4x4 matrix)
 {
+	return { TransformDirection(matrix, basis.d1), TransformDirection(matrix, basis.d2), TransformDirection(matrix, basis.d3)};
+}
+
+
+static Vector3Basis TransformBasis(Vector3Basis basis, m3x3 matrix)
+{
 	return { matrix * basis.d1, matrix * basis.d2, matrix * basis.d3 };
 }
 
 static m4x4 CamBasisToMat(Vector3Basis basis)
 {
-	return Columns3x3(basis.d1, basis.d2, basis.d3);
+	return Columns4x4(basis.d1, basis.d2, basis.d3);
 }
 
 

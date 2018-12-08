@@ -3,14 +3,24 @@
 
 struct File
 {
-	void *memory;
-	u32 fileSize;
+	union
+	{
+		u8 *memory;
+		u8 *data;
+	};
+	
+	union
+	{
+		u32 fileSize;
+		u32 amount;
+	};
+	
 };
 
 static File CreateFile(void *memory, u32 fileSize)
 {
 	File ret;
-	ret.memory = memory;
+	ret.memory = (u8 *)memory;
 	ret.fileSize = fileSize;
 	return ret;
 }
@@ -20,6 +30,7 @@ static File LoadFile(char *fileName, Arena *arena);
 static File LoadFile(char *fileName);
 static void FreeFile(File file);
 static File LoadFile(char *fileName, void *dest, u32 destSize);
+static StringArray FindAllFiles(char *path, char *type, Arena *stringArena);
 
 
 #endif

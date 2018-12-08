@@ -29,16 +29,12 @@ struct ConsoleCommand
 
 DefineArray(ConsoleCommand);
 
-struct GameState;
-
 struct Console
 {
 	f32 fontSize = 0.023f;
 	f32 openness = 0.0f;
 	f32 dt = 1.5f;
 	f32 intendedOpenness = 0.0f;
-
-	Font font;
 
 	f32 textInputFieldSize = 0.03f;
 	String inputString;
@@ -76,8 +72,6 @@ struct Console
 
 	f32 scrollbarWidth = 0.02f;
 	b32 scrollingScrollbar = false;
-
-	GameState *state;
 
 	ConsoleCommandArray commands;
 };

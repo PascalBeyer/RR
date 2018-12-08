@@ -8,6 +8,9 @@
 #define GL_CLAMP_TO_BORDER                0x812D
 
 #define GL_FRAMEBUFFER_SRGB               0x8DB9
+#define GL_SRGB                           0x8C40
+#define GL_SRGB8                          0x8C41
+#define GL_SRGB_ALPHA                     0x8C42
 #define GL_SRGB8_ALPHA8                   0x8C43
 #define GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE 0x8D56
 
@@ -44,6 +47,7 @@
 #define GL_DEPTH_COMPONENT16              0x81A5
 #define GL_DEPTH_COMPONENT24              0x81A6
 #define GL_DEPTH_COMPONENT32              0x81A7
+#define GL_DEPTH_COMPONENT32F             0x8CAC
 #define GL_DEPTH_ATTACHMENT               0x8D00
 #define GL_COLOR_ATTACHMENT0              0x8CE0
 
@@ -189,6 +193,8 @@ struct OpenGLProgram
 	GLuint cameraTransform;
 	GLuint shadowTransform;
 	GLuint lightPos;
+	GLuint scaleColor;
+
 	//GLuint cameraPos;
 	GLuint specularExponent;
 
@@ -203,6 +209,8 @@ struct OpenGLProgram
 };
 
 //globals
+static OpenGLInfo openGLInfo;
+
 static GLuint vertexBuffer;
 static GLuint elementBuffer;
 static GLuint defaultInternalTextureFormat;
@@ -651,6 +659,7 @@ static void SetUpBasicMeshProgram()
 	uniform vec3 lightPos; // allready transfomed for now, so we do not need a third matrix, that is the transform with out the object Transform
 	//uniform vec3 cameraPos;
 	uniform float specularExponent;
+	uniform vec4 scaleColor;
 
 	in vec3 vertP;
 	in vec4 vertC;
@@ -666,7 +675,7 @@ static void SetUpBasicMeshProgram()
 	void main(void)
 	{
 		//pass through
-		fragColor = vertC;
+		fragColor = vertC * scaleColor;
 		fragCoord = vertUV;
 
 		vec4 inputVertex = vec4(vertP, 1);
@@ -747,6 +756,7 @@ static void SetUpBasicMeshProgram()
 	basicMesh.lightPos = glGetUniformLocation(basicMesh.program, "lightPos");
 	//basicMesh.cameraPos = glGetUniformLocation(basicMesh.program, "cameraPos");
 	basicMesh.specularExponent = glGetUniformLocation(basicMesh.program, "specularExponent");
+	basicMesh.scaleColor = glGetUniformLocation(basicMesh.program, "scaleColor");
 
 	glUniform1i(basicMesh.depthSampler, 1);
 	glUniform1i(basicMesh.textureSampler, 0);
@@ -761,12 +771,13 @@ static void SetUpDepthProgram()
 	
 	glGenTextures(1, &shadowTexture);
 	glBindTexture(GL_TEXTURE_2D, shadowTexture);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16, 1024, 1024, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+	
 	//glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1024, 1024, 0, GL_BGRA_EXT, GL_FLOAT, 0 );
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16, 1024, 1024, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
 
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowTexture, 0);
 
@@ -891,10 +902,10 @@ void OpenGLInit(HGLRC modernContext)
 		glDebugMessageCallback(OpenGLDebugCallback, 0);
 	}
 
-	defaultInternalTextureFormat = GL_RGBA8;
+	defaultInternalTextureFormat = GL_RGBA;
 	if (info.GL_EXT_texture_sRGB)
 	{
-		defaultInternalTextureFormat = GL_SRGB8_ALPHA8;
+		defaultInternalTextureFormat = GL_SRGB_ALPHA;
 	}
 
 	GLuint DummyVertexArray;
@@ -944,7 +955,7 @@ void OpenGLInit(HGLRC modernContext)
 	//glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
 	//glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
 
-	glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 4, GL_RGBA, 1280, 720, false);
+	glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 4, defaultInternalTextureFormat, 1280, 720, GL_FALSE);
 	//glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1280, 720, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 
 	renderTexture = texture_map;
@@ -960,7 +971,7 @@ void OpenGLInit(HGLRC modernContext)
 	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	//glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, 1280, 720, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE, NULL);
-	glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 4, GL_DEPTH_COMPONENT, 1280, 720, false);
+	glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 4, GL_DEPTH_COMPONENT, 1280, 720, GL_FALSE);
 	glBindTexture(GL_TEXTURE_2D, 0);
 	renderDepth = depth_texture;
 
@@ -1041,7 +1052,7 @@ void RenderIntoShadowMap(RenderCommands *rg)
 		m4x4 qmat = Translate(QuaternionToMatrix(q) * ScaleMatrix(meshHeader->scale), meshHeader->pos);
 
 		//todo: slow. and hardcoded
-		m4x4 projection = Projection(rg->aspectRatio, rg->focalLength);
+		m4x4 projection = setup.projection; // think this is right 
 		m4x4 shadowMat =  CameraTransform(V3(1, 0, 0), V3(0, 1, 0), V3(0, 0, 1), setup.lightPos);
 		m4x4 mat = shadowMat * qmat;
 
@@ -1179,10 +1190,10 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg)
 
 			BeginUseProgram(basic, trianglesHeader->header.setup);
 
-
 			if (setup.flag & Setup_ShadowMapping)
 			{
-				m4x4 shadowMat = biasMatrix * Projection(rg->aspectRatio, rg->focalLength) * CameraTransform(V3(1, 0, 0), V3(0, 1, 0), V3(0, 0, 1), setup.lightPos);
+				// same as above setup.projection, should always yeald the right projection
+				m4x4 shadowMat = biasMatrix * setup.projection * CameraTransform(V3(1, 0, 0), V3(0, 1, 0), V3(0, 0, 1), setup.lightPos);
 				glUniformMatrix4fv(basic.shadowTransform, 1, GL_TRUE, shadowMat.a[0]);
 			}
 			else
@@ -1208,7 +1219,7 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg)
 			m4x4 qmat = Translate(QuaternionToMatrix(q) * ScaleMatrix(meshHeader->scale), pos);
 
 			//todo: slow.
-			m4x4 shadowMat = biasMatrix * Projection(rg->aspectRatio, rg->focalLength) * CameraTransform(V3(1, 0, 0), V3(0, 1, 0), V3(0, 0, 1), setup.lightPos) * qmat;
+			m4x4 shadowMat = biasMatrix * setup.projection * CameraTransform(V3(1, 0, 0), V3(0, 1, 0), V3(0, 0, 1), setup.lightPos) * qmat;
 
 			m4x4 mat  = setup.cameraTransform * qmat;
 			v4 lightP = setup.cameraTransform * V4(setup.lightPos, 1.0f);
@@ -1221,7 +1232,7 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg)
 			glUniformMatrix4fv(basicMesh.projection, 1, GL_TRUE, setup.projection.a[0]);
 			glUniformMatrix4fv(basicMesh.shadowTransform, 1, GL_TRUE, shadowMat.a[0]);
 			glUniform3f(basicMesh.lightPos, lightP.x, lightP.y, lightP.z); 
-			
+			glUniform4f(basicMesh.scaleColor, meshHeader->scaleColor.r, meshHeader->scaleColor.g, meshHeader->scaleColor.b, meshHeader->scaleColor.a);
 
 			glBindBuffer(GL_ARRAY_BUFFER, mesh.vertexVBO);
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.indexVBO);
@@ -1308,7 +1319,7 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg)
 	glBindFramebuffer(GL_READ_FRAMEBUFFER, renderFrameBuffer);
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 
-	glBlitFramebuffer(0, 0, rg->width, rg->height, 0, 0, rg->width, rg->height, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+	glBlitFramebuffer(0, 0, rg->width, rg->height, 0, 0, rg->width, rg->height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
 
 
 	//flush

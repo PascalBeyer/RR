@@ -30,6 +30,11 @@
 #endif
 
 #define Assert(Expression) if(!(Expression)) {__debugbreak();}
+#define InvalidDefaultCase \
+default: \
+{\
+	Die;\
+}break;
 
 template <typename F>
 struct saucy_defer {
@@ -76,7 +81,6 @@ struct RenderCommands
 
 	u32 width;
 	u32 height;
-	f32 focalLength;
 	f32 aspectRatio;
 
 };

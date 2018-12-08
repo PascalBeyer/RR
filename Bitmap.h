@@ -46,6 +46,7 @@ static void UpdateWrapingTexture(Bitmap bitmap);
 
 static u32 *GetPixel(Bitmap bitmap, u32 x, u32 y)
 {
+	Assert(x < bitmap.width && y < bitmap.height);
 	u32 shift = y * bitmap.width + x;
 	u32 *pixP = bitmap.pixels + shift;
 	return pixP;
@@ -118,8 +119,7 @@ static Bitmap CreateBitmap(char* fileName, bool wrapping = false)
 
 static Bitmap CreateBitmap(String fileName)
 {
-	Clear(workingArena);
-	return CreateBitmap(ToNullTerminated(workingArena, fileName));
+	return CreateBitmap(ToNullTerminated(fileName));
 }
 
 static void FreeBitmap(Bitmap *bitmap)

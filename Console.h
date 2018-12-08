@@ -43,9 +43,8 @@ static ConsoleCommand CreateCommand(char* name, void (*interp)(StringArray args)
 	return ret;
 }
 
-static void InitConsole(Font font)
+static void InitConsole(Arena *constantArena)
 {
-	console.font = font;
 	console.buffer = PushData(constantArena, Char, console.bufferSize);
 	console.arena = InitArena(console.buffer, console.bufferSize * sizeof(Char));
 	console.history = PushData(constantArena, HistoryEntry, console.maxHistoryLength);
@@ -65,6 +64,9 @@ static void InitConsole(Font font)
 	BuildStaticArray(constantArena, console.commands, CreateCommand("tweekers", TweekersHelper, 0, 0));
 	BuildStaticArray(constantArena, console.commands, CreateCommand("grisu", GrisuHelper, 1, 1));
 	BuildStaticArray(constantArena, console.commands, CreateCommand("convert", ConvertHelper, 1, 1));
+	BuildStaticArray(constantArena, console.commands, CreateCommand("gameMode", GameModeHelper, 1, 1));
+	BuildStaticArray(constantArena, console.commands, CreateCommand("saveLevel", SaveLevelHelper, 1, 1));
+	BuildStaticArray(constantArena, console.commands, CreateCommand("loadLevel", LoadLevelHelper, 1, 1));
 	
 }
 
@@ -83,110 +85,6 @@ static bool ConsoleOpen()
 	return (console.intendedOpenness > 0.0f);
 }
 
-static Char KeyToChar(u32 keyCode, bool shiftDown)
-{
-	if (shiftDown)
-	{
-		switch (keyCode)
-		{
-		case Key_0:
-		{
-			return '=';
-		}break;
-		case Key_1:
-		{
-			return '!';
-		}break;
-		case Key_2:
-		{
-			return '"';
-		}break;
-		case Key_3:
-		{
-			return '§';
-		}break;
-		case Key_4:
-		{
-			return '$';
-		}break;
-		case Key_5:
-		{
-			return '%';
-		}break;
-		case Key_6:
-		{
-			return '&';
-		}break;
-		case Key_7:
-		{
-			return '/';
-		}break;
-		case Key_8:
-		{
-			return '(';
-		}break;
-		case Key_9:
-		{
-			return ')';
-		}break;
-		case Key_dot:
-		{
-			return ':';
-		}break;
-		case Key_comma:
-		{
-			return ';';
-		}break;
-		case Key_minus:
-		{
-			return '_';
-		}break;
-		}
-	
-	}
-	else
-	{
-		switch (keyCode)
-		{
-		case Key_dot:
-		{
-			return '.';
-		}break;
-		case Key_comma:
-		{
-			return ',';
-		}break;
-		case Key_minus:
-		{
-			return '-';
-		}break;
-		}
-	}
-
-	if (Key_a <= keyCode && keyCode <=  Key_z)
-	{
-		u32 shiftedKeyCode = keyCode - Key_a;
-		if (shiftDown)
-		{
-			return (shiftedKeyCode + 'A');
-		}
-		else
-		{
-			return (shiftedKeyCode + 'a');
-		}
-	}
-	else if (Key_0 <= keyCode &&  keyCode <= Key_9)
-	{
-		u32 shiftedKeyCode = keyCode - Key_0;
-		return (shiftedKeyCode + 0x30);
-	}
-	else if (keyCode == Key_space)
-	{
-		return ' ';
-	}
-	return 0;
-}
-
 static void AddSingleLineToHistory(String string, HistoryEntryEnum flag)
 {
 	if (console.historyLength + 1 < console.maxHistoryLength)
@@ -200,11 +98,12 @@ static void AddSingleLineToHistory(String string, HistoryEntryEnum flag)
 	{
 		Die;
 	}
+	if (!console.intendedOpenness) console.intendedOpenness = console.open;
 }
 
 static void AddStringToHistory(String string, HistoryEntryEnum flag = HistoryEntry_Default)
 {
-	float fScale = console.fontSize / (f32)console.font.charHeight;
+	float fScale = console.fontSize / (f32)globalFont.charHeight;
 	String toProcess = string;
 	toProcess.length = string.length;
 
@@ -221,7 +120,7 @@ static void AddStringToHistory(String string, HistoryEntryEnum flag = HistoryEnt
 			toProcess.length--;
 			toProcess.data++;
 		}
-		f32 newLength = GetActualStringLength(newWord, console.fontSize, console.font);
+		f32 newLength = GetActualStringLength(newWord, console.fontSize, globalFont);
 
 		if (currentLength + newLength > (1.0f - console.scrollbarWidth) - 2.0f * console.fontSize)
 		{
@@ -271,7 +170,7 @@ static void ConsoleOutputError(char *format, ...)
 
 static u32 GetBestCursorLocationForString(String string, float xPos, f32 xOffset)
 {
-	Font font = console.font;
+	Font font = globalFont;
 
 	f32 stringSize = xOffset;
 	float fScale = console.fontSize / (f32)font.charHeight;
@@ -299,7 +198,7 @@ static u32 GetBestCursorLocationForString(String string, float xPos, f32 xOffset
 
 static u32 GetBestCursorLocationForConsoleHistory(Input input)
 {
-	Font font = console.font;
+	Font font = globalFont;
 
 	f32 lineSize = 1.5f * console.fontSize;
 	f32 amountOfDisplayedLinesf = console.openness / lineSize;
@@ -365,15 +264,15 @@ static void ConsoleHandleCommand(String inputLine)
 			ConsoleCommand selectedCommand = *it;
 
 			StringArray args = {};
-			Clear(workingArena);
-			args = PushArray(workingArena, String, 0);
+			Clear(gameState.workingArena);
+			args = PushArray(gameState.workingArena, String, 0);
 
 			EatSpaces(&remaining);
 			while (remaining.length)
 			{
 				String arg = EatToNextSpaceReturnHead(&remaining);
 				Assert(arg.length);
-				BuildStaticArray(workingArena, args, arg);
+				BuildStaticArray(gameState.workingArena, args, arg);
 				EatSpaces(&remaining);
 			}
 
@@ -803,7 +702,7 @@ static void UpdateConsole(Input input)
 	String preCursorString = console.inputString;
 	preCursorString.length = console.cursorPos;
 
-	f32 stringLengthUpToCursor = GetActualStringLength(preCursorString, console.fontSize, console.font);
+	f32 stringLengthUpToCursor = GetActualStringLength(preCursorString, console.fontSize, globalFont);
 	
 	if ((stringLengthUpToCursor - console.typeFieldTextScrollOffset) > (1.0f - console.cursorScrollEdge))
 	{
@@ -876,10 +775,10 @@ static void ConsoleDrawSelection(RenderGroup *rg, String string, u32 first, u32 
 {
 	String prefirst = string;
 	prefirst.length = first;
-	f32 stringLengthUpToSelection = GetActualStringLength(prefirst, console.fontSize, console.font);
+	f32 stringLengthUpToSelection = GetActualStringLength(prefirst, console.fontSize, globalFont);
 	String selection = string;
 	selection.length = (end - first);
-	f32 selectionLength = GetActualStringLength(selection, console.fontSize, console.font);
+	f32 selectionLength = GetActualStringLength(selection, console.fontSize, globalFont);
 
 	f32 selectionMinX = stringLengthUpToSelection - console.typeFieldTextScrollOffset + xOffset;
 	f32 selectionMaxX = selectionMinX + selectionLength;
@@ -914,7 +813,7 @@ static void DrawConsole(RenderGroup *rg)
 		String preCursorString = console.inputString;
 		preCursorString.length = console.cursorPos;
 
-		f32 stringLengthUpToCursor = GetActualStringLength(preCursorString, console.fontSize, console.font); 
+		f32 stringLengthUpToCursor = GetActualStringLength(preCursorString, console.fontSize, globalFont); 
 		v2 cursorPos = V2(console.typeFieldXOffset + stringLengthUpToCursor - console.typeFieldTextScrollOffset, typeFieldPos.y);
 		PushRectangle(rg, cursorPos, console.cursorWidth, console.fontSize, V4(1.0f, 1.0f, 1.0f, 0.85f));
 	}
@@ -1025,15 +924,15 @@ static void DrawConsole(RenderGroup *rg)
 
 	//typefield Text
 	v2 typeFieldTextPos = p3 + V2(console.typeFieldXOffset - console.typeFieldTextScrollOffset, -console.textInputFieldSize);
-	PushString(rg, typeFieldTextPos - V2(0.001f, 0.001f), console.inputString, console.fontSize, console.font, V4(1, 0.5f, 0.5f, 0.5f));
-	PushString(rg, typeFieldTextPos, console.inputString, console.fontSize, console.font, V4(1.0f, 1.0f, 1.0f, 1.0f)); 
+	PushString(rg, typeFieldTextPos - V2(0.001f, 0.001f), console.inputString, console.fontSize, globalFont, V4(1, 0.5f, 0.5f, 0.5f));
+	PushString(rg, typeFieldTextPos, console.inputString, console.fontSize, globalFont, V4(1.0f, 1.0f, 1.0f, 1.0f)); 
 
 	//History Text
 	for (i32 i = bottomLine; i >= topLine; i--)
 	{
 		f32 pos = (f32)(console.historyLength - console.historyPos - i);
 		v4 color = ColorForHistoryEntry(console.history[i].flag);
-		PushString(rg, consoleFieldFirstRow - pos * V2(0, lineSize), console.history[i].entry, console.fontSize, console.font, color);
+		PushString(rg, consoleFieldFirstRow - pos * V2(0, lineSize), console.history[i].entry, console.fontSize, globalFont, color);
 	}
 	
 	//scrollbar
@@ -1061,8 +960,9 @@ static void DrawConsole(RenderGroup *rg)
 // control left right
 // maybe handle to long strings?
 // make all arrays dynamic?
-// dont die on to may symbols i.e dynamic arrays or rolling buffer maybe 65536 long for that juicy speed?
+// dont die on to many symbols i.e dynamic arrays or rolling buffer maybe 65536 long for that juicy speed?
 // sanitise strings and handle \n, \r
+// dont paste if the copy buffer is a file or smth
 
 #endif // !RR_CONSOLE
 

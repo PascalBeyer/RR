@@ -1,8 +1,6 @@
 #ifndef RR_EDITOR
 #define RR_EDITOR
 
-
-
 enum PickerSelectionTag
 {
 	PickerSelecting_Nothing,
@@ -10,7 +8,6 @@ enum PickerSelectionTag
 	PickerSelecting_ColorPicker,
 	PickerSelecting_Header,
 };
-
 
 struct ColorPicker
 {
@@ -32,12 +29,15 @@ struct ColorPicker
 
 	v2 pickerPos = {0.0f, 0.0f}; // relative to the Color picker. (0, 0) is pure white
 
-	v4 pickedColor;
-	Tweeker tweeker; // for now, rethink this
+	v4 *pickedColor;
+
+	b32 isTweeker;
+	Tweeker *tweeker; // for now, rethink this
 };
 enum EditorUIElementEnum
 {
-	EditorUI_ColorPicker
+	EditorUI_ColorPicker,
+
 };
 
 struct EditorUIElement
@@ -51,21 +51,385 @@ struct EditorUIElement
 
 DefineDynamicArray(EditorUIElement);
 
+
+enum EditorState
+{
+	EditorState_Default,
+	EditorState_Scaling,
+	EditorState_Rotating,
+	EditorState_Moving,
+	EditorState_DragingPanel,
+	EditorState_PickingColor,
+	EditorState_AlteringValue,
+	EditorState_TileMapEditor,
+	EditorState_TileMapPlacingGoal,
+	EditorState_TileMapPlacingSpawner,
+	EditorState_OrbitingCamera,
+};
+
+static String EditorStateToString(EditorState state)
+{
+	switch (state)
+	{
+	case EditorState_Default:
+	{
+		return CreateString("EditorState_None");
+	}break;
+	case EditorState_Scaling:
+	{
+		return CreateString("EditorState_Scaling");
+	}break;
+	case EditorState_Rotating:
+	{
+		return CreateString("EditorState_Rotating");
+	}break;
+	case EditorState_Moving:
+	{
+		return CreateString("EditorState_Moving");
+	}break;
+	case EditorState_DragingPanel:
+	{
+		return CreateString("EditorState_DraggingPanel");
+	}break;
+	case EditorState_PickingColor:
+	{
+		return CreateString("EditorState_PickingColor");
+	}break;
+	case EditorState_AlteringValue: 
+	{
+		return CreateString("EditorState_AlteringValue"); 
+	}break;
+	}
+	return CreateString("Unknown EditorState.");
+}
+
+
+struct TweekerPointer
+{
+	TweekerType type;
+	String name;
+
+	union 
+	{
+		u32 *u;
+		f32 *f;
+		v2 *vec2;
+		v3 *vec3;
+		v4 *vec4;
+		b32 *b;
+	};
+
+};
+
+static TweekerPointer CreateTweekerPointer(TweekerType type, char *name, void *address)
+{
+	TweekerPointer ret;
+	ret.type = type;
+	ret.name = CreateString(name);
+	ret.u = (u32 *)address;
+	return ret;
+}
+
+DefineDynamicArray(TweekerPointer);
+
+struct TextInput
+{
+	String string;
+	u32 maxLength;
+};
+
+struct EditorPanel
+{
+	b32 visible;
+	v2 pos;
+	u32 hotValue;
+	Char hotValueXYZ;
+	TextInput textInput;
+
+	TweekerPointerDynamicArray values;
+};
+
 struct Editor
 {
 	EditorUIElementDynamicArray elements;
+	PlacedMesh *hotMesh;
+	u32 unitIndex;
+	EditorState state = EditorState_Default;
+
+	EditorPanel panel;
+
+	Quaternion rotater = { 1, 0, 0, 0 };
+	f32 scaler = 1.0f;
+	v3 mover = V3();
+
+	v3 focusPoint;
 };
+
+static f32 HeightForTweekerPanel(TweekerType type, f32 editorBorderWidth, f32 editorPanelFontSize)
+{
+	switch (type)
+	{
+	case Tweeker_b32:
+	{
+		return (editorPanelFontSize + editorBorderWidth);
+	}break;
+	case Tweeker_u32:
+	{
+		return (editorPanelFontSize + editorBorderWidth);
+	}break;
+	case Tweeker_f32:
+	{
+		
+		return (editorPanelFontSize + editorBorderWidth);
+	}break;
+	case Tweeker_v2:
+	{
+		return (3.0f * editorPanelFontSize + editorBorderWidth);
+
+	}break;
+	case Tweeker_v3:
+	{
+		return (4.0f * editorPanelFontSize + editorBorderWidth);
+	}break;
+	case Tweeker_v4:
+	{
+		f32 colorRectSize = 3.0f * editorPanelFontSize;
+		f32 height = 2.0f * editorBorderWidth + colorRectSize;
+
+		return height;
+	}break;
+	default:
+	{
+		Die;
+		return 0.0f;
+	}break;
+	}
+
+}
+
+
+static void RenderEditorPanel(RenderGroup *rg, Editor editor, Font font)
+{
+	if (editor.state == EditorState_Rotating || editor.state == EditorState_Scaling || editor.state == EditorState_Moving)
+	{
+		return;
+	}
+	
+	EditorPanel *p = &editor.panel;
+	if (!p->visible) return;
+
+	Tweekable(v4, editorPanelColor, V4(1, 1, 1, 1));
+	Tweekable(v4, editorPanelValueColor, V4(1, 0.5f, 0.7f, 1.0f)); 
+	Tweekable(v4, editorPanelHeaderColor, V4(1, 0.4f, 0.6f, 0.8f));
+	Tweekable(f32, editorBorderWidth, 0.01f);
+	Tweekable(f32, editorHeaderWidth, 0.08f);
+	Tweekable(f32, editorPanelFontSize, 0.01f);
+	Tweekable(f32, editorPanelWidth, 0.1f);
+	Tweekable(f32, editorPanelHeight, 0.6f);
+
+	f32 panelWidth = editorPanelWidth;
+	f32 panelHeight = editorPanelHeight;
+
+	//whole thang
+	PushRectangle(rg, p->pos, panelWidth, panelHeight, editorPanelColor);
+
+	//header
+	f32 widthWithoutBoarder = panelWidth - 2 * editorBorderWidth;
+	PushRectangle(rg, p->pos + V2(editorBorderWidth, editorBorderWidth), widthWithoutBoarder, editorHeaderWidth, editorPanelHeaderColor);
+	PushString(rg, p->pos + V2(editorBorderWidth, editorBorderWidth), EditorStateToString(editor.state), 0.5f * editorHeaderWidth, font);
+
+	u32 xyz = editor.panel.hotValueXYZ;
+	v2 valuePos = p->pos + V2(editorBorderWidth, editorBorderWidth + editorHeaderWidth);
+	For(p->values)
+	{
+		
+		String name = FormatString("%s:", it->name);
+		f32 offset = PushString(rg, valuePos, name, editorPanelFontSize, font);
+
+		v2 writePos = valuePos + V2(0, editorPanelFontSize);
+		v2 continuePos = valuePos + V2(offset + 3 * editorPanelFontSize, 0);
+
+		switch (it->type)
+		{
+		case Tweeker_b32:
+		{
+			f32 height = editorPanelFontSize + editorBorderWidth;
+			PushRectangle(rg, valuePos, widthWithoutBoarder, height, editorPanelValueColor);
+
+			if (*it->b)
+			{
+				PushString(rg, continuePos, "True", editorPanelFontSize, font);
+			}
+			else
+			{
+				PushString(rg, continuePos, "False", editorPanelFontSize, font);
+			}
+
+			valuePos.y += height;
+		}break;
+		case Tweeker_u32:
+		{
+			f32 height = editorPanelFontSize + editorBorderWidth;
+			PushRectangle(rg, valuePos, widthWithoutBoarder, height, editorPanelValueColor);
+
+			if (p->values.data + p->hotValue == it)
+			{
+				PushString(rg, continuePos, p->textInput.string, editorPanelFontSize, font);
+				valuePos.y += height;
+				break;
+			}
+
+			String str = UtoS(*it->u);
+			PushString(rg, continuePos, str, editorPanelFontSize, font);
+			valuePos.y += height;
+		}break;
+		case Tweeker_f32:
+		{
+			f32 height = editorPanelFontSize + editorBorderWidth;
+			PushRectangle(rg, valuePos, widthWithoutBoarder, height, editorPanelValueColor);
+			if (p->values.data + p->hotValue == it)
+			{
+				PushString(rg, continuePos, p->textInput.string, editorPanelFontSize, font);
+				valuePos.y += height;
+				break;
+			}
+
+			String str = FtoS(*it->f);
+			PushString(rg, continuePos, str, editorPanelFontSize, font);
+
+			valuePos.y += height;
+		}break;
+		case Tweeker_v2:
+		{
+			f32 height = 3.0f * editorPanelFontSize + editorBorderWidth;
+			PushRectangle(rg, valuePos, widthWithoutBoarder, height, editorPanelValueColor);
+
+			if (xyz == 'x' && (p->values.data + p->hotValue == it))
+			{
+				String str = FormatString("x: %s", p->textInput.string);
+				PushString(rg, writePos, str, editorPanelFontSize, font);
+			}
+			else
+			{
+				String strx = FormatString("x: %s", FtoS(it->vec2->x));
+				PushString(rg, writePos, strx, editorPanelFontSize, font);
+			}
+
+			writePos.y += editorPanelFontSize;
+
+			if (xyz == 'y' && (p->values.data + p->hotValue == it))
+			{
+				String str = FormatString("y: %s", p->textInput.string);
+				PushString(rg, writePos, str, editorPanelFontSize, font);
+			}
+			else
+			{
+			
+				String stry = FormatString("y: %s", FtoS(it->vec2->y));
+				PushString(rg, writePos, stry, editorPanelFontSize, font);
+			}
+			valuePos.y += height;
+
+		}break;
+		case Tweeker_v3:
+		{
+			f32 height = 4.0f * editorPanelFontSize + editorBorderWidth;
+			PushRectangle(rg, valuePos, widthWithoutBoarder, height, editorPanelValueColor);
+
+			if (xyz == 'x' && (p->values.data + p->hotValue == it))
+			{
+				String str = FormatString("x: %s", p->textInput.string);
+				PushString(rg, writePos, str, editorPanelFontSize, font);
+			}
+			else
+			{
+				String strx = FormatString("x: %s", FtoS(it->vec3->x));
+				PushString(rg, writePos, strx, editorPanelFontSize, font);
+			}
+			writePos.y += editorPanelFontSize;
+			if (xyz == 'y' && (p->values.data + p->hotValue == it))
+			{
+				String str = FormatString("y: %s", p->textInput.string);
+				PushString(rg, writePos, str, editorPanelFontSize, font);
+			}
+			else
+			{
+				String stry = FormatString("y: %s", FtoS(it->vec3->y));
+				PushString(rg, writePos, stry, editorPanelFontSize, font);
+			}
+			writePos.y += editorPanelFontSize;
+
+			if (xyz == 'z' && (p->values.data + p->hotValue == it))
+			{
+				String str = FormatString("z: %s", p->textInput.string);
+				PushString(rg, writePos, str, editorPanelFontSize, font);
+			}
+			else
+			{
+				String strz = FormatString("z: %s", FtoS(it->vec3->z));
+				PushString(rg, writePos, strz, editorPanelFontSize, font);
+			}
+			valuePos.y += height;
+		}break;
+		case Tweeker_v4:
+		{
+			f32 colorRectSize = 3.0f * editorPanelFontSize;
+			f32 height = 2.0f * editorBorderWidth + colorRectSize;
+			PushRectangle(rg, valuePos, widthWithoutBoarder, height, editorPanelValueColor);
+			
+			v4 color = *it->vec4;
+			PushRectangle(rg, V2(valuePos.x + widthWithoutBoarder - colorRectSize - editorBorderWidth, valuePos.y + editorBorderWidth), colorRectSize, colorRectSize, color);
+			valuePos.y += height;
+		}break;
+		default:
+		{
+			Die;
+		}break;
+		}
+		
+		valuePos.y += editorBorderWidth;
+	}
+
+}
+
+
+static Editor InitEditor(Camera camera, Arena *constantArena)
+{
+	Editor ret;
+	ret.elements = EditorUIElementCreateDynamicArray();
+
+	ret.hotMesh = NULL;
+	ret.unitIndex = 0xFFFFFFFF;
+	ret.state = EditorState_Default;
+
+	Tweekable(v2, initialEditorPanelPos, V2(0.75f, 0.2f));
+	
+	ret.panel.pos = initialEditorPanelPos;
+	ret.panel.visible = false;
+	ret.panel.values = TweekerPointerCreateDynamicArray();
+	ret.panel.textInput.string = PushArray(constantArena, Char, 50);
+	ret.panel.textInput.string.length = 0;
+	ret.panel.textInput.maxLength = 50;
+	ret.panel.hotValue = 0xFFFFFFFF;
+
+	ret.focusPoint = i12(ScreenZeroToOneToInGame(camera, V2(0.5f, 0.5f)));
+
+	ret.rotater = { 1, 0, 0, 0 };
+	ret.scaler = 1.0f;
+	ret.mover = V3();
+	return ret;
+}
 
 
 // todo: i don't think it matters here, but I really have to get these color things straight.
-static ColorPicker CreateColorPicker(v4 initialColor)
+static ColorPicker CreateColorPicker(v4 *initialColor)
 {
-
 	// WARINIG : the factors DO NOT commute with the interpolation, do they?
 
 	// calculating bar pos and picker pos : colors in the bar are of the form 0xFF00abFF or 0xFFabFF00, or something like that (2F, 20, 2 something)
 	ColorPicker ret;
 
+	ret.isTweeker = false;
 	Tweekable(f32, pickerBorder);
 	Tweekable(f32, pickerWidth);
 	Tweekable(f32, pickerHeight);
@@ -83,7 +447,7 @@ static ColorPicker CreateColorPicker(v4 initialColor)
 	ret.killRectPos = V2(ret.headerPos.x + ret.width - ret.headerSize, ret.headerPos.y);
 
 	ret.pickedColor = initialColor;
-	u32 c = Pack4x8(initialColor);
+	u32 c = Pack4x8(*initialColor);
 	u32 a = (c >> 24) & 0xFF;
 	u32 b = (c >> 16) & 0xFF;
 	u32 g = (c >> 8) & 0xFF;
@@ -180,44 +544,6 @@ static ColorPicker CreateColorPicker(v4 initialColor)
 
 static void WriteSingleTweeker(Tweeker tweeker);
 //returns whether or not it should be closed
-static bool ColorPickerHandleEvent(ColorPicker *picker, KeyStateMessage message, Input input)
-{
-	if (!message.key == Key_leftMouse)
-	{
-		return false;
-	}
-
-	if ((message.flag & KeyState_PressedThisFrame))
-	{
-		if (PointInRectangle(picker->sliderPos, picker->width, picker->sliderHeight, input.mouseZeroToOne))
-		{
-			picker->selecting = (message.flag & KeyState_Down) ? PickerSelecting_Slider : PickerSelecting_Nothing;
-			return false;
-		}
-		if (PointInRectangle(picker->pos, picker->width, picker->height, input.mouseZeroToOne))
-		{
-			picker->selecting = (message.flag & KeyState_Down) ? PickerSelecting_ColorPicker : PickerSelecting_Nothing;
-			return false;
-		}
-		if (PointInRectangle(picker->killRectPos, picker->headerSize, picker->headerSize, input.mouseZeroToOne))
-		{
-			WriteSingleTweeker(picker->tweeker);
-			return true;
-		}
-		if (PointInRectangle(picker->headerPos, picker->width, picker->headerSize, input.mouseZeroToOne))
-		{
-			picker->selecting = (message.flag & KeyState_Down) ? PickerSelecting_Header : PickerSelecting_Nothing;
-			return false;
-		}
-
-	}
-
-	if (message.flag & KeyState_ReleasedThisFrame)
-	{
-		picker->selecting = PickerSelecting_Nothing;
-	}
-	return false;
-}
 
 // todo: could save these up and then on access do the mem copy. Not sure if worth the complexity
 // todo unordered remove (just move the last guy)
@@ -241,31 +567,7 @@ static void ArrayRemove(EditorUIElementDynamicArray *arr, EditorUIElement *elem)
 	}
 }
 
-static void EditorHandleEvents(Editor *editor, KeyStateMessage message, Input input)
-{
-	For(editor->elements)
-	{
-		switch (it->type)
-		{
-		case EditorUI_ColorPicker:
-		{
-			bool shouldClose = ColorPickerHandleEvent(&it->picker, message, input);
-			if (shouldClose)
-			{
-				ArrayRemove(&editor->elements, it);
-			}
-		}break;
-		default:
-		{
-			Die;
-		}break;
-
-		}
-
-	}
-}
-
-static void ColorPickerUpdate(ColorPicker *picker, Input input)
+static void UpdateColorPicker(ColorPicker *picker, Input input)
 {
 	Tweekable(f32, pickerBorder);
 	Tweekable(f32, pickerWidth);
@@ -329,14 +631,14 @@ static void ColorPickerUpdate(ColorPicker *picker, Input input)
 	v3 interpWithWhite = LerpVector3(ul, ur, xfac);
 	v3 color = LerpVector3(interpWithWhite, bottom, yfac);
 
-	picker->pickedColor = V4(1.0f, color);
+	*picker->pickedColor = V4(1.0f, color);
 
 	//todo if we use this in some other context, we either have to make everything tweekers, or have to re-formalize this.
-	picker->tweeker.vec4 = picker->pickedColor;
-	Tweek(picker->tweeker);
+	//picker->tweeker.vec4 = picker->pickedColor;
+	//Tweek(picker->tweeker);
 }
 
-static void ColorPickerRender(RenderGroup *rg, ColorPicker *picker)
+static void RenderColorPicker(RenderGroup *rg, ColorPicker *picker)
 {
 	Tweekable(v4, borderColor);
 
@@ -399,22 +701,77 @@ static void ColorPickerRender(RenderGroup *rg, ColorPicker *picker)
 	Tweekable(f32, pickerFontSize);
 	Tweekable(f32, pickerFontXIncrease);
 	f32 fontY = picker->pos.y + picker->width - pickerFontSize;
-	PushString(rg, V2(picker->pos.x + 0.0f * pickerFontXIncrease * pickerFontSize, fontY), FormatString("a:%f32", picker->pickedColor.a), pickerFontSize, globalFont);
-	PushString(rg, V2(picker->pos.x + 1.0f * pickerFontXIncrease * pickerFontSize, fontY), FormatString("r:%f32", picker->pickedColor.r), pickerFontSize, globalFont);
-	PushString(rg, V2(picker->pos.x + 2.0f * pickerFontXIncrease * pickerFontSize, fontY), FormatString("g:%f32", picker->pickedColor.g), pickerFontSize, globalFont);
-	PushString(rg, V2(picker->pos.x + 3.0f * pickerFontXIncrease * pickerFontSize, fontY), FormatString("b:%f32", picker->pickedColor.b), pickerFontSize, globalFont);
+	PushString(rg, V2(picker->pos.x + 0.0f * pickerFontXIncrease * pickerFontSize, fontY), FormatString("a:%f32", picker->pickedColor->a), pickerFontSize, globalFont);
+	PushString(rg, V2(picker->pos.x + 1.0f * pickerFontXIncrease * pickerFontSize, fontY), FormatString("r:%f32", picker->pickedColor->r), pickerFontSize, globalFont);
+	PushString(rg, V2(picker->pos.x + 2.0f * pickerFontXIncrease * pickerFontSize, fontY), FormatString("g:%f32", picker->pickedColor->g), pickerFontSize, globalFont);
+	PushString(rg, V2(picker->pos.x + 3.0f * pickerFontXIncrease * pickerFontSize, fontY), FormatString("b:%f32", picker->pickedColor->b), pickerFontSize, globalFont);
 
 }
 
+
 static void RenderEditor(RenderGroup *rg, Editor editor)
 {
+	PlacedMesh *mesh = editor.hotMesh;
+	if (!mesh) return;
+	AABB transformedAABB = mesh->untransformedAABB;
+
+	transformedAABB.minDim *= mesh->scale;
+	transformedAABB.maxDim *= mesh->scale;
+
+	m4x4 mat = Translate(QuaternionToMatrix(mesh->orientation), mesh->pos);
+
+	v3 d1 = V3(transformedAABB.maxDim.x - transformedAABB.minDim.x, 0, 0);
+	v3 d2 = V3(0, transformedAABB.maxDim.y - transformedAABB.minDim.y, 0);
+	v3 d3 = V3(0, 0, transformedAABB.maxDim.z - transformedAABB.minDim.z);
+
+	v3 p[8] =
+	{
+		mat * transformedAABB.minDim,			//0
+
+		mat * (transformedAABB.minDim + d1),		//1
+		mat * (transformedAABB.minDim + d2),		//2
+		mat * (transformedAABB.minDim + d3),		//3
+
+		mat * (transformedAABB.minDim + d1 + d2),	//4
+		mat * (transformedAABB.minDim + d2 + d3),	//5
+		mat * (transformedAABB.minDim + d3 + d1),	//6
+
+		mat * transformedAABB.maxDim,			//7
+
+	};
+
+	//_upper_ square
+	PushLine(rg, p[0], p[1]);
+	PushLine(rg, p[1], p[4]);
+	PushLine(rg, p[4], p[2]);
+	PushLine(rg, p[2], p[0]);
+
+	//_lower_ square
+	PushLine(rg, p[7], p[5]);
+	PushLine(rg, p[5], p[3]);
+	PushLine(rg, p[3], p[6]);
+	PushLine(rg, p[6], p[7]);
+
+	//_connecting_ lines
+	PushLine(rg, p[0], p[3]);
+	PushLine(rg, p[2], p[5]);
+	PushLine(rg, p[1], p[6]);
+	PushLine(rg, p[4], p[7]);
+
+}
+
+static void RenderEditorUI(RenderGroup *rg, Editor editor, Font font)
+{
+
+	RenderEditorPanel(rg, editor, font);
+
 	For(editor.elements)
 	{
 		switch (it->type)
 		{
 		case EditorUI_ColorPicker:
 		{
-			ColorPickerRender(rg, &it->picker);
+			RenderColorPicker(rg, &it->picker);
 		}break;
 		default:
 		{
@@ -424,503 +781,10 @@ static void RenderEditor(RenderGroup *rg, Editor editor)
 		}
 
 	}
+
 }
 
-static String GetFilePathFromName(String fileName)
-{
-	u32 positionOfLastSlash = 0;
-	for (u32 i = fileName.length - 1; i < MAXU32; i--)
-	{
-		if (fileName[i] == '/')
-		{
-			positionOfLastSlash = i;
-			break;
-		}
-	}
-	if (!positionOfLastSlash)
-	{
-		return {};
-	}
-
-	String ret; 
-	ret.data = fileName.data;
-	ret.length = positionOfLastSlash + 1;
-	return ret;
-}
-
-
-//look at 1:50 in vertex vbo
-// todo right now this allocates into "arena", exept name and bitmap are hardcoded to go into constant arena and virtual alloc
-static MaterialDynamicArray LoadMTL(AssetHandler *assetHandler, String path, String fileName, Arena *arena)
-{
-	MaterialDynamicArray ret = MaterialCreateDynamicArray();
-
-	u8 *frameArenaReset = frameArena->current;
-	defer(frameArena->current = frameArenaReset);
-	File file = LoadFile((char *)FormatCString("%s%s\0", path, fileName).data, frameArena);
-	Assert(file.fileSize);
-	String string = CreateString((Char *)file.memory, file.fileSize); 
-	
-	b32 success = true;
-
-	while (string.length)
-	{
-		Material cur = {};
-		String line = ConsumeNextLineSanitize(&string);
-		while (string.length && line.length == 0 || line[0] == '#') { line = ConsumeNextLineSanitize(&string); }
-
-		// newmtl
-		{
-			String ident = EatToNextSpaceReturnHead(&line);
-			Assert(ident == "newmtl");
-			EatSpaces(&line);
-			
-			cur.name = CopyString(line, constantArena);
-		}
-
-		line = ConsumeNextLineSanitize(&string);
-		while (string.length && line.length == 0 || line[0] == '#') { line = ConsumeNextLineSanitize(&string); }
-
-		// Ns
-		{
-			String ident = EatToNextSpaceReturnHead(&line);
-			Assert(ident == "Ns");
-			EatSpaces(&line);
-			cur.spectularExponent = StoF(line, &success);
-		}
-
-		line = ConsumeNextLineSanitize(&string);
-		while (string.length && line.length == 0 || line[0] == '#') { line = ConsumeNextLineSanitize(&string); }
-
-		// Ka
-		{
-			String ident = EatToNextSpaceReturnHead(&line);
-			Assert(ident == "Ka");
-			EatSpaces(&line);
-			String head = EatToNextSpaceReturnHead(&line);
-			f32 a1 = StoF(head, &success);
-
-			EatSpaces(&line);
-			head = EatToNextSpaceReturnHead(&line);
-			f32 a2 = StoF(head, &success);
-
-			EatSpaces(&line);
-			head = EatToNextSpaceReturnHead(&line);
-			f32 a3 = StoF(head, &success);
-			
-			cur.ambientColor = V3(a1, a2, a3);
-		}
-
-		line = ConsumeNextLineSanitize(&string);
-		while (string.length && line.length == 0 || line[0] == '#') { line = ConsumeNextLineSanitize(&string); }
-
-		// Kd
-		{
-			String ident = EatToNextSpaceReturnHead(&line);
-			Assert(ident == "Kd");
-			EatSpaces(&line);
-			String head = EatToNextSpaceReturnHead(&line);
-			f32 a1 = StoF(head, &success);
-
-			EatSpaces(&line);
-			head = EatToNextSpaceReturnHead(&line);
-			f32 a2 = StoF(head, &success);
-
-			EatSpaces(&line);
-			head = EatToNextSpaceReturnHead(&line);
-			f32 a3 = StoF(head, &success);
-
-			cur.diffuseColor = V3(a1, a2, a3);
-		}
-
-		line = ConsumeNextLineSanitize(&string);
-		while (string.length && line.length == 0 || line[0] == '#') { line = ConsumeNextLineSanitize(&string); }
-
-		// Ks
-		{
-			String ident = EatToNextSpaceReturnHead(&line);
-			Assert(ident == "Ks");
-			EatSpaces(&line);
-			String head = EatToNextSpaceReturnHead(&line);
-			f32 a1 = StoF(head, &success);
-
-			EatSpaces(&line);
-			head = EatToNextSpaceReturnHead(&line);
-			f32 a2 = StoF(head, &success);
-
-			EatSpaces(&line);
-			head = EatToNextSpaceReturnHead(&line);
-			f32 a3 = StoF(head, &success);
-
-			cur.specularColor = V3(a1, a2, a3);
-		}
-
-		line = ConsumeNextLineSanitize(&string);
-		while (string.length && line.length == 0 || line[0] == '#') { line = ConsumeNextLineSanitize(&string); }
-
-		// Ke
-		{
-			String ident = EatToNextSpaceReturnHead(&line);
-			Assert(ident == "Ke");
-			EatSpaces(&line);
-			String head = EatToNextSpaceReturnHead(&line);
-			f32 a1 = StoF(head, &success);
-
-			EatSpaces(&line);
-			head = EatToNextSpaceReturnHead(&line);
-			f32 a2 = StoF(head, &success);
-
-			EatSpaces(&line);
-			head = EatToNextSpaceReturnHead(&line);
-			f32 a3 = StoF(head, &success);
-
-			cur.ke = V3(a1, a2, a3);
-		}
-
-		line = ConsumeNextLineSanitize(&string);
-		while (string.length && line.length == 0 || line[0] == '#') { line = ConsumeNextLineSanitize(&string); }
-
-		// Ni
-		{
-			String ident = EatToNextSpaceReturnHead(&line);
-			Assert(ident == "Ni");
-			EatSpaces(&line);
-			String head = EatToNextSpaceReturnHead(&line);
-			f32 a1 = StoF(head, &success);
-
-			cur.indexOfReflection = a1;
-		}
-
-		line = ConsumeNextLineSanitize(&string);
-		while (string.length && line.length == 0 || line[0] == '#') { line = ConsumeNextLineSanitize(&string); }
-
-		// d
-		{
-			String ident = EatToNextSpaceReturnHead(&line);
-			Assert(ident == "d");
-			EatSpaces(&line);
-			String head = EatToNextSpaceReturnHead(&line);
-			f32 a1 = StoF(head, &success);
-
-			cur.dissolved = a1;
-		}
-
-		line = ConsumeNextLineSanitize(&string);
-		while (string.length && line.length == 0 || line[0] == '#') { line = ConsumeNextLineSanitize(&string); }
-
-		// illum
-		{
-			String ident = EatToNextSpaceReturnHead(&line);
-			Assert(ident == "illum");
-			EatSpaces(&line);
-			String head = EatToNextSpaceReturnHead(&line);
-			u32 a1 = StoU(head, &success);
-
-			cur.illuminationModel = a1;
-		}
-
-		line = ConsumeNextLineSanitize(&string);
-		while (string.length && line.length == 0 || line[0] == '#') { line = ConsumeNextLineSanitize(&string); }
-
-		// map_Kd
-		{
-			String ident = EatToNextSpaceReturnHead(&line);
-			Assert(ident == "map_Kd");
-			EatSpaces(&line);
-			if(assetHandler) cur.bitmapID = RegisterAsset(assetHandler, Asset_Texture, (char *)FormatCString("%s%s%c1", path, line, '\0').data);
-		}
-
-		ArrayAdd(&ret, cur);
-	}
-
-	Assert(success);
-
-	return ret;
-}
-
-static TriangleMesh ReadObj(AssetHandler *assetHandler, char *fileName)
-{
-	String filename = CreateString(fileName);
-	String path = GetFilePathFromName(filename);
-	Arena *arena = constantArena;
-	TriangleMesh ret = {};
-
-	u8 *frameArenaReset = frameArena->current;
-	defer(frameArena->current = frameArenaReset);
-
-	File file = LoadFile(fileName, frameArena);
-	if (!file.fileSize) return {};
-	String string = CreateString((Char *)file.memory, file.fileSize);
-
-	// here mtllib "bla.mtl"
-	String mtllib = ConsumeNextLineSanitize(&string);
-	while (string.length && mtllib.length == 0 || mtllib[0] == '#') { mtllib = ConsumeNextLineSanitize(&string); }
-	Assert(string.length);
-	String ident = EatToNextSpaceReturnHead(&mtllib);
-	Assert(ident == "mtllib");
-	EatSpaces(&mtllib);
-
-	MaterialDynamicArray materials = LoadMTL(assetHandler, path, mtllib, frameArena); 
-	// todo make sure that multiples get handled, i.e make this assets.
-
-	b32 success = true;
-	u32 amountOfVertsBefore = 1;
-	u32 amountOfNormalsBefore = 1;
-	u32 amountOfUVsBefore = 1;
-	u32 amountOfIndeciesBefore = 0;
-	String line = ConsumeNextLineSanitize(&string);
-
-	u16PtrDynamicArray indexPointerArray = u16PtrCreateDynamicArray();
-	IndexSetDynamicArray indexSets = IndexSetCreateDynamicArray();
-
-	// begin on vertex daisy chain
-	ret.vertices.data = (VertexFormat *)arena->current;
-
-	while (string.length)
-	{
-		IndexSet cur;
-
-		while (string.length && line.length == 0 || line[0] == '#') { line = ConsumeNextLineSanitize(&string); }
-		if (!string.length) break;
-
-		// o
-		{
-			String head = EatToNextSpaceReturnHead(&line);
-			Assert(head == "o");
-			EatSpaces(&line);
-			String o = line; // ignored for now
-		}
-
-		line = ConsumeNextLineSanitize(&string);
-		while (string.length && line.length == 0 || line[0] == '#') { line = ConsumeNextLineSanitize(&string); }
-		if (!string.length) break;
-
-		// todo  speed, here we first load and then copy later when we read in the triangles, not sure if we could make this better...
-
-		BeginArray(frameArena, v3, tempVertexArray); // could silent fill and the push, which is not as "save".
-		while (line[0] == 'v' && line[1] == ' ')
-		{
-			Eat1(&line);
-			EatSpaces(&line);
-			String f1 = EatToNextSpaceReturnHead(&line);
-			EatSpaces(&line);
-			String f2 = EatToNextSpaceReturnHead(&line);
-			EatSpaces(&line);
-			String f3 = EatToNextSpaceReturnHead(&line);
-			
-			f32 s1 = StoF(f1, &success);
-			f32 s2 = StoF(f2, &success);
-			f32 s3 = StoF(f3, &success);
-			v3 *val = PushStruct(frameArena, v3);
-			*val = V3(s1, s2, s3);
-			
-			line = ConsumeNextLineSanitize(&string);
-		}
-		EndArray(frameArena, v3, tempVertexArray);
-		
-		while (string.length && line.length == 0 || line[0] == '#') { line = ConsumeNextLineSanitize(&string); }
-		if (!string.length) break;
-
-		BeginArray(frameArena, v2, textrueCoordinates);
-		while (line[0] == 'v' && line[1] == 't')
-		{
-			Eat1(&line);
-			Eat1(&line);
-			EatSpaces(&line);
-			String f1 = EatToNextSpaceReturnHead(&line);
-			EatSpaces(&line);
-			String f2 = EatToNextSpaceReturnHead(&line);
-
-			f32 s1 = StoF(f1, &success);
-			f32 s2 = StoF(f2, &success);
-			v2 *val = PushStruct(frameArena, v2);
-			*val = V2(s1, s2);
-
-			line = ConsumeNextLineSanitize(&string);
-		}
-		EndArray(frameArena, v2, textrueCoordinates);
-
-		while (string.length && line.length == 0 || line[0] == '#') { line = ConsumeNextLineSanitize(&string); }
-		if (!string.length) break;
-		BeginArray(frameArena, v3, normals);
-		while (line[0] == 'v' && line[1] == 'n')
-		{
-			Eat1(&line);
-			Eat1(&line);
-			EatSpaces(&line);
-			String f1 = EatToNextSpaceReturnHead(&line);
-			EatSpaces(&line);
-			String f2 = EatToNextSpaceReturnHead(&line);
-			EatSpaces(&line);
-			String f3 = EatToNextSpaceReturnHead(&line);
-
-			f32 s1 = StoF(f1, &success);
-			f32 s2 = StoF(f2, &success);
-			f32 s3 = StoF(f3, &success);
-			v3 *val = PushStruct(frameArena, v3);
-			*val = V3(s1, s2, s3);
-
-			line = ConsumeNextLineSanitize(&string);
-		}
-		EndArray(frameArena, v3, normals);
-
-		while (string.length && line.length == 0 || line[0] == '#') { line = ConsumeNextLineSanitize(&string); }
-		if (!string.length) break;
-
-		// usemtl
-		{
-			String head = EatToNextSpaceReturnHead(&line);
-			Assert(head == "usemtl");
-			EatSpaces(&line);
-			String name = line;
-			For(materials)
-			{
-				if (it->name == name)
-				{
-					cur.mat = *it;
-					break;
-				}
-			}
-		}
-
-		line = ConsumeNextLineSanitize(&string);
-		while (string.length && line.length == 0 || line[0] == '#') { line = ConsumeNextLineSanitize(&string); }
-		if (!string.length) break;
-
-		// s -smoothening, what ever that means
-		{
-			String head = EatToNextSpaceReturnHead(&line);
-			Assert(head == "s");
-			EatSpaces(&line);
-			u32 s = StoU(line, &success); // ignored for now
-		}
-
-		line = ConsumeNextLineSanitize(&string);
-		while (string.length && line.length == 0 || line[0] == '#') { line = ConsumeNextLineSanitize(&string); }
-		if (!string.length) break;
-
-		struct UVList
-		{
-			u16 uvIndex;
-			u16 flattendIndex;
-			u16 normalIndex;
-			UVList *next;
-		};
-		typedef UVList * UVListPtr;
-		DefineArray(UVListPtr);
-
-		Clear(workingArena);
-		UVListPtrArray flatten = PushZeroArray(workingArena, UVListPtr, tempVertexArray.amount);
-		u32 vertexArrayLength = 0;
-
-		cur.offset = amountOfIndeciesBefore;
-		
-		BeginArray(frameArena, u16, indecies);
-		ArrayAdd(&indexPointerArray, indecies.data);
-		while (line[0] == 'f')
-		{
-			Eat1(&line);
-
-			// we assume they are all here
-
-			for (u32 parseIndex = 0; parseIndex < 3; parseIndex++)
-			{
-				EatSpaces(&line);
-				String s1 = EatToCharReturnHead(&line, '/', ' ');
-				Eat1(&line);
-				String s2 = EatToCharReturnHead(&line, '/', ' ');
-				Eat1(&line);
-				String s3 = EatToCharReturnHead(&line, ' ');
-
-
-				u32 u1 = StoU(s1, &success) - amountOfVertsBefore;		// this has to be relative to be an index, but also saved absolute wrt the flattend array
-				u32 u2 = StoU(s2, &success) - amountOfUVsBefore;		// this is relative as we just need it to build our array
-				u32 u3 = StoU(s3, &success) - amountOfNormalsBefore;	// this is also relative 
-
-				//todo no handling for meshes, that have more then 0xFFFE verticies
-				
-				// we are flattening trough an array of vertex positions
-				u16 flattenedIndex = 0xFFFF;
-				for (UVListPtr it = flatten[u1]; it; it = it->next)
-				{
-					if (it->uvIndex == u2 && it->normalIndex == u3)
-					{
-						flattenedIndex = it->flattendIndex;
-						break;
-					}
-				}
-
-				if (flattenedIndex == 0xFFFF)
-				{
-					UVList *append = PushStruct(workingArena, UVList);
-					append->flattendIndex = vertexArrayLength++;
-					append->next = flatten[u1];
-					append->uvIndex = (u16)u2;
-					append->normalIndex = (u16)u3;
-					flatten[u1] = append;
-					
-					flattenedIndex = append->flattendIndex;
-				}
-
-				*PushStruct(frameArena, u16) = flattenedIndex + ret.vertices.amount;
-			}
-
-			line = ConsumeNextLineSanitize(&string);
-		}
-		EndArray(frameArena, u16, indecies);
-		cur.amount = indecies.amount;
-
-		ArrayAdd(&indexSets, cur);
-
-		amountOfIndeciesBefore += indecies.amount;
-		amountOfVertsBefore += tempVertexArray.amount;
-		amountOfNormalsBefore += normals.amount;
-		amountOfUVsBefore += textrueCoordinates.amount;
-		ret.vertices.amount += vertexArrayLength;
-
-		// vertexArrayLength allready incrented by flattening
-		VertexFormatArray save = PushArray(arena, VertexFormat, vertexArrayLength);
-		//
-		// WARNING, we are daisy chaining here into constantArena and into frameArena
-		//
-		For (flatten)
-		{
-			u32 it_index = (u32)(it - &flatten[0]);
-			for (UVListPtr i = *it; i; i = i->next)
-			{
-				save[i->flattendIndex].p = tempVertexArray[it_index];
-				save[i->flattendIndex].uv = textrueCoordinates[i->uvIndex];
-				save[i->flattendIndex].n = normals[i->normalIndex];
-				save[i->flattendIndex].c = 0xFFFFFFFF;
-			}
-		}
-	}
-	
-
-	ret.indices.data = (u16 *)arena->current;
-	Assert(indexPointerArray.amount == indexSets.amount);
-	for(u32 i = 0; i < indexPointerArray.amount; i++)
-	{
-		IndexSet set = indexSets[i];
-		u16 *source = indexPointerArray[i];
-		u16 *dest = PushData(arena, u16, set.amount);
-		memcpy(dest, source, set.amount * sizeof(u16));
-	}
-	ret.indices.amount = (u32)((u16 *)arena->current - ret.indices.data);
-
-	ret.indexSets = PushArray(arena, IndexSet, indexSets.amount);
-	memcpy(ret.indexSets.data, indexSets.data, indexSets.amount * sizeof(IndexSet));
-
-	ret.type = TriangleMeshType_List;
-
-	RegisterTriangleMesh(&ret);
-
-	Assert(success);
-	
-	return ret;
-}
-
-static void UpdateEditor(Editor *editor, Input input)
+static void UpdateColorPickers(Editor *editor, Input input)
 {
 	For(editor->elements)
 	{
@@ -928,7 +792,7 @@ static void UpdateEditor(Editor *editor, Input input)
 		{
 		case EditorUI_ColorPicker:
 		{
-			ColorPickerUpdate(&it->picker, input);
+			UpdateColorPicker(&it->picker, input);
 		}break;
 		default:
 		{
@@ -940,22 +804,912 @@ static void UpdateEditor(Editor *editor, Input input)
 	}
 }
 
-static void WriteTexture(char *fileName, Bitmap bitmap)
+static void ColorPickersHandleEvents(Editor *editor, KeyStateMessage message, Input input)
 {
-	u8 *arenaCur = frameArena->current;
-	defer(frameArena->current = arenaCur);
 
-	Assert(bitmap.height == AssetBitmapSize);
-	Assert(bitmap.width  == AssetBitmapSize);
-	Assert(bitmap.pixels);
+	For(editor->elements)
+	{
+		switch (it->type)
+		{
+		case EditorUI_ColorPicker:
+		{
+			ColorPicker *picker = &it->picker;
+			if (!message.key == Key_leftMouse)
+			{
+				break;
+			}
 
-	u32 fileSize = AssetBitmapSize * AssetBitmapSize * sizeof(u32);
-	File file = CreateFile(PushData(frameArena, u8, fileSize), fileSize);
-	memcpy(file.memory, bitmap.pixels, fileSize);
-	WriteEntireFile(fileName, file);
+			if ((message.flag & KeyState_PressedThisFrame))
+			{
+				if (PointInRectangle(picker->sliderPos, picker->width, picker->sliderHeight, input.mouseZeroToOne))
+				{
+					picker->selecting = (message.flag & KeyState_Down) ? PickerSelecting_Slider : PickerSelecting_Nothing;
+					return;
+				}
+				if (PointInRectangle(picker->pos, picker->width, picker->height, input.mouseZeroToOne))
+				{
+					picker->selecting = (message.flag & KeyState_Down) ? PickerSelecting_ColorPicker : PickerSelecting_Nothing;
+					return;
+				}
+				if (PointInRectangle(picker->killRectPos, picker->headerSize, picker->headerSize, input.mouseZeroToOne))
+				{
+					if (picker->isTweeker)
+					{
+						WriteSingleTweeker(*picker->tweeker);
+					}
+					ArrayRemove(&editor->elements, it);
+					return;
+				}
+				if (PointInRectangle(picker->headerPos, picker->width, picker->headerSize, input.mouseZeroToOne))
+				{
+					picker->selecting = (message.flag & KeyState_Down) ? PickerSelecting_Header : PickerSelecting_Nothing;
+					return;
+				}
+
+			}
+			if (message.flag & KeyState_ReleasedThisFrame)
+			{
+				picker->selecting = PickerSelecting_Nothing;
+			}
+
+			return;
+		}break;
+		default:
+		{
+			Die;
+		}break;
+
+		}
+	}
 }
 
 
+static void EditorGoToNone(Editor *editor)
+{
+	editor->state = EditorState_Default;
+	editor->rotater = { 1.0f, 0, 0, 0 };
+	editor->scaler = 1.0f;
+	editor->mover = V3();
+}
+
+static PlacedMesh *GetHotMesh(World *world, v2 mousePosZeroToOne)
+{
+	v3 camP = world->camera.pos; // todo camera or debugCamera? Maybe we should again unify them
+	v3 camD = ScreenZeroToOneToDirecion(world->camera, mousePosZeroToOne);
+
+	For(world->placedMeshes)
+	{
+		m4x4 mat = QuaternionToMatrix(Inverse(it->orientation));
+		v3 rayP = mat * (camP - it->pos);
+		v3 rayD = mat * camD;
+		AABB aabb = it->untransformedAABB;
+		aabb.maxDim *= it->scale;
+		aabb.minDim *= it->scale;
+		f32 curIntersectionMin = MAXF32;
+
+		f32 x = rayP.x;
+		f32 dx = rayD.x;
+		f32 y = rayP.y;
+		f32 dy = rayD.y;
+		f32 z = rayP.z;
+		f32 dz = rayD.z;
+
+		f32 aabbMinX = aabb.minDim.x;
+		f32 aabbMaxX = aabb.maxDim.x;
+		f32 aabbMinY = aabb.minDim.y;
+		f32 aabbMaxY = aabb.maxDim.y;
+		f32 aabbMinZ = aabb.minDim.z;
+		f32 aabbMaxZ = aabb.maxDim.z;
+
+		f32 t1x = (aabbMaxX - x) / dx;
+		if (dx > 0 && t1x <= curIntersectionMin)
+		{
+			curIntersectionMin = t1x;
+		}
+
+		f32 t2x = (aabbMinX - x) / dx;
+		if (dx < 0 && t2x <= curIntersectionMin)
+		{
+			curIntersectionMin = t2x;
+		}
+
+		f32 t1y = (aabbMaxY - y) / dy;
+		if (dy > 0 && t1y <= curIntersectionMin)
+		{
+			curIntersectionMin = t1y;
+		}
+
+		f32 t2y = (aabbMinY - y) / dy;
+		if (dy < 0 && t2y <= curIntersectionMin)
+		{
+			curIntersectionMin = t2y;
+		}
+
+		f32 t1z = (aabbMaxZ - z) / dz;
+		if (dz > 0 && t1z <= curIntersectionMin)
+		{
+			curIntersectionMin = t1z;
+		}
+
+		f32 t2z = (aabbMinZ - z) / dz;
+		if (dz < 0 && t2z <= curIntersectionMin)
+		{
+			curIntersectionMin = t2z;
+		}
+		v3 curExit = rayD * curIntersectionMin + rayP;
+
+		if (PointInAABB(aabb, curExit)) return it;
+
+	}
+
+	return NULL;
+}
+
+// maybe this is a bad function, as it does more then it says
+static void EditorSetHotMeshToNULL(Editor *editor) 
+{
+	editor->panel.values.amount = 0;
+	editor->panel.visible = false;
+	editor->hotMesh = NULL;
+}
+
+static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *world, KeyStateMessage message, Input input, f32 focalLength, f32 aspectRatio)
+{
+	Camera *cam = &world->camera;
+	For(editor->elements)
+	{
+		switch (it->type)
+		{
+		case EditorUI_ColorPicker:
+		{
+			ColorPicker *picker = &it->picker;
+			if (!message.key == Key_leftMouse)
+			{
+				break;
+			}
+
+			if ((message.flag & KeyState_PressedThisFrame))
+			{
+				if (PointInRectangle(picker->sliderPos, picker->width, picker->sliderHeight, input.mouseZeroToOne))
+				{
+					picker->selecting = (message.flag & KeyState_Down) ? PickerSelecting_Slider : PickerSelecting_Nothing;
+					return;
+				}
+				if (PointInRectangle(picker->pos, picker->width, picker->height, input.mouseZeroToOne))
+				{
+					picker->selecting = (message.flag & KeyState_Down) ? PickerSelecting_ColorPicker : PickerSelecting_Nothing;
+					return;
+				}
+				if (PointInRectangle(picker->killRectPos, picker->headerSize, picker->headerSize, input.mouseZeroToOne))
+				{
+					if (picker->isTweeker)
+					{
+						WriteSingleTweeker(*picker->tweeker);
+					}
+					ArrayRemove(&editor->elements, it);
+					return;
+				}
+				if (PointInRectangle(picker->headerPos, picker->width, picker->headerSize, input.mouseZeroToOne))
+				{
+					picker->selecting = (message.flag & KeyState_Down) ? PickerSelecting_Header : PickerSelecting_Nothing;
+					return;
+				}
+
+			}
+			if (message.flag & KeyState_ReleasedThisFrame)
+			{
+				picker->selecting = PickerSelecting_Nothing;
+			}
+			
+			break;
+		}break;
+		default:
+		{
+			Die;
+		}break;
+
+		}
+
+	}
+
+	if(message.flag & KeyState_Down)
+	{
+		switch (editor->state)
+		{
+		case EditorState_PickingColor:
+		{
+			EditorGoToNone(editor);
+		}break;
+		case EditorState_Default:
+		{
+			switch (message.key)
+			{
+			case Key_leftMouse:
+			{
+				Tweekable(f32, editorPanelWidth);
+				Tweekable(f32, editorPanelHeight);
+				if (editor->panel.visible && PointInRectangle(editor->panel.pos, editorPanelWidth, editorPanelHeight, input.mouseZeroToOne))
+				{
+					Tweekable(f32, editorBorderWidth);
+					Tweekable(f32, editorHeaderWidth);
+					Tweekable(f32, editorPanelFontSize);
+					EditorPanel *p = &editor->panel;
+
+					v2 headerPos = editor->panel.pos + V2(editorBorderWidth, editorBorderWidth);
+					f32 widthWithoutBoarder = editorPanelWidth - 2.0f * editorBorderWidth;
+					if (PointInRectangle(headerPos, widthWithoutBoarder, editorHeaderWidth, input.mouseZeroToOne))
+					{
+						editor->state = EditorState_DragingPanel;
+						return;
+					}
+
+					v2 pos = V2(headerPos.x, headerPos.y + editorHeaderWidth + editorBorderWidth);
+					For(p->values)
+					{
+						f32 height = HeightForTweekerPanel(it->type, editorBorderWidth, editorPanelFontSize);
+						switch(it->type)
+						{
+						case Tweeker_u32:
+						case Tweeker_f32:
+						{
+							if (PointInRectangle(pos, widthWithoutBoarder, height, input.mouseZeroToOne))
+							{
+								editor->state = EditorState_AlteringValue;
+								editor->panel.hotValue = (u32)(it - p->values.data);
+								return;
+							}
+						}break;
+						case Tweeker_b32:
+						{
+							*it->b = !*it->b;
+						}break;
+						case Tweeker_v2:
+						{
+							if (PointInRectangle(V2(pos.x, pos.y + editorPanelFontSize), widthWithoutBoarder, editorPanelFontSize, input.mouseZeroToOne))
+							{
+								editor->state = EditorState_AlteringValue;
+								editor->panel.hotValue = (u32)(it - p->values.data);
+								editor->panel.hotValueXYZ = 'x';
+								return;
+							}
+							else if (PointInRectangle(V2(pos.x, pos.y + 2.0f * editorPanelFontSize), widthWithoutBoarder, editorPanelFontSize, input.mouseZeroToOne))
+							{
+								editor->state = EditorState_AlteringValue;
+								editor->panel.hotValue = (u32)(it - p->values.data);
+								editor->panel.hotValueXYZ = 'y';
+								return;
+							}
+						}break;
+						case Tweeker_v3:
+						{
+						if (PointInRectangle(V2(pos.x, pos.y + editorPanelFontSize), widthWithoutBoarder, editorPanelFontSize, input.mouseZeroToOne))
+						{
+							editor->state = EditorState_AlteringValue;
+							editor->panel.hotValue = (u32)(it - p->values.data);
+							editor->panel.hotValueXYZ = 'x';
+							return;
+						}
+						else if (PointInRectangle(V2(pos.x, pos.y + 2.0f * editorPanelFontSize), widthWithoutBoarder, editorPanelFontSize, input.mouseZeroToOne))
+						{
+							editor->state = EditorState_AlteringValue;
+							editor->panel.hotValue = (u32)(it - p->values.data);
+							editor->panel.hotValueXYZ = 'y';
+							return;
+						}
+						else if (PointInRectangle(V2(pos.x, pos.y + 3.0f * editorPanelFontSize), widthWithoutBoarder, editorPanelFontSize, input.mouseZeroToOne))
+						{
+							editor->state = EditorState_AlteringValue;
+							editor->panel.hotValue = (u32)(it - p->values.data);
+							editor->panel.hotValueXYZ = 'z';
+							return;
+						}
+
+						}break;
+						case Tweeker_v4:
+						{
+							if (PointInRectangle(pos, widthWithoutBoarder, height, input.mouseZeroToOne))
+							{
+								editor->state = EditorState_PickingColor;
+								editor->panel.hotValue = (u32)(it - p->values.data);
+
+								ColorPicker picker = CreateColorPicker(it->vec4);
+								ArrayAdd(&editor->elements, { EditorUI_ColorPicker, picker });
+								return;
+							}
+						}break;
+						default:
+						{
+							Die;
+						}break;
+						}
+
+						pos.y += height;
+					}
+
+					return;
+				}
+				// todo here we have to have some logic of UI vs Screen maybe just put flags on editor and to this in update?
+
+				if (editor->hotMesh)
+				{
+					editor->panel.values.amount = 0;
+					editor->hotMesh = NULL;
+					editor->panel.visible = false;
+				}
+
+				PlacedMesh *hotMesh = GetHotMesh(world, input.mouseZeroToOne);
+				
+				if (hotMesh)
+				{
+					editor->hotMesh = hotMesh;
+					editor->panel.visible = true;
+
+					ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_v3, "Pos", &hotMesh->pos));
+					ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_f32, "Scale", &hotMesh->scale));
+					ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_v4, "Color", &hotMesh->color));
+					//ArrayAdd(&editor->panel.values, CreateTweeker()); orientation
+				}
+			}break;
+			case Key_g:
+			{
+				editor->state = EditorState_Moving;
+			}break;
+			case Key_r:
+			{
+				editor->state = EditorState_Rotating;
+			}break;
+			case Key_s:
+			{
+				editor->state = EditorState_Scaling;
+			}break;
+			case Key_tab:
+			{
+				editor->state = EditorState_TileMapEditor;
+				EditorSetHotMeshToNULL(editor);
+
+			}break;
+			case Key_middleMouse:
+			{
+				editor->state = EditorState_OrbitingCamera;
+			}break;
+
+			case Key_num1:
+			{
+				// front
+				
+				cam->b3 = V3(0, 1, 0);
+				cam->b1 = V3(1, 0, 0);
+				cam->b2 = V3(0, 0, 1);
+				cam->pos = editor->focusPoint + V3(0, -Norm(editor->focusPoint - cam->pos), 0);
+				
+			}break;
+			case Key_num3:
+			{
+				// Right
+				cam->b3 = V3(-1, 0, 0);
+				cam->b1 = V3(0, -1, 0);
+				cam->b2 = V3(0, 0, 1);
+				cam->pos = editor->focusPoint + V3(Norm(editor->focusPoint - cam->pos), 0, 0);
+				
+			}break;
+			case Key_num7:
+			{
+				// Top
+				cam->b1 = V3(1, 0, 0);
+				cam->b2 = V3(0, 1, 0);
+				cam->b3 = V3(0, 0, 1);
+				cam->pos = editor->focusPoint + V3(0, 0, -Norm(editor->focusPoint - cam->pos));
+				
+			}break;
+			case Key_num9:
+			{
+				//// todo
+				// Right/left, Top/bottom, front/back toggle
+				
+				cam->b3 = -cam->b3;
+				cam->b1 = -cam->b1;
+
+				cam->pos = editor->focusPoint - (cam->pos - editor->focusPoint);
+				
+			}break;
+			case Key_numDot:
+			{
+				if (editor->hotMesh)
+				{
+					cam->pos = editor->hotMesh->pos + cam->pos - editor->focusPoint;
+					editor->focusPoint = editor->hotMesh->pos;
+				}
+			}break;
+			case Key_mouseWheelBack:
+			{
+				cam->pos = 1.1f * (cam->pos - editor->focusPoint) + editor->focusPoint;
+				
+			}break;
+			case Key_mouseWheelForward:
+			{
+				cam->pos = 0.9f * (cam->pos - editor->focusPoint) + editor->focusPoint;
+			}break;
+
+
+			}
+		}break;
+		case EditorState_Rotating:
+		{
+			switch (message.key)
+			{
+			case Key_leftMouse:
+			{
+				EditorGoToNone(editor);
+			}break;
+			case Key_rightMouse:
+			{
+				editor->hotMesh->orientation = Inverse(editor->rotater) * editor->hotMesh->orientation;
+				EditorGoToNone(editor);
+				
+			}break;
+
+			}
+		}break;
+		case EditorState_Moving:
+		{
+			switch (message.key)
+			{
+			case Key_leftMouse:
+			{
+				EditorGoToNone(editor);
+			}break;
+			case Key_rightMouse:
+			{
+				editor->hotMesh->pos -= editor->mover;
+				EditorGoToNone(editor);
+			}break;
+
+			}
+		}break;
+		case EditorState_Scaling:
+		{
+			switch (message.key)
+			{
+			case Key_leftMouse:
+			{
+				EditorGoToNone(editor);
+			}break;
+			case Key_rightMouse:
+			{
+				editor->hotMesh->scale /= editor->scaler;
+				EditorGoToNone(editor);
+			}break;
+
+			}
+		}break;
+		case EditorState_DragingPanel:
+		{
+		}break;
+		case EditorState_AlteringValue:
+		{
+			TextInput *t = &editor->panel.textInput;
+			Char input = KeyToChar(message.key, false);
+			if (input == '-' || input == '.' || '0' <= input && input <= '9')
+			{
+				if (t->string.length + 1 <= t->maxLength)
+				{
+					t->string[t->string.length++] = input;
+					return;
+				}
+				ConsoleOutputError("To many symbols, exceeds max length of 50");
+
+				return;
+			}
+
+			if (message.key == Key_backSpace)
+			{
+				if (t->string.length)
+				{
+					t->string.length--;
+				}
+				return;
+			}
+
+			if (message.key == Key_enter)
+			{
+				b32 success = true;
+				
+				u32 i = editor->panel.hotValue;
+				auto val = editor->panel.values[i];
+				switch (val.type)
+				{
+				case Tweeker_f32:
+				{
+					f32 newValue = StoF(t->string, &success);
+					if (success)
+					{
+						*val.f = newValue;
+						break;
+					}
+					ConsoleOutputError("Couldn't parse Editor input as f32.");
+				}break;
+				case Tweeker_u32:
+				{
+					u32 newValue = StoU(t->string, &success);
+					if (success)
+					{
+						*val.u = newValue;
+						break;
+					}
+					ConsoleOutputError("Couldn't parse Editor input as u32.");
+				}break;
+
+				case Tweeker_v2:
+				{
+					f32 newValue = StoF(t->string, &success);
+					if (success)
+					{
+						switch (editor->panel.hotValueXYZ)
+						{
+						case 'x':
+						{
+							val.vec2->x = newValue;
+						}break;
+						case 'y':
+						{
+							val.vec2->y = newValue;
+						}break;
+						default:
+						{
+							Die;
+						}break;
+						}
+						
+						break;
+					}
+					ConsoleOutputError("Couldn't parse Editor input as f32.");
+				}break;
+				case Tweeker_v3:
+				{
+					f32 newValue = StoF(t->string, &success);
+					if (success)
+					{
+						switch (editor->panel.hotValueXYZ)
+						{
+						case 'x':
+						{
+							val.vec3->x = newValue;
+						}break;
+						case 'y':
+						{
+							val.vec3->y = newValue;
+						}break;
+						case 'z':
+						{
+							val.vec3->z = newValue;
+						}break;
+
+						default:
+						{
+							Die;
+						}break;
+						}
+						break;
+					}
+					ConsoleOutputError("Couldn't parse Editor input as f32.");
+				}break;
+				}
+				
+				t->string.length = 0;
+				editor->panel.hotValue = 0xFFFFFFFF;
+				EditorGoToNone(editor);
+				return;
+			}
+
+		}break;
+		case EditorState_TileMapEditor:
+		{
+			switch (message.key)
+			{
+			case Key_tab:
+			{
+				editor->state = EditorState_Default;
+			}break;
+			case Key_leftMouse:
+			{
+				v2 clickedP = ScreenZeroToOneToInGame(world->camera, input.mouseZeroToOne);
+				Tile *tile = GetTile(world->tileMap, clickedP);
+				if (tile)
+				{
+					switch(tile->type)
+					{
+					case Tile_Blocked:
+					{
+						tile->type = Tile_Empty;
+					}break;
+					case Tile_Empty:
+					{
+						tile->type = Tile_Blocked;
+					}break;
+					}
+				}
+			}break;
+			case Key_g:
+			{
+				editor->state = EditorState_TileMapPlacingGoal;
+			}break;
+			case Key_s:
+			{
+				editor->state = EditorState_TileMapPlacingSpawner;
+			}break;
+
+			}
+
+		}break;
+		case EditorState_TileMapPlacingGoal:
+		{
+			switch (message.key)
+			{
+			case Key_leftMouse:
+			{
+				v2 clickedP = ScreenZeroToOneToInGame(world->camera, input.mouseZeroToOne);
+				Tile *tile = GetTile(world->tileMap, clickedP);
+				if (tile)
+				{
+					tile->type = (tile->type == Tile_Goal) ? Tile_Empty : Tile_Goal;
+				}
+				editor->state = EditorState_TileMapEditor;
+			}break;
+			case Key_rightMouse:
+			{
+				editor->state = EditorState_TileMapEditor;
+			}break;
+				
+			}
+			
+
+		}break;
+		case EditorState_TileMapPlacingSpawner:
+		{
+			switch (message.key)
+			{
+			case Key_leftMouse:
+			{
+				v2 clickedP = ScreenZeroToOneToInGame(world->camera, input.mouseZeroToOne);
+				Tile *tile = GetTile(world->tileMap, clickedP);
+				if (tile)
+				{
+					tile->type = (tile->type == Tile_Spawner) ? Tile_Empty : Tile_Spawner;
+				}
+				editor->state = EditorState_TileMapEditor;
+			}break;
+			case Key_rightMouse:
+			{
+				editor->state = EditorState_TileMapEditor;
+			}break;
+			}			
+		}break;
+		case EditorState_OrbitingCamera:
+		{
+
+		}break;
+		InvalidDefaultCase;
+		}
+	}
+
+	if (message.flag & KeyState_Up)
+	{
+		switch (message.key)
+		{
+			
+			case Key_leftMouse:
+			{
+				switch (editor->state)
+				{
+				case EditorState_DragingPanel:
+				{
+					EditorGoToNone(editor);
+				}break;
+				}
+
+			}break;
+
+			case Key_middleMouse:
+			{
+				if (editor->state == EditorState_OrbitingCamera)
+				{
+					editor->state = EditorState_Default;
+				}
+			}break;
+		}
+	}
+
+}
+static v3 GetMidPoint(PlacedMesh mesh)
+{
+	AABB transformedAABB = mesh.untransformedAABB;
+
+	transformedAABB.minDim *= mesh.scale;
+	transformedAABB.maxDim *= mesh.scale;
+
+	m4x4 mat = Translate(QuaternionToMatrix(mesh.orientation), mesh.pos);
+
+	v3 mid = 0.5f * (transformedAABB.maxDim + transformedAABB.minDim);
+
+
+	return mat * mid;
+}
+
+// todo maybe make all this matrix stuff more consitent
+static void UpdateEditor(Editor *editor, UnitHandler *unitHandler, World *world, Input input)
+{
+	Camera *cam = &world->camera;
+	PlacedMesh* mesh = editor->hotMesh;
+
+	UpdateColorPickers(editor, input);
+
+	switch (editor->state)
+	{
+	case EditorState_TileMapEditor:
+	{
+		ColorForTileMap(world);
+		return;
+	}break;
+	case EditorState_TileMapPlacingGoal:
+	{
+		ColorForTileMap(world);
+		return;
+	}break;
+	case EditorState_TileMapPlacingSpawner:
+	{
+		ColorForTileMap(world);
+		return;
+	}break;
+	case EditorState_OrbitingCamera:
+	{
+		v2 mouseDelta = input.mouseDelta;
+
+		f32 rotSpeed = 0.001f * 3.141592f;
+
+		f32 mouseZRot = -mouseDelta.y * rotSpeed; // this should rotate around the z axis
+		f32 mouseCXRot = mouseDelta.x * rotSpeed; // this should rotate around the camera x axis
+
+		m3x3 cameraT = Rows3x3(cam->b1, cam->b2, cam->b3);
+		m3x3 cameraTInv = Invert(cameraT);
+
+		m3x3 id = cameraT * cameraTInv;
+		m3x3 rotX = XRotation3x3(mouseZRot);
+		m3x3 rotZ = ZRotation3x3(mouseCXRot);
+		m3x3 rot = cameraTInv * rotX * cameraT * rotZ;
+
+		v3 delta = cam->pos - editor->focusPoint;
+
+		cam->pos = editor->focusPoint + rot * delta;
+
+		cam->basis = TransformBasis(cam->basis, rot);
+		return;
+	}break;
+	
+
+	}
+
+
+	if (!editor->hotMesh)
+	{
+		return;
+	}
+
+	Tweekable(v4, editorMeshSelectColor, V4(1.0f, 0.4f, 0.5f, 0.1f));
+
+	switch (editor->state)
+	{
+	case EditorState_Default:
+	{
+		mesh->frameColor *= editorMeshSelectColor;
+	}break;
+	case EditorState_Rotating:
+	{
+		AABB transformedAABB = mesh->untransformedAABB;
+
+		transformedAABB.minDim *= mesh->scale;
+		transformedAABB.maxDim *= mesh->scale;
+
+		m4x4 mat = Translate(QuaternionToMatrix(mesh->orientation), mesh->pos);
+
+		v3 mid = 0.5f * (transformedAABB.maxDim + transformedAABB.minDim);
+		v3 front = V3(transformedAABB.minDim.x, 0.5f * (transformedAABB.maxDim.y + transformedAABB.minDim.y), 0.0f);
+
+		// todo maybe  this should rotate in the plane depending on the pos
+		// right now get projected onto z = 0, probably should be projected onto z = pos.z
+		v2 midPoint = p12(mat * mid); // mid == pos?
+		v2 frontPoint = p12(mat * front);
+		v2 mousePos = ScreenZeroToOneToInGame(world->camera, input.mouseZeroToOne);
+			
+		
+		f32 angle = AngleBetween(frontPoint - midPoint, mousePos - midPoint);
+
+		Quaternion q = QuaternionFromAngleAxis(angle, V3(0, 0, 1));
+			
+		editor->hotMesh->orientation = q * editor->hotMesh->orientation;
+		editor->rotater = q * editor->rotater;
+
+	}break;
+	case EditorState_Scaling:
+	{
+		AABB transformedAABB = mesh->untransformedAABB;
+
+		transformedAABB.minDim *= mesh->scale;
+		transformedAABB.maxDim *= mesh->scale;
+		m4x4 mat = Translate(QuaternionToMatrix(mesh->orientation), mesh->pos);
+
+		v3 mid = i12(0.5f * (transformedAABB.maxDim + transformedAABB.minDim).xy);
+		v3 midPoint = (mat * mid); // pos?
+
+		m4x4 proj = Projection(world->camera.aspectRatio, world->camera.focalLength) * CameraTransform(cam->basis.d1, cam->basis.d2, cam->basis.d3, cam->pos);
+		v4 projectiveMidPoint = V4(midPoint, 1.0f);
+			 
+		v4 projectedMidPoint = (proj * projectiveMidPoint);
+		Assert(projectedMidPoint.w);
+		v2 screenPoint = (projectedMidPoint / projectedMidPoint.w).xy; // in -1 to 1 range
+		screenPoint = 0.5f * screenPoint + V2(0.5f, 0.5f);
+		screenPoint = V2(screenPoint.x, 1.0f - screenPoint.y);
+		v2 mouseD =  3.0f * input.mouseZeroToOneDelta;
+		if (mouseD == V2()) break;
+
+		v2 p = input.mouseZeroToOne;
+		v2 d = Normalize(p - screenPoint);
+		f32 dot = Dot(mouseD, d);
+
+		f32 exp = expf(dot);
+
+		editor->scaler *= exp;
+		editor->hotMesh->scale *= exp;
+		editor->hotMesh->pos = V3(p12(midPoint) + exp * p12(editor->hotMesh->pos - midPoint), editor->hotMesh->pos.z);
+
+	}break;
+	case EditorState_Moving:
+	{	
+		v3 p = editor->hotMesh->pos;
+		v3 cp = cam->pos;
+		v3 diff = cp - p;
+
+		v3 oldP = ScreenZeroToOneToScreenInGame(*cam, input.mouseZeroToOne - input.mouseZeroToOneDelta);
+		v3 newP = ScreenZeroToOneToScreenInGame(*cam, input.mouseZeroToOne);
+
+		v3 oP = SolveLinearSystem((cp - oldP), cam->b1, cam->b2, diff);
+		v3 nP = SolveLinearSystem((cp - newP), cam->b1, cam->b2, diff);
+			
+		m3x3 mat = Columns3x3((cp - oldP), cam->b1, cam->b2);
+		v3 asd = mat * oP; // == cp - p == 
+
+		v3 oI = cp + oP.x * (oldP - cp); // = p + op.y * cam->b1 + op.z * cam->b2
+		v3 nI = cp + nP.x * (newP - cp);
+			
+		v3 realDelta = nI - oI;
+
+		editor->hotMesh->pos += realDelta;
+		editor->mover += realDelta;
+	}break;
+	case EditorState_DragingPanel:
+	{
+		mesh->frameColor *= editorMeshSelectColor;
+		editor->panel.pos += input.mouseZeroToOneDelta;
+	}break;
+	case EditorState_PickingColor:
+	{
+	
+	}break;
+	case EditorState_AlteringValue:
+	{
+		mesh->frameColor *= editorMeshSelectColor;
+	}break;
+
+	default:
+	{
+		Die;
+	}break;
+	}
+}
+
+// todo  make the controles as they are in blender
+// num pad keys
+// middle mouse button for roato potato // done?
+// make aabb recalc ? right now it is behind by a frame.
 
 #endif // !RR_EDITOR
 

@@ -1794,7 +1794,7 @@ static void RenderKdTree(KdNode *node, RenderGroup *rg)
 	RenderKdTree(node->negative, rg);
 }
 
-static void InitLighting(World *world)
+static void InitLighting(World *world, Arena *constantArena)
 {
 	Assert(!world->light.lightingTriangles);
 	dummyLeaf = PushStruct(constantArena, KdNode);
@@ -1816,7 +1816,7 @@ static void InitLighting(World *world)
 		trs[i] = CreateLightingTriangleFromThreePoints(t[i].p1, t[i].p2, t[i].p3, Unpack3x8(t[i].c2), constantArena);
 	}
 	world->light.lightingTriangles = trs;
-	world->light.kdTree = BuildKdTree(trs, t.amount, constantArena, workingArena);
+	world->light.kdTree = BuildKdTree(trs, t.amount, constantArena, frameArena);
 
 	world->light.cache = PushStruct(constantArena, IrradianceCache);
 	world->light.cache->maxEntriesPerTriangle = 200;
@@ -1838,11 +1838,11 @@ static void PushLightingImage(RenderGroup *rg)
 }
 
 
-static void CalculateLightingSolution(World *world)
+static void CalculateLightingSolution(World *world, Arena *arena)
 {
 	if (!lightingInitialized)
 	{
-		InitLighting(world);
+		InitLighting(world, arena);
 		lightingInitialized = true;
 	}
 	ClipRect wholeScreen;

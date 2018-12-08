@@ -1,28 +1,6 @@
 #ifndef RR_DEBUG_BODY
 #define RR_DEBUG_BODY
 
-struct SplittBlock // rolling buffer of these?
-{
-	u16 debugInfoIndex;
-	u16 hitCount;
-	u32 cycles;
-	u8 eventTag;
-};
-
-
-#define DEBUG_SPLITT_BLOCK_ARRAY_SIZE (4 * 63)
-
-SplittBlock debugSplittBlocks[DEBUG_SPLITT_BLOCK_ARRAY_SIZE];
-
-struct DebugFrameList
-{
-	u32 firstIndex;
-	u32 lastIndex;
-	DebugFrameList *next;
-};
-
-//todo collaps everything down into a debug memory kind of a thing
-
 inline b32 ModRangeIntersect(u32 first1, u32 last1, u32 first2, u32 last2, u32 mod)
 {
 	return ((first2 - first1) % mod) <= ((last1 - first1) % mod) || ((first1 - first2) % mod) <= ((last2 - first2) % mod);
@@ -33,139 +11,6 @@ inline void AdvanceMod(u32 *a, u32 mod) // todo can make fast version of this by
 	*a = ((*a + 1) % mod);
 }
 
-// We want three informations
-// 1: how long took a scope (including every child)
-// 2: how long took a scope (excluding every child)
-// 3: how long took a block (might be between two children of the scope) (more for drawing)
-
-// last one gives the top two, so we will for now only compute that one
-
-//this really does not do much now i guess...
-static void CollectDebugRecords()
-{
-	TimedBlock;
-	if (globalDebugState.paused) return;
-
-	// for now we assume there is one "all enclosing" timed block - in this case "WinMain" which times our main loop
-
-	DebugState *s = &globalDebugState;
-	if (!s->lastFramesEventIndex) return;
-
-	DebugFrameList *f;
-	if (s->frameFree)
-	{
-		f = s->frameFree;
-		s->frameFree = s->frameFree->next;
-	}
-	else
-	{
-		f = PushStruct(constantArena, DebugFrameList);
-	}
-	u32 firstIndex;
-	if (s->frameTail)
-	{
-		firstIndex = (s->frameTail->lastIndex + 1) % DEBUG_SPLITT_BLOCK_ARRAY_SIZE;
-	}
-	else
-	{
-		s->frameHead = f;
-		s->frameTail = f;
-		firstIndex = 0;
-	}
-	u32 currentEnd = firstIndex;
-
-	f->firstIndex = firstIndex;
-	s->frameTail->next = f;
-	s->frameTail = f;
-	f->next = NULL;
-
-	// last frames stuff
-	u32 eventArrayIndex = !s->eventArrayIndex;
-	u32 amountOfEventsToHandle = s->lastFramesEventIndex;
-
-	//fill new frame into rolling buffer
-	DebugEvent *firstEvent = globalDebugState.events[eventArrayIndex];
-
-	Assert(firstEvent->type == DebugEvent_BeginTimedBlock);
-
-	SplittBlock *firstBlock = debugSplittBlocks + firstIndex;
-
-	firstBlock->debugInfoIndex = firstEvent->debugRecordIndex;
-	firstBlock->cycles = firstEvent->cycles;
-	firstBlock->hitCount = firstEvent->hitCount;
-	firstBlock->eventTag = (u8)firstEvent->type;
-
-	for (u32 i = 1; i < amountOfEventsToHandle - 1; i++)
-	{
-		DebugEvent *e = globalDebugState.events[eventArrayIndex] + i;
-
-		switch (e->type)
-		{
-		//todo maybe ignore blocks that are to short?
-		case DebugEvent_BeginTimedBlock:
-		{
-			SplittBlock *lastBlock = debugSplittBlocks + currentEnd;
-			lastBlock->cycles = e->cycles - lastBlock->cycles;
-
-			AdvanceMod(&currentEnd, DEBUG_SPLITT_BLOCK_ARRAY_SIZE);
-
-			SplittBlock *newBlock = debugSplittBlocks + currentEnd;
-
-			newBlock->debugInfoIndex = e->debugRecordIndex;
-			newBlock->cycles = e->cycles;
-			newBlock->hitCount = e->hitCount;
-			newBlock->eventTag = (u8)e->type;
-
-		}break;
-		case DebugEvent_EndTimedBlock:
-		{
-
-			SplittBlock *lastBlock = debugSplittBlocks + currentEnd;
-			lastBlock->cycles = e->cycles - lastBlock->cycles;
-
-			AdvanceMod(&currentEnd, DEBUG_SPLITT_BLOCK_ARRAY_SIZE);
-
-			SplittBlock *newBlock = debugSplittBlocks + currentEnd;
-
-			newBlock->debugInfoIndex = lastBlock->debugInfoIndex;
-			newBlock->cycles = e->cycles;
-			newBlock->hitCount = lastBlock->hitCount;
-			newBlock->eventTag = (u8)e->type;
-
-		}break;
-
-		default:
-		{
-			ConsoleOutput("Unknown DebugEvent Received!");
-		}break;
-		}
-	}
-
-	DebugEvent *lastEvent = globalDebugState.events[eventArrayIndex] + (amountOfEventsToHandle - 1);
-
-	Assert(lastEvent->type == DebugEvent_EndTimedBlock);
-	b32 sad = strcmp(debugInfoArray[lastEvent->debugRecordIndex].function, "WinMain");
-	Assert(!sad);
-
-	SplittBlock *lastBlock = debugSplittBlocks + currentEnd;
-	lastBlock->cycles = lastEvent->cycles - lastBlock->cycles;
-
-	f->lastIndex = currentEnd;
-
-	while (s->frameHead != f)
-	{
-		DebugFrameList *toCheck = s->frameHead;
-		if (!ModRangeIntersect(f->firstIndex, f->lastIndex, toCheck->firstIndex, toCheck->lastIndex, DEBUG_SPLITT_BLOCK_ARRAY_SIZE))
-		{
-			break;
-		}
-
-		s->frameHead = s->frameHead->next;
-
-		toCheck->next = s->frameFree;
-		s->frameFree = toCheck;
-	}
-}
 
 static void LoadDebugVariablesFile() //todo strings?
 {
@@ -208,17 +53,6 @@ enum DebugUIElementFlag
 
 };
 
-static void InitDebug()
-{
-	DebugState *s = &globalDebugState;
-
-	s->tweekers = CreateDynamicArray(s->arena);
-	LoadDebugVariablesFile();
-	
-	s->uiElements = PushArray(s->arena, DebugUIElement, 0);
-
-	//BuildStaticArray(s->arena, s->uiElements, )
-}
 
 static void DrawTweekers(RenderGroup *rg, Font font)
 {
@@ -267,66 +101,171 @@ static void DrawTweekers(RenderGroup *rg, Font font)
 	
 }
 
+
+static void InitDebug()
+{
+	DebugState *s = &globalDebugState;
+
+	RandomSeries series = GetRandomSeries();
+	for (u32 i = 0; i < debugRecordsAmount; i++)
+	{
+		debugInfoArray[i].color = RandomColorU32(&series);
+	}
+
+	s->tweekers = TweekerCreateDynamicArray();
+	s->firstFrame = true;
+
+	for (u32 i = 0; i < DEBUG_AMOUNT_OF_DEBUG_FRAMES; i++)
+	{
+		s->debugFrames[i] = PushArray(s->arena, FrameTimeInfo, debugRecordsAmount);
+	}
+
+	LoadDebugVariablesFile();
+
+	s->uiElements = PushArray(s->arena, DebugUIElement, 0);
+
+	//BuildStaticArray(s->arena, s->uiElements, )
+}
+
+// We want three informations
+// 1: how long took a scope (including every child)
+// 2: how long took a scope (excluding every child)
+// 3: how long took a block (might be between two children of the scope) (more for drawing)
+
+// last one gives the top two, so we will for now only compute that one
+
+//this really does not do much now i guess...
+
+
+static bool DebugHandleEvents(KeyStateMessage message, Input input)
+{
+	if (message.key == Key_leftMouse && (message.flag & KeyState_PressedThisFrame) && PointInRectangle(V2(), 200, 40, input.mousePos))
+	{
+		globalDebugState.drawDebug = !globalDebugState.drawDebug;
+		return true;
+	}
+	return false;
+}
+
+static void CollectDebugRecords()
+{
+	TimedBlock;
+	if (globalDebugState.firstFrame) return;
+	if (globalDebugState.paused) return;
+
+	DebugState *s = &globalDebugState;
+
+	u32 thisFrameIndex = s->rollingFrameIndex ? (s->rollingFrameIndex - 1) : (DEBUG_AMOUNT_OF_DEBUG_FRAMES - 1);
+	u32 amountOfEventsToHandle = globalDebugState.amountOfEventsLastFrame;
+	DebugEvent *firstEvent = globalDebugState.events[thisFrameIndex];
+	u64 startCycles = firstEvent->cycles;
+	
+	auto frame = s->debugFrames[thisFrameIndex];
+
+	DeferRestore(globalDebugState.arena);
+	Arena *arena = globalDebugState.arena;
+
+	for (DebugEvent *it = firstEvent; it < firstEvent + amountOfEventsToHandle; it++)
+	{
+		switch (it->type)
+		{
+		case DebugEvent_BeginTimedBlock:
+		{
+			*PushStruct(arena, DebugEvent) = *it;
+	
+
+		}break;
+		case DebugEvent_EndTimedBlock:
+		{
+			DebugEvent e = PopStruct(arena, DebugEvent);
+			Assert(e.debugRecordIndex == it->debugRecordIndex);
+			u32 cycleD = it->cycles - e.cycles;
+
+			frame.times[it->debugRecordIndex].cycles += cycleD;
+			frame.times[it->debugRecordIndex].hitCount += e.hitMultiplicity;
+
+		}break;
+		default:
+		{
+
+		}break;
+
+		}
+	}
+}
+
 //todo make left bound render for strings
 //todo maybe make it so that we can click on a frame and jump to it, by saving the gamestate. has a lot of issues I guess (rendering and such)... but may work
 static void DrawDebugRecords(RenderGroup *rg, Font font, f32 secondsPerFrame, Input input)
 {
+	
 	TimedBlock;
-
-	DebugState *s = &globalDebugState;
-	// last frames stuff
-	u32 eventArrayIndex = !globalDebugState.eventArrayIndex;
-	u32 amountOfEventsToHandle = globalDebugState.lastFramesEventIndex;
-
-	u32 maxFramesDisplayed = 30;
-
-	//todo  make this render from the other side, and probably vertically
-	u32 j = 1;
 	Tweekable(u32, renderCycleThreshhold);
-	for (DebugFrameList *it = s->frameHead; it; it = it->next, j++)
+	Tweekable(f32, debugDisplayBarSize, 0.03f);
+	
+	DebugState *s = &globalDebugState;
+	if (s->firstFrame) return;
+	if (!s->drawDebug) return;
+	// last frames stuff
+	u32 thisFrameIndex = s->rollingFrameIndex ? (s->rollingFrameIndex - 1) : (DEBUG_AMOUNT_OF_DEBUG_FRAMES - 1);
+	u32 amountOfEventsToHandle = globalDebugState.amountOfEventsLastFrame;
+	
+	auto frameInfo = s->debugFrames[thisFrameIndex];
+
+	For(frameInfo.times)
 	{
-		
-		f32 currentHeight = 0.0f;
-
-		Assert(debugSplittBlocks[it->firstIndex].eventTag == DebugEvent_BeginTimedBlock /*&& debugSplittBlocks[it->firstIndex].debugInfoIndex*/);
-
-		for (u32 i = it->firstIndex; ; AdvanceMod(&i, DEBUG_SPLITT_BLOCK_ARRAY_SIZE))
-		{
-			SplittBlock block = debugSplittBlocks[i];
-
-			if (block.cycles > renderCycleThreshhold)
-			{
-				DebugBlockInfo *info = debugInfoArray + block.debugInfoIndex;
-
-				f32 barSize = 200.0f * (f32)block.cycles / 60000000.0f;
-
-				if (!info->color)
-				{
-					RandomSeries series = { RandomSeed() };
-					info->color = RandomColorU32(&series);
-				}
-
-				u32 color = info->color;
-
-				PushRectangle(rg, V2(20 * j, 100.0f + currentHeight), (f32)10, barSize, Unpack4x8(color));
-
-				if (PointInRectangle(V2(20 * j, 100.0f + currentHeight), (f32)10, barSize, input.mousePos))
-				{
-					String name = FormatString("%c*: %u32 cy", info->function, block.cycles);
-					f32 actualFloatWidth = PushString(rg, input.mousePos, name, 20.0f, font);
-					PushRectangle(rg, input.mousePos, actualFloatWidth, 20.0f, 0.05f, V4(0.9f, 0.0f, 0.0f, 0.0f));
-				}
-
-				currentHeight += barSize;
-			}
-			if (i == it->lastIndex) break;
-		}
-
-		if (j > maxFramesDisplayed) break;
+		u32 it_index = (u32)(it - frameInfo.times.data);
+		if (!debugInfoArray[it_index].function) continue;
+		String s = FormatString("%c*: %u32cy", debugInfoArray[it_index].function, it->cycles);
+		PushString(rg, V2(0.5f, 0.5f + it_index * debugDisplayBarSize), s, debugDisplayBarSize, font);
 	}
-	PushLine(rg, V2(20, 300.0f), V2(20 * j, 300.0f));
-}
 
+	DebugEvent *firstEvent = globalDebugState.events[thisFrameIndex];
+
+	DeferRestore(globalDebugState.arena);
+	Arena *arena = globalDebugState.arena;
+
+	u32 startCycles = firstEvent->cycles;
+	f32 amountOfFramesPerCycle = 1.0f / 20000000.0f;
+
+	u32 depth = 0;	
+	for (DebugEvent *it = firstEvent; it < firstEvent + amountOfEventsToHandle; it++)
+	{
+		switch (it->type)
+		{
+		case DebugEvent_BeginTimedBlock:
+		{
+			*PushStruct(arena, DebugEvent) = *it;
+			depth++;
+		}break;
+		case DebugEvent_EndTimedBlock:
+		{
+			DebugEvent e = PopStruct(arena, DebugEvent);
+			Assert(e.debugRecordIndex == it->debugRecordIndex);
+
+			u32 cycleD = it->cycles - e.cycles;
+			v2 pos = V2((f32)(e.cycles - startCycles) * amountOfFramesPerCycle, (f32)depth * debugDisplayBarSize);
+			f32 width = (f32)cycleD * amountOfFramesPerCycle;
+
+			u32 color = debugInfoArray[it->debugRecordIndex].color;
+			PushRectangle(rg, pos, width, debugDisplayBarSize, color);
+			if (PointInRectangle(pos, width, debugDisplayBarSize, input.mouseZeroToOne))
+			{
+				PushString(rg, input.mouseZeroToOne, debugInfoArray[it->debugRecordIndex].function, debugDisplayBarSize, font);
+			}
+
+			depth--;
+			
+		}break;
+		default:
+		{
+
+		}break;
+
+		}
+	}
+
+}
 
 static void ReportLoadDebugVariablesError(char *string, u32 lineNumber)
 {
@@ -545,11 +484,39 @@ static void *MaybeAddTweekerReturnValue(char *_name, TweekerType type, char *_fu
 		t.name = name;
 		t.function = function;
 
-		Tweeker *added = ArrayAdd(&globalDebugState.tweekers, t);
-		return (void *)(&added->u);
+		u32 addedIndex = ArrayAdd(&globalDebugState.tweekers, t);
+		return (void *)(&(globalDebugState.tweekers.data + addedIndex)->u);
 	}
 	return (void *)(&toTweek->u);
 }
+
+static void *MaybeAddTweekerReturnValue(char *_name, TweekerType type, char *_function, TweekerValue value)
+{
+	String name = S(_name);
+	String function = S(_function);
+	Tweeker *toTweek = GetTweeker(name);
+	if (!toTweek)
+	{
+		Tweeker t = ExtractTweekerFromFile(name);
+		if (t.type == Tweeker_Invalid)
+		{
+			t.type = type;
+			t.vec4 = value.vec4;
+			t.name = name;
+			WriteSingleTweeker(t);
+		}
+		Assert(t.type == type); // right now we can't have multiple tweekers of the same name, and thats fine
+
+		t.name = name;
+		t.function = function;
+
+		u32 addedIndex = ArrayAdd(&globalDebugState.tweekers, t);
+		return (void *)(&(globalDebugState.tweekers.data + addedIndex)->u);
+	}
+	return (void *)(&toTweek->u);
+}
+
+
 static void WriteSingleTweeker(Tweeker tweeker) 
 {
 	File *file = globalDebugState.tweekerFile;

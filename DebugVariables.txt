@@ -2,7 +2,6 @@
 
 
 debugCam false
-DrawWholeMap true 
 selectedPoint (0.00000,0.00000)
 consoleTextFieldColor (1.00000,0.40784,0.43570,1.00000)
 consoleCommandTextColor (1.00000,0.62239,0.86968,1.00000)
@@ -23,4 +22,25 @@ pickerFontXIncrease 6.00000
 consoleSelectionColor (1.00000,0.03315,0.03315,0.57870)
 lightPos (4.00000,2.00000,-5.00000)  
 cameraMoveSpeed 0.10000
-girlPos (0.40000,4.69999) 
+DrawMeshOutlines false
+cameraStartingPos (3.00000,3.00000,-4.00000)
+drawCamera false
+editorPanelColor (1.00000,0.35836,0.32851,0.96296)
+editorPanelValueColor (1.00000,0.22616,0.22616,0.78240)
+editorBorderWidth 0.00499
+editorHeaderWidth 0.03999
+editorValueWidth 0.07999
+initialEditorPanelPos (0.75000,0.20000)
+editorMeshSelectColor (1.00000,1.00000,1.00000,1.00000)
+editorPanelHeaderColor (1.00000,0.09317,0.12216,0.38888)
+editorPanelSize 0.00999
+editorPanelFontSize 0.01999
+editorPanelWidth 0.22000
+editorPanelHeight 0.60000
+screenScrollBorder 0.05000
+screenScrollSpeed 0.30000
+DrawWholeMap true 
+pathCreatorPathColor (1.00000,0.40000,0.40000,1.00000)
+pathCreatorUnitPosColor (1.00000,1.00000,1.00000,0.40000)
+renderCycleThreshhold 1000
+debugDisplayBarSize 0.02999

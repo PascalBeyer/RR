@@ -80,10 +80,11 @@ static void TweekHelper(StringArray args)
 	{
 		if (toTweek->type == Tweeker_v4)
 		{
-			ColorPicker picker = CreateColorPicker(toTweek->vec4);
-			picker.tweeker = *toTweek;
+			ColorPicker picker = CreateColorPicker(&toTweek->vec4);
+			picker.tweeker = toTweek;
+			picker.isTweeker = true;
 			EditorUIElement elem = { EditorUI_ColorPicker, picker };
-			ArrayAdd(&console.state->editor.elements, elem);
+			ArrayAdd(&gameState.editor.elements, elem);
 		}
 
 		ConsoleOutput("Current Tweeker Value is: %s", TweekerToString(*toTweek)); 
@@ -183,20 +184,20 @@ static void GrisuHelper(StringArray args)
 static void ConvertHelper(StringArray args)
 {
 	DeferRestore(frameArena);
-	Clear(workingArena);
 
-	String name = args[0];
-	String type = EatToCharFromBackRetrunTail(&name, '.');
-	if (!name.length)
+	String head = args[0];
+	String type = EatToCharFromBackReturnTail(&head, '.');
+	if (!head.length)
 	{
 		ConsoleOutputError("No filetype found!");
 		return;
 	}
 
 	char* nameToLoad = ToNullTerminated(frameArena, args[0]);		
+	String name = EatToCharFromBackReturnTail(&head, '/');
 	if (type == "bmp")
 	{
-		String nameToSave = FormatString("%stexture\n", name);
+		String nameToSave = FormatString("textures/%stexture\n", name);
 		nameToSave[nameToSave.length - 1] = '\0'; // todo  hack... maybe make this a version of format string
 		Bitmap bitmap = CreateBitmap(nameToLoad);
 
@@ -206,7 +207,7 @@ static void ConvertHelper(StringArray args)
 			return;
 		}
 
-		if (bitmap.height != AssetBitmapSize || bitmap.width != AssetBitmapSize)
+		if (bitmap.height != Asset_Bitmap_Size || bitmap.width != Asset_Bitmap_Size)
 		{
 			ConsoleOutputError("Bitmap does not have standart bitmap size.", nameToLoad);
 			return;
@@ -218,9 +219,8 @@ static void ConvertHelper(StringArray args)
 	} 
 	else if(type == "obj")
 	{
-		String nameToSave = FormatString("%smesh\n", name);
-		nameToSave[nameToSave.length - 1] = '\0'; // todo  hack... maybe make this a version of format string
-		TriangleMesh mesh = ReadObj(NULL, nameToLoad);
+		String nameToSave = FormatCString("mesh/%smesh", name);
+		TriangleMesh mesh = ReadObj(NULL, nameToLoad, gameState.currentStateArena, gameState.workingArena);
 		if (!mesh.vertices.amount)
 		{
 			ConsoleOutputError("Probably file name wrong. Might have loaded a mesh w/0 vertices.");
@@ -232,6 +232,44 @@ static void ConvertHelper(StringArray args)
 	}
 
 	ConsoleOutputError("Unrecognized Format!");
+}
+
+static void GameModeHelper(StringArray args)
+{
+	if (args[0] == "game")
+	{
+		GameGoToMode(&gameState, Game_PathCreator);
+		ConsoleOutput("Switched to game mode 'Game'.");
+		return;
+	}
+	else if(args[0] == "editor")
+	{ 
+		GameGoToMode(&gameState, Game_Editor);
+		ConsoleOutput("Switched to game mode 'Editor'.");
+		return;
+	}
+
+	ConsoleOutputError("No such game mode.");
+}
+
+static void SaveLevelHelper(StringArray args)
+{
+	String fileName = FormatCString("level/%s.level", args[0]);
+
+	WriteLevel(fileName.cstr, gameState.world, gameState.unitHandler, &gameState.assetHandler);
+	ConsoleOutputError("Done!");
+}
+
+static void LoadLevelHelper(StringArray args)
+{
+	if (LoadLevel(args[0], &gameState.unitHandler, &gameState.world, gameState.currentStateArena, &gameState.assetHandler))
+	{
+		GameGoToMode(&gameState, Game_Editor);
+		ConsoleOutput("Loaded level %s!", args[0]);
+		return;
+	}
+
+	ConsoleOutputError("Tried to load \"level/%s.level\", no such file or directory!", args[0]);
 }
 
 

@@ -27,11 +27,11 @@ struct Font
 
 static Font globalFont;
 
-static Font CreateFontFromSTB(u32 width, u32 height, u8 *pixels, u32 amountOfChars, f32 charHeight, stbtt_bakedchar *charData)
+static Font CreateFontFromSTB(u32 width, u32 height, u8 *pixels, u32 amountOfChars, f32 charHeight, stbtt_bakedchar *charData, Arena *arena)
 {
 	Font ret;
 
-	u32 *output = PushData(constantArena, u32, width * height);
+	u32 *output = PushData(arena, u32, width * height);
 	u32 *out = output;
 	u8 *inp = pixels;
 
@@ -46,7 +46,7 @@ static Font CreateFontFromSTB(u32 width, u32 height, u8 *pixels, u32 amountOfCha
 		}
 	}
 
-	ret.charData = PushData(constantArena, CharData, amountOfChars);
+	ret.charData = PushData(arena, CharData, amountOfChars);
 	v2 scale = V2(1.0f / (f32)width, 1.0f / (f32)height);
 	for (u32 i = 0; i < amountOfChars; i++)
 	{
@@ -71,24 +71,22 @@ static Font CreateFontFromSTB(u32 width, u32 height, u8 *pixels, u32 amountOfCha
 	return ret;
 }
 
-static Font LoadFont(char *fileName)
+static Font LoadFont(char *fileName, Arena *arena)
 {
-	Clear(workingArena);
-
 	File file = LoadFile(fileName);
 
 	u32 width = 1024;
 	u32 height = 1024;
-	u8 *pixels = PushData(workingArena, u8, width * height);
+	u8 *pixels = PushData(frameArena, u8, width * height);
 	
 	u32 amountOfChars = 255;
 	f32 charHeight = 64.0f;
-	stbtt_bakedchar *charData = PushData(workingArena, stbtt_bakedchar, amountOfChars);
-	stbtt_BakeFontBitmap((u8 *)file.memory, 0, charHeight, pixels, width, height, 0, amountOfChars, charData );
+	stbtt_bakedchar *charData = PushData(frameArena, stbtt_bakedchar, amountOfChars);
+	stbtt_BakeFontBitmap((u8 *)file.memory, 0, charHeight, pixels, width, height, 0, amountOfChars, charData);
 
 	FreeFile(file);
 
-	return CreateFontFromSTB(width, height, pixels, amountOfChars, charHeight, charData);
+	return CreateFontFromSTB(width, height, pixels, amountOfChars, charHeight, charData, arena);
 }
 
 static f32 GetActualStringLength(String string, f32 fontSize, Font font)
