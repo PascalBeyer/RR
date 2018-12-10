@@ -54,53 +54,48 @@ DefineDynamicArray(EditorUIElement);
 
 enum EditorState
 {
-	EditorState_Default,
-	EditorState_Scaling,
-	EditorState_Rotating,
-	EditorState_Moving,
-	EditorState_DragingPanel,
-	EditorState_PickingColor,
-	EditorState_AlteringValue,
-	EditorState_TileMapEditor,
-	EditorState_TileMapPlacingGoal,
-	EditorState_TileMapPlacingSpawner,
-	EditorState_OrbitingCamera,
+	EditorState_Default					= 0x0,
+	EditorState_Scaling					= 0x1,
+	EditorState_Rotating				= 0x2,
+	EditorState_Moving					= 0x3,
+	EditorState_DragingPanel			= 0x4,
+	EditorState_PickingColor			= 0x5,
+	EditorState_AlteringValue			= 0x6,
+	EditorState_PlacingNewMesh			= 0x7,
+	EditorState_DeleteSelection			= 0x8,
+
+	EditorState_TileMapEditor			= 0x10,
+	EditorState_TileMapPlacingGoal		= 0x11,
+	EditorState_TileMapPlacingSpawner	= 0x12,
+
+	EditorState_OrbitingCamera			= 0x100,
+
+	EditorState_OrbitingTileMap = EditorState_OrbitingCamera | EditorState_TileMapEditor,
+
 };
 
 static String EditorStateToString(EditorState state)
 {
 	switch (state)
 	{
-	case EditorState_Default:
-	{
-		return CreateString("EditorState_None");
-	}break;
-	case EditorState_Scaling:
-	{
-		return CreateString("EditorState_Scaling");
-	}break;
-	case EditorState_Rotating:
-	{
-		return CreateString("EditorState_Rotating");
-	}break;
-	case EditorState_Moving:
-	{
-		return CreateString("EditorState_Moving");
-	}break;
-	case EditorState_DragingPanel:
-	{
-		return CreateString("EditorState_DraggingPanel");
-	}break;
-	case EditorState_PickingColor:
-	{
-		return CreateString("EditorState_PickingColor");
-	}break;
-	case EditorState_AlteringValue: 
-	{
-		return CreateString("EditorState_AlteringValue"); 
-	}break;
+	case EditorState_Default:					return CreateString("EditorState_None");
+	case EditorState_Scaling:					return CreateString("EditorState_Scaling");
+	case EditorState_Rotating:					return CreateString("EditorState_Rotating");
+	case EditorState_Moving:					return CreateString("EditorState_Moving");
+	case EditorState_DragingPanel:				return CreateString("EditorState_DraggingPanel");
+	case EditorState_PickingColor:				return CreateString("EditorState_PickingColor");
+	case EditorState_AlteringValue:				return CreateString("EditorState_AlteringValue"); 
+	case EditorState_PlacingNewMesh:			return CreateString("EditorState_PlacingNewValue");
+	case EditorState_DeleteSelection:			return CreateString("EditorState_DeleteSelection");
+	case EditorState_TileMapEditor:				return CreateString("EditorState_TileMapEditor");
+	case EditorState_TileMapPlacingGoal:		return CreateString("EditorState_TileMapPlacingGoal");
+	case EditorState_TileMapPlacingSpawner:		return CreateString("EditorState_TileMapPlacingSpawner");
+	case EditorState_OrbitingCamera:			return CreateString("EditorState_OrbitingCamera");
+
+
+
 	}
-	return CreateString("Unknown EditorState.");
+	return CreateString("EditorState_Unknown");
 }
 
 
@@ -149,21 +144,112 @@ struct EditorPanel
 	TweekerPointerDynamicArray values;
 };
 
+// todo we do not have to initialize this everywhere we do, but what evs.
+struct EditorSelect
+{
+	u32 placedSerial;
+	Quaternion initialOrientation;
+	f32 initialScale;
+	v3 initialPos;
+	v4 initialColor;
+};
+
+struct PlacedMeshCopyData
+{
+	u32 meshId;
+	f32 scale;
+	Quaternion orientation;
+	v3 pos;
+	v4 color;
+};
+
+struct EditorMeshUndoRedoData
+{
+	u32 placedSerial;
+	u32 meshId;
+	Quaternion orientation;
+	f32 scale;
+	v3 pos;
+	v4 color;
+};
+
+
+DefineDynamicArray(PlacedMeshCopyData);
+
+typedef PlacedMeshCopyDataDynamicArray EditorClipBoard;
+
+DefineDynamicArray(EditorSelect);
+
+enum EditorActionType
+{
+	EditorAction_None,
+	EditorAction_AlterMesh,
+	EditorAction_DeleteMesh,
+	EditorAction_PlaceMesh,
+
+	EditorAction_AlterTile,
+
+	EditorAction_BeginBundle,
+	EditorAction_EndBundle,
+
+	EditorAction_Count,
+
+};
+
+struct EditorTileUndoRedoData
+{
+	u32 x, y;
+	TileMapType type;
+};
+
+struct EditorAction
+{
+	EditorActionType type;
+
+	union
+	{
+		EditorMeshUndoRedoData preModifyMesh;
+		EditorTileUndoRedoData preModifyTile;
+	};
+	union
+	{
+		EditorMeshUndoRedoData postModifyMesh;
+		EditorTileUndoRedoData postModifyTile;
+	};
+	
+};
+
+
+DefineDynamicArray(EditorAction);
+
 struct Editor
 {
 	EditorUIElementDynamicArray elements;
-	PlacedMesh *hotMesh;
+	EditorSelectDynamicArray hotMeshInfos;
 	u32 unitIndex;
 	EditorState state = EditorState_Default;
 
+	EditorClipBoard clipBoard;
+	EditorActionDynamicArray undoRedoBuffer;
+	u32 undoRedoAt;
+
 	EditorPanel panel;
 
-	Quaternion rotater = { 1, 0, 0, 0 };
-	f32 scaler = 1.0f;
-	v3 mover = V3();
+	b32 snapToTileMap;
 
 	v3 focusPoint;
 };
+
+static v3 GetAveragePosForSelection(Editor *editor, Level *level)
+{
+	v3 averagePos = V3();
+	For(editor->hotMeshInfos)
+	{
+		averagePos += GetPlacedMesh(level, it->placedSerial)->pos;
+	}
+	averagePos /= (f32)editor->hotMeshInfos.amount;
+	return averagePos;
+}
 
 static f32 HeightForTweekerPanel(TweekerType type, f32 editorBorderWidth, f32 editorPanelFontSize)
 {
@@ -256,13 +342,20 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor, Font font)
 			f32 height = editorPanelFontSize + editorBorderWidth;
 			PushRectangle(rg, valuePos, widthWithoutBoarder, height, editorPanelValueColor);
 
+			f32 indecatorSquareSize = height - editorBorderWidth;
+
+			v2 squarePos = valuePos + V2(widthWithoutBoarder - height, editorBorderWidth);
+			PushRectangle(rg, squarePos, indecatorSquareSize, indecatorSquareSize, V4(1, 1, 1, 1));
+
+			f32 innerSquareSize = indecatorSquareSize - editorBorderWidth;
+
 			if (*it->b)
 			{
-				PushString(rg, continuePos, "True", editorPanelFontSize, font);
+				PushRectangle(rg, squarePos + 0.5f * V2(editorBorderWidth, editorBorderWidth), innerSquareSize, innerSquareSize, V4(1, 0.3f, 0.8f, 0.3f));
 			}
 			else
 			{
-				PushString(rg, continuePos, "False", editorPanelFontSize, font);
+				PushRectangle(rg, squarePos + 0.5f * V2(editorBorderWidth, editorBorderWidth), innerSquareSize, innerSquareSize, V4(1, 0.8f, 0.3f, 0.3f));
 			}
 
 			valuePos.y += height;
@@ -393,12 +486,16 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor, Font font)
 }
 
 
-static Editor InitEditor(Camera camera, Arena *constantArena)
+static Editor InitEditor(Arena *constantArena)
 {
 	Editor ret;
 	ret.elements = EditorUIElementCreateDynamicArray();
+	ret.clipBoard = PlacedMeshCopyDataCreateDynamicArray();
 
-	ret.hotMesh = NULL;
+	ret.undoRedoBuffer = EditorActionCreateDynamicArray();
+	ret.undoRedoAt = 0xFFFFFFFF;
+	
+	ret.hotMeshInfos = EditorSelectCreateDynamicArray();
 	ret.unitIndex = 0xFFFFFFFF;
 	ret.state = EditorState_Default;
 
@@ -412,11 +509,8 @@ static Editor InitEditor(Camera camera, Arena *constantArena)
 	ret.panel.textInput.maxLength = 50;
 	ret.panel.hotValue = 0xFFFFFFFF;
 
-	ret.focusPoint = i12(ScreenZeroToOneToInGame(camera, V2(0.5f, 0.5f)));
+	ret.focusPoint = V3();
 
-	ret.rotater = { 1, 0, 0, 0 };
-	ret.scaler = 1.0f;
-	ret.mover = V3();
 	return ret;
 }
 
@@ -543,7 +637,6 @@ static ColorPicker CreateColorPicker(v4 *initialColor)
 
 
 static void WriteSingleTweeker(Tweeker tweeker);
-//returns whether or not it should be closed
 
 // todo: could save these up and then on access do the mem copy. Not sure if worth the complexity
 // todo unordered remove (just move the last guy)
@@ -709,59 +802,83 @@ static void RenderColorPicker(RenderGroup *rg, ColorPicker *picker)
 }
 
 
-static void RenderEditor(RenderGroup *rg, Editor editor)
+static void RenderEditor(RenderGroup *rg, AssetHandler *assetHandler, Editor editor, Level *level, Input input)
 {
-	PlacedMesh *mesh = editor.hotMesh;
-	if (!mesh) return;
-	AABB transformedAABB = mesh->untransformedAABB;
-
-	transformedAABB.minDim *= mesh->scale;
-	transformedAABB.maxDim *= mesh->scale;
-
-	m4x4 mat = Translate(QuaternionToMatrix(mesh->orientation), mesh->pos);
-
-	v3 d1 = V3(transformedAABB.maxDim.x - transformedAABB.minDim.x, 0, 0);
-	v3 d2 = V3(0, transformedAABB.maxDim.y - transformedAABB.minDim.y, 0);
-	v3 d3 = V3(0, 0, transformedAABB.maxDim.z - transformedAABB.minDim.z);
-
-	v3 p[8] =
+	switch (editor.state)
 	{
-		mat * transformedAABB.minDim,			//0
+	case EditorState_PlacingNewMesh:
+	{
+		v2 clickedP = ScreenZeroToOneToInGame(level->camera, input.mouseZeroToOne);
+		For(editor.clipBoard)
+		{
+			PushTriangleMesh(rg, it->meshId, it->orientation, it->pos + i12(clickedP), it->scale, it->color * V4(0.5f, 1.0f, 1.0f, 1.0f));
+		}
 
-		mat * (transformedAABB.minDim + d1),		//1
-		mat * (transformedAABB.minDim + d2),		//2
-		mat * (transformedAABB.minDim + d3),		//3
+	}break;
+	}
 
-		mat * (transformedAABB.minDim + d1 + d2),	//4
-		mat * (transformedAABB.minDim + d2 + d3),	//5
-		mat * (transformedAABB.minDim + d3 + d1),	//6
+	if (!editor.hotMeshInfos.amount) return;
 
-		mat * transformedAABB.maxDim,			//7
+	v3 averagePos = GetAveragePosForSelection(&editor, level);
 
-	};
+	PushDebugPointCuboid(rg, V3(averagePos.xy, 0.0f));
 
-	//_upper_ square
-	PushLine(rg, p[0], p[1]);
-	PushLine(rg, p[1], p[4]);
-	PushLine(rg, p[4], p[2]);
-	PushLine(rg, p[2], p[0]);
+	For(editor.hotMeshInfos)
+	{
+		PlacedMesh *mesh = GetPlacedMesh(level, it->placedSerial);
+		AABB transformedAABB = GetMesh(assetHandler, mesh->meshId)->aabb;
 
-	//_lower_ square
-	PushLine(rg, p[7], p[5]);
-	PushLine(rg, p[5], p[3]);
-	PushLine(rg, p[3], p[6]);
-	PushLine(rg, p[6], p[7]);
+		transformedAABB.minDim *= mesh->scale;
+		transformedAABB.maxDim *= mesh->scale;
 
-	//_connecting_ lines
-	PushLine(rg, p[0], p[3]);
-	PushLine(rg, p[2], p[5]);
-	PushLine(rg, p[1], p[6]);
-	PushLine(rg, p[4], p[7]);
+		m4x4 mat = Translate(QuaternionToMatrix(mesh->orientation), mesh->pos);
 
+		v3 d1 = V3(transformedAABB.maxDim.x - transformedAABB.minDim.x, 0, 0);
+		v3 d2 = V3(0, transformedAABB.maxDim.y - transformedAABB.minDim.y, 0);
+		v3 d3 = V3(0, 0, transformedAABB.maxDim.z - transformedAABB.minDim.z);
+
+		v3 p[8] =
+		{
+			mat * transformedAABB.minDim,			//0
+
+			mat * (transformedAABB.minDim + d1),		//1
+			mat * (transformedAABB.minDim + d2),		//2
+			mat * (transformedAABB.minDim + d3),		//3
+
+			mat * (transformedAABB.minDim + d1 + d2),	//4
+			mat * (transformedAABB.minDim + d2 + d3),	//5
+			mat * (transformedAABB.minDim + d3 + d1),	//6
+
+			mat * transformedAABB.maxDim,			//7
+
+		};
+
+		//_upper_ square
+		PushLine(rg, p[0], p[1]);
+		PushLine(rg, p[1], p[4]);
+		PushLine(rg, p[4], p[2]);
+		PushLine(rg, p[2], p[0]);
+
+		//_lower_ square
+		PushLine(rg, p[7], p[5]);
+		PushLine(rg, p[5], p[3]);
+		PushLine(rg, p[3], p[6]);
+		PushLine(rg, p[6], p[7]);
+
+		//_connecting_ lines
+		PushLine(rg, p[0], p[3]);
+		PushLine(rg, p[2], p[5]);
+		PushLine(rg, p[1], p[6]);
+		PushLine(rg, p[4], p[7]);
+	}
 }
 
 static void RenderEditorUI(RenderGroup *rg, Editor editor, Font font)
 {
+	if (editor.state == EditorState_DeleteSelection)
+	{
+		PushString(rg, V2(0.4f, 0.1f), "Delete?", 0.05f, font);
+	}
 
 	RenderEditorPanel(rg, editor, font);
 
@@ -863,26 +980,43 @@ static void ColorPickersHandleEvents(Editor *editor, KeyStateMessage message, In
 	}
 }
 
-
 static void EditorGoToNone(Editor *editor)
 {
 	editor->state = EditorState_Default;
-	editor->rotater = { 1.0f, 0, 0, 0 };
-	editor->scaler = 1.0f;
-	editor->mover = V3();
+#if 0
+	For(editor->hotMeshInfos)
+	{
+		PlacedMesh *mesh = GetPlacedMesh(level, it->placedSerial);
+		it->initialPos			= mesh->pos;
+		it->initialScale		= mesh->scale;
+		it->initialOrientation	= mesh->orientation;
+		it->initialColor		= mesh->color;
+	}
+#endif
 }
 
-static PlacedMesh *GetHotMesh(World *world, v2 mousePosZeroToOne)
+static PlacedMesh *GetHotMesh(Level *level, AssetHandler *handler, v2 mousePosZeroToOne)
 {
-	v3 camP = world->camera.pos; // todo camera or debugCamera? Maybe we should again unify them
-	v3 camD = ScreenZeroToOneToDirecion(world->camera, mousePosZeroToOne);
+	v3 camP = level->camera.pos; // todo camera or debugCamera? Maybe we should again unify them
+	v3 camD = ScreenZeroToOneToDirecion(level->camera, mousePosZeroToOne);
 
-	For(world->placedMeshes)
+	f32 minDist = F32MAX;
+
+	PlacedMesh *ret = NULL;
+
+	For(level->placedMeshes)
 	{
-		m4x4 mat = QuaternionToMatrix(Inverse(it->orientation));
+		MeshInfo *info = GetMeshInfo(handler, it->meshId);
+
+		if (!info) continue; // probably not on screen, if never rendered
+
+		m4x4 mat = QuaternionToMatrix(Inverse(it->orientation)); // todo save these?
 		v3 rayP = mat * (camP - it->pos);
-		v3 rayD = mat * camD;
-		AABB aabb = it->untransformedAABB;
+		v3 rayD = mat * camD; 
+		// better rayCast system, right now this loads every mesh, to find out the aabb....
+
+		AABB aabb = info->aabb;
+
 		aabb.maxDim *= it->scale;
 		aabb.minDim *= it->scale;
 		f32 curIntersectionMin = MAXF32;
@@ -895,7 +1029,7 @@ static PlacedMesh *GetHotMesh(World *world, v2 mousePosZeroToOne)
 		f32 dz = rayD.z;
 
 		f32 aabbMinX = aabb.minDim.x;
-		f32 aabbMaxX = aabb.maxDim.x;
+		f32 aabbMaxX = aabb.maxDim.x; 
 		f32 aabbMinY = aabb.minDim.y;
 		f32 aabbMaxY = aabb.maxDim.y;
 		f32 aabbMinZ = aabb.minDim.z;
@@ -938,24 +1072,360 @@ static PlacedMesh *GetHotMesh(World *world, v2 mousePosZeroToOne)
 		}
 		v3 curExit = rayD * curIntersectionMin + rayP;
 
-		if (PointInAABB(aabb, curExit)) return it;
 
+		if (PointInAABB(aabb, curExit))
+		{
+			f32 dist = Dist(curExit, rayP);
+			if (dist < minDist)
+			{
+				minDist = dist;
+				ret = it;
+			}
+		}
 	}
 
-	return NULL;
+	return ret;
 }
 
 // maybe this is a bad function, as it does more then it says
-static void EditorSetHotMeshToNULL(Editor *editor) 
+static void EditorSelectNothing(Editor *editor) 
 {
 	editor->panel.values.amount = 0;
 	editor->panel.visible = false;
-	editor->hotMesh = NULL;
+	Clear(&editor->hotMeshInfos);
 }
 
-static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *world, KeyStateMessage message, Input input, f32 focalLength, f32 aspectRatio)
+static bool WriteLevel(char *fileName, Level world, UnitHandler unitHandler, AssetHandler *assetHandler);
+
+static bool EditorHasSelection(Editor *editor)
 {
-	Camera *cam = &world->camera;
+	return (editor->hotMeshInfos.amount > 0);
+}
+
+static void ResetHotMeshes(Editor *editor, Level *level)
+{
+	For(editor->hotMeshInfos)
+	{
+		PlacedMesh *mesh = GetPlacedMesh(level, it->placedSerial);
+		mesh->pos = it->initialPos;
+		mesh->scale = it->initialScale;
+		mesh->orientation = it->initialOrientation;
+		mesh->color = it->initialColor;
+	}
+}
+
+static EditorAction ActionForModifyTile(Tile *tile, u32 x, u32 y, TileMapType postType)
+{
+	EditorAction toAdd;
+
+	toAdd.type = EditorAction_AlterTile;
+
+	toAdd.preModifyTile.type = tile->type;
+	toAdd.preModifyTile.x = x;
+	toAdd.preModifyTile.y = y;
+
+	toAdd.postModifyTile.type = postType;
+	toAdd.postModifyTile.x = x;
+	toAdd.postModifyTile.y = y;
+
+	return toAdd;
+}
+
+// kills all redos
+static void AddActionToUndoRedoBuffer(Editor *editor, EditorAction toAdd)
+{
+	editor->undoRedoBuffer.amount = ++editor->undoRedoAt;
+	
+	ArrayAdd(&editor->undoRedoBuffer, toAdd);
+
+	Assert((editor->undoRedoAt + 1) == editor->undoRedoBuffer.amount);
+}
+
+static void EditorPerformUndo(Editor *editor, Level *level)
+{
+	if (editor->undoRedoAt == 0xFFFFFFFF) return;
+	EditorAction toReverse = editor->undoRedoBuffer[editor->undoRedoAt--];
+	switch (toReverse.type)
+	{
+	case EditorAction_AlterMesh:
+	{
+		EditorMeshUndoRedoData data = toReverse.preModifyMesh;
+		u32 serial = toReverse.preModifyMesh.placedSerial;
+		Assert(toReverse.preModifyMesh.placedSerial == toReverse.postModifyMesh.placedSerial);
+		PlacedMesh *mesh = GetPlacedMesh(level, toReverse.preModifyMesh.placedSerial);
+		mesh->color			= data.color;
+		mesh->pos			= data.pos;
+		mesh->orientation	= data.orientation;
+		mesh->scale			= data.scale;
+	}break;
+	case EditorAction_DeleteMesh: 
+	{
+		EditorMeshUndoRedoData data = toReverse.preModifyMesh;
+		u32 serial = toReverse.preModifyMesh.placedSerial;
+		RestorePlacedMesh(level, serial, data.meshId, data.scale, data.orientation, data.pos, data.color);
+	}break;
+	case EditorAction_PlaceMesh:
+	{
+		EditorMeshUndoRedoData data = toReverse.postModifyMesh;
+		RemovePlacedMesh(level, data.placedSerial);
+	}break;
+	case EditorAction_AlterTile:
+	{
+		EditorTileUndoRedoData data = toReverse.preModifyTile;
+		Tile *toAlter = GetTile(level->tileMap, data.x, data.y);
+		toAlter->type = data.type;
+
+	}break;
+	case EditorAction_BeginBundle:
+	{
+		
+	}break;
+	case EditorAction_EndBundle:
+	{
+		while (editor->undoRedoBuffer[editor->undoRedoAt].type != EditorAction_BeginBundle)
+		{
+			EditorPerformUndo(editor, level);
+		}
+		editor->undoRedoAt--;
+	}break;
+
+	InvalidDefaultCase;
+	}
+}
+
+
+static void EditorPerformRedo(Editor *editor, Level *level)
+{
+	if (editor->undoRedoAt == (editor->undoRedoBuffer.amount - 1)) return;
+	EditorAction toReverse = editor->undoRedoBuffer[++editor->undoRedoAt];
+	switch (toReverse.type)
+	{
+	case EditorAction_AlterMesh:
+	{
+		EditorMeshUndoRedoData data = toReverse.postModifyMesh;
+		u32 serial = toReverse.postModifyMesh.placedSerial;
+		Assert(toReverse.postModifyMesh.placedSerial == toReverse.postModifyMesh.placedSerial);
+		PlacedMesh *mesh = GetPlacedMesh(level, toReverse.postModifyMesh.placedSerial);
+		mesh->color = data.color;
+		mesh->pos = data.pos;
+		mesh->orientation = data.orientation;
+		mesh->scale = data.scale;
+	}break;
+	case EditorAction_DeleteMesh:
+	{
+		EditorMeshUndoRedoData data = toReverse.preModifyMesh;
+		u32 serial = toReverse.preModifyMesh.placedSerial;
+		RemovePlacedMesh(level, serial);
+	}break;
+	case EditorAction_PlaceMesh:
+	{
+		EditorMeshUndoRedoData data = toReverse.postModifyMesh;
+		RestorePlacedMesh(level, data.placedSerial, data.meshId, data.scale, data.orientation, data.pos, data.color);
+	}break;
+	case EditorAction_AlterTile:
+	{
+		EditorTileUndoRedoData data = toReverse.postModifyTile;
+		Tile *toAlter = GetTile(level->tileMap, data.x, data.y);
+		toAlter->type = data.type;
+
+	}break;
+	case EditorAction_BeginBundle:
+	{
+		while (editor->undoRedoBuffer[editor->undoRedoAt].type != EditorAction_EndBundle)
+		{
+			EditorPerformRedo(editor, level);
+		}
+	}break;
+	case EditorAction_EndBundle:
+	{
+		return;
+	}break;
+
+	InvalidDefaultCase;
+	}
+}
+
+
+static void EditorPushUndo(Editor *editor, Tile *tile, v2i pos)
+{
+	Assert(editor->state & EditorState_TileMapEditor);
+	
+	u32 x = pos.x;
+	u32 y = pos.y;
+
+	switch (editor->state)
+	{
+	case EditorState_TileMapEditor:
+	{
+		Assert(tile->type == Tile_Blocked || tile->type == Tile_Empty);
+
+		TileMapType newType = (tile->type == Tile_Empty) ? Tile_Blocked : Tile_Empty;
+		EditorAction toAdd = ActionForModifyTile(tile, x, y, newType);
+		AddActionToUndoRedoBuffer(editor, toAdd);
+
+	}break;
+	case EditorState_TileMapPlacingGoal:
+	{
+		TileMapType newType = (tile->type == Tile_Goal) ? Tile_Empty : Tile_Goal;
+		if (newType == tile->type) break;
+		EditorAction toAdd = ActionForModifyTile(tile, x, y, newType);
+		AddActionToUndoRedoBuffer(editor, toAdd);
+	}break;
+	case EditorState_TileMapPlacingSpawner:
+	{
+		TileMapType newType = (tile->type == Tile_Spawner) ? Tile_Empty : Tile_Spawner;
+		if (newType == tile->type) break;
+		EditorAction toAdd = ActionForModifyTile(tile, x, y, newType);
+		AddActionToUndoRedoBuffer(editor, toAdd);
+	}break;
+	}
+	
+}
+
+static EditorMeshUndoRedoData PreModifyToEditorSelect(EditorSelect select, Editor *editor, Level *level)
+{
+	PlacedMesh *mesh = GetPlacedMesh(level, select.placedSerial);
+	EditorMeshUndoRedoData ret;
+	ret.meshId			= mesh->meshId;
+	ret.placedSerial	= mesh->serialNumber;
+
+	ret.orientation		= select.initialOrientation;
+	ret.pos				= select.initialPos;
+	ret.scale			= select.initialScale;
+	ret.color			= select.initialColor;
+	
+	return ret;
+}
+
+static EditorMeshUndoRedoData PostModifyToEditorSelect(EditorSelect select, Editor *editor, Level *level)
+{
+	PlacedMesh *mesh = GetPlacedMesh(level, select.placedSerial);
+	EditorMeshUndoRedoData ret;
+	ret.color			= mesh->color;
+	ret.placedSerial	= mesh->serialNumber;
+	ret.orientation		= mesh->orientation;
+	ret.pos				= mesh->pos;
+	ret.scale			= mesh->scale;
+	ret.meshId			= mesh->meshId;
+	return ret;
+}
+
+static void PushAlterMeshModifies(Editor *editor, Level *level)
+{
+	For(editor->hotMeshInfos)
+	{
+		EditorAction toAdd;
+		toAdd.type = EditorAction_AlterMesh;
+		toAdd.preModifyMesh = PreModifyToEditorSelect(*it, editor, level);
+		toAdd.postModifyMesh = PostModifyToEditorSelect(*it, editor, level);
+		AddActionToUndoRedoBuffer(editor, toAdd);
+	}
+}
+
+static void EditorPushUndo(Editor *editor, Level *level)
+{
+	Assert(editor->hotMeshInfos.amount);
+
+	if (editor->hotMeshInfos.amount > 1)
+	{
+		EditorAction toAdd;
+		toAdd.type = EditorAction_BeginBundle;
+		AddActionToUndoRedoBuffer(editor, toAdd);
+	}
+
+	
+	switch (editor->state)
+	{
+	case EditorState_Scaling:
+	{
+		PushAlterMeshModifies(editor, level);
+	}break;
+	case EditorState_Rotating:
+	{
+		PushAlterMeshModifies(editor, level);
+	}break;
+	case EditorState_Moving:
+	{
+		PushAlterMeshModifies(editor, level);
+	}break;
+	case EditorState_PickingColor:
+	{
+		PushAlterMeshModifies(editor, level);
+	}break;
+	case EditorState_AlteringValue:
+	{
+		PushAlterMeshModifies(editor, level);
+	}break;
+	case EditorState_PlacingNewMesh:
+	{
+		For(editor->hotMeshInfos)
+		{
+			EditorAction toAdd;
+			toAdd.type = EditorAction_PlaceMesh;
+			PlacedMesh *mesh = GetPlacedMesh(level, it->placedSerial);
+
+			toAdd.postModifyMesh.color = mesh->color;
+			toAdd.postModifyMesh.meshId = mesh->meshId;
+			toAdd.postModifyMesh.orientation = mesh->orientation;
+			toAdd.postModifyMesh.pos = mesh->pos;
+			toAdd.postModifyMesh.scale = mesh->scale;
+			toAdd.postModifyMesh.placedSerial = it->placedSerial;
+
+			AddActionToUndoRedoBuffer(editor, toAdd);
+		}
+	}break;
+	case EditorState_DeleteSelection: 
+	{
+		// to be called when the selection did not get cleared yet.
+		For(editor->hotMeshInfos)
+		{
+			EditorAction toAdd;
+			toAdd.type = EditorAction_DeleteMesh;
+			PlacedMesh *mesh = GetPlacedMesh(level, it->placedSerial);
+
+			toAdd.preModifyMesh.color = mesh->color;
+			toAdd.preModifyMesh.meshId = mesh->meshId;
+			toAdd.preModifyMesh.orientation = mesh->orientation;
+			toAdd.preModifyMesh.pos = mesh->pos;
+			toAdd.preModifyMesh.scale = mesh->scale;
+			toAdd.preModifyMesh.placedSerial = it->placedSerial;
+
+			AddActionToUndoRedoBuffer(editor, toAdd);
+		}
+	}break;
+
+
+	default:
+	{
+		Die;
+	}break;
+
+	}
+
+	if (editor->hotMeshInfos.amount > 1)
+	{
+		EditorAction toAdd;
+		toAdd.type = EditorAction_EndBundle;
+		AddActionToUndoRedoBuffer(editor, toAdd);
+	}
+}
+
+static void ResetSelectionInitials(Editor *editor, Level *level)
+{
+	For(editor->hotMeshInfos)
+	{
+		PlacedMesh *mesh = GetPlacedMesh(level, it->placedSerial);
+		it->initialPos = mesh->pos;
+		it->initialOrientation = mesh->orientation;
+		it->initialScale = mesh->scale;
+		it->initialColor = mesh->color;
+	}
+}
+
+
+static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, Level *level, AssetHandler *assetHandler, KeyStateMessage message, Input input, f32 focalLength, f32 aspectRatio)
+{
+	Camera *cam = &level->camera;
 	For(editor->elements)
 	{
 		switch (it->type)
@@ -972,12 +1442,12 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 			{
 				if (PointInRectangle(picker->sliderPos, picker->width, picker->sliderHeight, input.mouseZeroToOne))
 				{
-					picker->selecting = (message.flag & KeyState_Down) ? PickerSelecting_Slider : PickerSelecting_Nothing;
+					picker->selecting = PickerSelecting_Slider;
 					return;
 				}
 				if (PointInRectangle(picker->pos, picker->width, picker->height, input.mouseZeroToOne))
 				{
-					picker->selecting = (message.flag & KeyState_Down) ? PickerSelecting_ColorPicker : PickerSelecting_Nothing;
+					picker->selecting = PickerSelecting_ColorPicker;
 					return;
 				}
 				if (PointInRectangle(picker->killRectPos, picker->headerSize, picker->headerSize, input.mouseZeroToOne))
@@ -991,7 +1461,7 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 				}
 				if (PointInRectangle(picker->headerPos, picker->width, picker->headerSize, input.mouseZeroToOne))
 				{
-					picker->selecting = (message.flag & KeyState_Down) ? PickerSelecting_Header : PickerSelecting_Nothing;
+					picker->selecting = PickerSelecting_Header;
 					return;
 				}
 
@@ -1018,6 +1488,9 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 		{
 		case EditorState_PickingColor:
 		{
+			EditorPushUndo(editor, level);
+
+			ResetSelectionInitials(editor, level);
 			EditorGoToNone(editor);
 		}break;
 		case EditorState_Default:
@@ -1128,44 +1601,205 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 
 					return;
 				}
-				// todo here we have to have some logic of UI vs Screen maybe just put flags on editor and to this in update?
 
-				if (editor->hotMesh)
+				PlacedMesh *hotMesh = GetHotMesh(level, assetHandler, input.mouseZeroToOne);
+
+				if (message.flag & KeyState_ShiftDown)
 				{
+					if (!hotMesh) break;
+
+					b32 allreadyIn = false;
+					For(editor->hotMeshInfos)
+					{
+						if (it->placedSerial == hotMesh->serialNumber)
+						{
+							allreadyIn = true;
+							u32 it_index = (u32)(it - editor->hotMeshInfos.data);
+							UnorderedRemove(&editor->hotMeshInfos, it_index);
+						}
+					}
+
+					if (allreadyIn) break;
+					
+					EditorSelect toAdd;
+					toAdd.initialPos			= hotMesh->pos;
+					toAdd.initialOrientation	= hotMesh->orientation;
+					toAdd.initialScale			= hotMesh->scale;
+					toAdd.placedSerial		= hotMesh->serialNumber;
+
+					ArrayAdd(&editor->hotMeshInfos, toAdd);
 					editor->panel.values.amount = 0;
-					editor->hotMesh = NULL;
-					editor->panel.visible = false;
+					editor->panel.visible = true;
+					ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_b32, "SnapToTileMap", &editor->snapToTileMap));
+					break;
 				}
 
-				PlacedMesh *hotMesh = GetHotMesh(world, input.mouseZeroToOne);
-				
+				if (EditorHasSelection(editor))
+				{
+					EditorSelectNothing(editor);
+				}
+
 				if (hotMesh)
 				{
-					editor->hotMesh = hotMesh;
+					EditorSelect toAdd;
+					toAdd.initialPos = hotMesh->pos;
+					toAdd.initialOrientation = hotMesh->orientation;
+					toAdd.initialScale = hotMesh->scale;
+					toAdd.placedSerial = hotMesh->serialNumber;
+
+					ArrayAdd(&editor->hotMeshInfos, toAdd);
 					editor->panel.visible = true;
 
+					ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_b32, "SnapToTileMap", &editor->snapToTileMap));
 					ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_v3, "Pos", &hotMesh->pos));
 					ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_f32, "Scale", &hotMesh->scale));
 					ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_v4, "Color", &hotMesh->color));
-					//ArrayAdd(&editor->panel.values, CreateTweeker()); orientation
+					ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_u32, "Serial", &hotMesh->serialNumber));
 				}
 			}break;
+			case Key_left:
+			{
+				For(editor->hotMeshInfos)
+				{
+					PlacedMesh *mesh = GetPlacedMesh(level, it->placedSerial);
+					mesh->pos.x--;
+				}
+			}break;
+			case Key_right:
+			{
+				For(editor->hotMeshInfos)
+				{
+					PlacedMesh *mesh = GetPlacedMesh(level, it->placedSerial);
+					mesh->pos.x++;
+				}
+
+			}break;
+			case Key_up:
+			{
+				if (message.flag & KeyState_ControlDown)
+				{
+					For(editor->hotMeshInfos)
+					{
+						PlacedMesh *mesh = GetPlacedMesh(level, it->placedSerial);
+						mesh->pos.z--;
+					}
+					break;
+				}
+
+				For(editor->hotMeshInfos)
+				{
+					PlacedMesh *mesh = GetPlacedMesh(level, it->placedSerial);
+					mesh->pos.y--;
+				}
+
+			}break;
+			case Key_down:
+			{
+				if (message.flag & KeyState_ControlDown)
+				{
+					For(editor->hotMeshInfos)
+					{
+						PlacedMesh *mesh = GetPlacedMesh(level, it->placedSerial);
+						mesh->pos.z++;
+					}
+					break;
+				}
+				For(editor->hotMeshInfos)
+				{
+					PlacedMesh *mesh = GetPlacedMesh(level, it->placedSerial);
+					mesh->pos.y++;
+				}
+
+			}break;
+
 			case Key_g:
 			{
+				ResetSelectionInitials(editor, level);
 				editor->state = EditorState_Moving;
 			}break;
 			case Key_r:
 			{
+				ResetSelectionInitials(editor, level);
 				editor->state = EditorState_Rotating;
 			}break;
 			case Key_s:
 			{
+				ResetSelectionInitials(editor, level);
+
+				if ((message.flag & KeyState_ControlDown) && level->allreadyExists)
+				{
+					char *fileName = FormatCString("level/%s.level", level->name);
+					if (WriteLevel(fileName, *level, *unitHandler, assetHandler))
+					{
+						ConsoleOutput("Saved!");
+					}
+					else
+					{
+						ConsoleOutputError("Could not save file %c*.", fileName);
+					}
+
+					break;
+				}
 				editor->state = EditorState_Scaling;
+			}break;
+			case Key_c:
+			{
+				if (!editor->hotMeshInfos) break;
+
+				if (message.flag & KeyState_ControlDown)
+				{
+					editor->clipBoard.amount = 0;
+					v3 averagePos = GetAveragePosForSelection(editor, level);
+					For(editor->hotMeshInfos)
+					{
+						PlacedMesh *mesh = GetPlacedMesh(level, it->placedSerial);
+						PlacedMeshCopyData data;
+						data.color			= mesh->color;
+						data.meshId			= mesh->meshId;
+						data.orientation	= mesh->orientation;
+						data.pos			= mesh->pos - averagePos;
+						data.scale			= mesh->scale;
+						ArrayAdd(&editor->clipBoard, data);
+					}
+				}
+
+			}break;
+			case Key_v:
+			{
+				if (!editor->clipBoard) break;
+				if (message.flag & KeyState_ControlDown)
+				{
+					editor->state = EditorState_PlacingNewMesh;
+					EditorSelectNothing(editor);
+				}
+			}break;
+			case Key_z:
+			{	
+				if (message.flag & KeyState_ControlDown)
+				{
+					EditorSelectNothing(editor);
+					EditorPerformUndo(editor, level);
+				}
+			}break;
+			case Key_y:
+			{
+				if (message.flag & KeyState_ControlDown)
+				{
+					EditorSelectNothing(editor);
+					EditorPerformRedo(editor, level);
+				}
+			}break;
+			case Key_x:
+			{
+				if (EditorHasSelection(editor))
+				{
+					editor->state = EditorState_DeleteSelection;
+				}
 			}break;
 			case Key_tab:
 			{
 				editor->state = EditorState_TileMapEditor;
-				EditorSetHotMeshToNULL(editor);
+				EditorSelectNothing(editor);
 
 			}break;
 			case Key_middleMouse:
@@ -1176,7 +1810,6 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 			case Key_num1:
 			{
 				// front
-				
 				cam->b3 = V3(0, 1, 0);
 				cam->b1 = V3(1, 0, 0);
 				cam->b2 = V3(0, 0, 1);
@@ -1203,9 +1836,7 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 			}break;
 			case Key_num9:
 			{
-				//// todo
-				// Right/left, Top/bottom, front/back toggle
-				
+				// toggle
 				cam->b3 = -cam->b3;
 				cam->b1 = -cam->b1;
 
@@ -1214,11 +1845,15 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 			}break;
 			case Key_numDot:
 			{
-				if (editor->hotMesh)
+				if (!EditorHasSelection(editor))
 				{
-					cam->pos = editor->hotMesh->pos + cam->pos - editor->focusPoint;
-					editor->focusPoint = editor->hotMesh->pos;
+					break;
 				}
+
+				v3 averagePos = GetAveragePosForSelection(editor, level);
+				cam->pos = averagePos + cam->pos - editor->focusPoint;
+				editor->focusPoint = averagePos;
+				
 			}break;
 			case Key_mouseWheelBack:
 			{
@@ -1239,13 +1874,15 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 			{
 			case Key_leftMouse:
 			{
+				EditorPushUndo(editor, level);
+				ResetSelectionInitials(editor, level);
 				EditorGoToNone(editor);
 			}break;
 			case Key_rightMouse:
 			{
-				editor->hotMesh->orientation = Inverse(editor->rotater) * editor->hotMesh->orientation;
+				ResetHotMeshes(editor, level);
+				ResetSelectionInitials(editor, level);
 				EditorGoToNone(editor);
-				
 			}break;
 
 			}
@@ -1256,11 +1893,21 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 			{
 			case Key_leftMouse:
 			{
+				if (editor->snapToTileMap && editor->hotMeshInfos.amount == 1)
+				{
+					EditorSelect select = editor->hotMeshInfos[0];
+					PlacedMesh *mesh = GetPlacedMesh(level, select.placedSerial);
+					mesh->pos = V3((i32)(mesh->pos.x + 0.5f), (i32)(mesh->pos.y + 0.5f), (i32)(mesh->pos.z + 0.5f));
+				}
+
+				EditorPushUndo(editor, level);
+				ResetSelectionInitials(editor, level);
 				EditorGoToNone(editor);
 			}break;
 			case Key_rightMouse:
 			{
-				editor->hotMesh->pos -= editor->mover;
+				ResetHotMeshes(editor, level);
+				ResetSelectionInitials(editor, level);
 				EditorGoToNone(editor);
 			}break;
 
@@ -1272,11 +1919,14 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 			{
 			case Key_leftMouse:
 			{
+				EditorPushUndo(editor, level);
+				ResetSelectionInitials(editor, level);
 				EditorGoToNone(editor);
 			}break;
 			case Key_rightMouse:
 			{
-				editor->hotMesh->scale /= editor->scaler;
+				ResetHotMeshes(editor, level);
+				ResetSelectionInitials(editor, level);
 				EditorGoToNone(editor);
 			}break;
 
@@ -1397,6 +2047,9 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 				
 				t->string.length = 0;
 				editor->panel.hotValue = 0xFFFFFFFF;
+
+				EditorPushUndo(editor, level);
+				ResetSelectionInitials(editor, level);
 				EditorGoToNone(editor);
 				return;
 			}
@@ -1412,8 +2065,9 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 			}break;
 			case Key_leftMouse:
 			{
-				v2 clickedP = ScreenZeroToOneToInGame(world->camera, input.mouseZeroToOne);
-				Tile *tile = GetTile(world->tileMap, clickedP);
+				v2 clickedP = ScreenZeroToOneToInGame(level->camera, input.mouseZeroToOne);
+				Tile *tile = GetTile(level->tileMap, clickedP);
+				EditorPushUndo(editor, tile, V2i(clickedP));
 				if (tile)
 				{
 					switch(tile->type)
@@ -1437,6 +2091,67 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 			{
 				editor->state = EditorState_TileMapPlacingSpawner;
 			}break;
+			case Key_middleMouse:
+			{
+				editor->state = EditorState_OrbitingTileMap;
+			}break;
+			case Key_num1:
+			{
+				// front
+				cam->b3 = V3(0, 1, 0);
+				cam->b1 = V3(1, 0, 0);
+				cam->b2 = V3(0, 0, 1);
+				cam->pos = editor->focusPoint + V3(0, -Norm(editor->focusPoint - cam->pos), 0);
+
+			}break;
+			case Key_num3:
+			{
+				// Right
+				cam->b3 = V3(-1, 0, 0);
+				cam->b1 = V3(0, -1, 0);
+				cam->b2 = V3(0, 0, 1);
+				cam->pos = editor->focusPoint + V3(Norm(editor->focusPoint - cam->pos), 0, 0);
+
+			}break;
+			case Key_num7:
+			{
+				// Top
+				cam->b1 = V3(1, 0, 0);
+				cam->b2 = V3(0, 1, 0);
+				cam->b3 = V3(0, 0, 1);
+				cam->pos = editor->focusPoint + V3(0, 0, -Norm(editor->focusPoint - cam->pos));
+
+			}break;
+			case Key_num9:
+			{
+				// toggle
+				cam->b3 = -cam->b3;
+				cam->b1 = -cam->b1;
+
+				cam->pos = editor->focusPoint - (cam->pos - editor->focusPoint);
+
+			}break;
+			case Key_numDot:
+			{
+				if (!EditorHasSelection(editor))
+				{
+					break;
+				}
+
+				v3 averagePos = GetAveragePosForSelection(editor, level);
+
+				cam->pos = averagePos + cam->pos - editor->focusPoint;
+				editor->focusPoint = averagePos;
+			}break;
+			case Key_mouseWheelBack:
+			{
+				cam->pos = 1.1f * (cam->pos - editor->focusPoint) + editor->focusPoint;
+
+			}break;
+			case Key_mouseWheelForward:
+			{
+				cam->pos = 0.9f * (cam->pos - editor->focusPoint) + editor->focusPoint;
+			}break;
 
 			}
 
@@ -1447,8 +2162,9 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 			{
 			case Key_leftMouse:
 			{
-				v2 clickedP = ScreenZeroToOneToInGame(world->camera, input.mouseZeroToOne);
-				Tile *tile = GetTile(world->tileMap, clickedP);
+				v2 clickedP = ScreenZeroToOneToInGame(level->camera, input.mouseZeroToOne);
+				Tile *tile = GetTile(level->tileMap, clickedP);
+				EditorPushUndo(editor, tile, V2i(clickedP));
 				if (tile)
 				{
 					tile->type = (tile->type == Tile_Goal) ? Tile_Empty : Tile_Goal;
@@ -1461,8 +2177,6 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 			}break;
 				
 			}
-			
-
 		}break;
 		case EditorState_TileMapPlacingSpawner:
 		{
@@ -1470,8 +2184,9 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 			{
 			case Key_leftMouse:
 			{
-				v2 clickedP = ScreenZeroToOneToInGame(world->camera, input.mouseZeroToOne);
-				Tile *tile = GetTile(world->tileMap, clickedP);
+				v2 clickedP = ScreenZeroToOneToInGame(level->camera, input.mouseZeroToOne);
+				Tile *tile = GetTile(level->tileMap, clickedP);
+				EditorPushUndo(editor, tile, V2i(clickedP));
 				if (tile)
 				{
 					tile->type = (tile->type == Tile_Spawner) ? Tile_Empty : Tile_Spawner;
@@ -1484,6 +2199,63 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 			}break;
 			}			
 		}break;
+		case EditorState_PlacingNewMesh:
+		{
+			switch (message.key)
+			{
+			case Key_leftMouse:
+			{
+				v2 clickedP = ScreenZeroToOneToInGame(level->camera, input.mouseZeroToOne);
+				
+				EditorSelectNothing(editor);
+
+				For(editor->clipBoard)
+				{
+					PlacedMesh mesh = CreatePlacedMesh(level, it->meshId, it->scale, it->orientation, it->pos + i12(clickedP), it->color);
+					EditorSelect add;
+					add.initialOrientation = it->orientation;
+					add.initialPos = it->pos;
+					add.initialScale = it->scale;
+					add.initialColor = it->color;
+					add.placedSerial = mesh.serialNumber;
+					ArrayAdd(&editor->hotMeshInfos, add);
+				}
+
+				EditorPushUndo(editor, level); // needs them to be selected
+				ResetSelectionInitials(editor, level);
+				EditorGoToNone(editor);
+			}break;
+			case Key_rightMouse:
+			{
+				ResetSelectionInitials(editor, level);
+				EditorGoToNone(editor);
+			}break;
+			}
+		}break;
+		case EditorState_DeleteSelection:
+		{
+			switch (message.key)
+			{
+			case Key_leftMouse:
+			{
+				// needs the meshes to be selected, so not yet dead
+				EditorPushUndo(editor, level); 
+				For(editor->hotMeshInfos)
+				{
+					RemovePlacedMesh(level, it->placedSerial);
+				}
+				EditorSelectNothing(editor);
+				ResetSelectionInitials(editor, level);
+				EditorGoToNone(editor);
+			}break;
+			case Key_rightMouse:
+			{
+				ResetSelectionInitials(editor, level);
+				EditorGoToNone(editor);
+			}break;
+			}
+		}break;
+		case EditorState_OrbitingTileMap:
 		case EditorState_OrbitingCamera:
 		{
 
@@ -1515,81 +2287,93 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 				{
 					editor->state = EditorState_Default;
 				}
+				if (editor->state == EditorState_OrbitingTileMap)
+				{
+					editor->state = EditorState_TileMapEditor;
+				}
+
 			}break;
 		}
 	}
 
 }
-static v3 GetMidPoint(PlacedMesh mesh)
+
+static void EditorUpdateCamFocus(Editor *editor, Camera *cam, Input input)
 {
-	AABB transformedAABB = mesh.untransformedAABB;
+	v2 mouseDelta = input.mouseDelta;
 
-	transformedAABB.minDim *= mesh.scale;
-	transformedAABB.maxDim *= mesh.scale;
+	f32 rotSpeed = 0.001f * 3.141592f;
 
-	m4x4 mat = Translate(QuaternionToMatrix(mesh.orientation), mesh.pos);
+	f32 mouseZRot = -mouseDelta.y * rotSpeed; // this should rotate around the z axis
+	f32 mouseCXRot = mouseDelta.x * rotSpeed; // this should rotate around the camera x axis
 
-	v3 mid = 0.5f * (transformedAABB.maxDim + transformedAABB.minDim);
+	m3x3 cameraT = Rows3x3(cam->b1, cam->b2, cam->b3);
+	m3x3 cameraTInv = Invert(cameraT);
 
+	m3x3 id = cameraT * cameraTInv;
+	m3x3 rotX = XRotation3x3(mouseZRot);
+	m3x3 rotZ = ZRotation3x3(mouseCXRot);
+	m3x3 rot = cameraTInv * rotX * cameraT * rotZ;
 
-	return mat * mid;
+	v3 delta = cam->pos - editor->focusPoint;
+
+	cam->pos = editor->focusPoint + rot * delta;
+
+	cam->basis = TransformBasis(cam->basis, rot);
+
+}
+
+static void FrameColorSelection(Editor *editor, Level *level, v4 editorMeshSelectColor)
+{
+	For(editor->hotMeshInfos)
+	{
+		GetPlacedMesh(level, it->placedSerial)->frameColor *= editorMeshSelectColor;
+	}
 }
 
 // todo maybe make all this matrix stuff more consitent
-static void UpdateEditor(Editor *editor, UnitHandler *unitHandler, World *world, Input input)
+static void UpdateEditor(Editor *editor, UnitHandler *unitHandler, Level *level, Input input)
 {
-	Camera *cam = &world->camera;
-	PlacedMesh* mesh = editor->hotMesh;
-
+	Camera *cam = &level->camera;
+	
 	UpdateColorPickers(editor, input);
 
 	switch (editor->state)
 	{
+	case EditorState_DeleteSelection:
+	{
+		return;
+	}break;
 	case EditorState_TileMapEditor:
 	{
-		ColorForTileMap(world);
+		ColorForTileMap(level);
+		return;
+	}break;
+	case EditorState_OrbitingTileMap:
+	{
+		EditorUpdateCamFocus(editor, cam, input);
+		ColorForTileMap(level);
 		return;
 	}break;
 	case EditorState_TileMapPlacingGoal:
 	{
-		ColorForTileMap(world);
+		ColorForTileMap(level);
 		return;
 	}break;
 	case EditorState_TileMapPlacingSpawner:
 	{
-		ColorForTileMap(world);
+		ColorForTileMap(level);
 		return;
 	}break;
 	case EditorState_OrbitingCamera:
 	{
-		v2 mouseDelta = input.mouseDelta;
-
-		f32 rotSpeed = 0.001f * 3.141592f;
-
-		f32 mouseZRot = -mouseDelta.y * rotSpeed; // this should rotate around the z axis
-		f32 mouseCXRot = mouseDelta.x * rotSpeed; // this should rotate around the camera x axis
-
-		m3x3 cameraT = Rows3x3(cam->b1, cam->b2, cam->b3);
-		m3x3 cameraTInv = Invert(cameraT);
-
-		m3x3 id = cameraT * cameraTInv;
-		m3x3 rotX = XRotation3x3(mouseZRot);
-		m3x3 rotZ = ZRotation3x3(mouseCXRot);
-		m3x3 rot = cameraTInv * rotX * cameraT * rotZ;
-
-		v3 delta = cam->pos - editor->focusPoint;
-
-		cam->pos = editor->focusPoint + rot * delta;
-
-		cam->basis = TransformBasis(cam->basis, rot);
+		EditorUpdateCamFocus(editor, cam, input);
 		return;
 	}break;
-	
 
 	}
 
-
-	if (!editor->hotMesh)
+	if (!EditorHasSelection(editor))
 	{
 		return;
 	}
@@ -1600,94 +2384,86 @@ static void UpdateEditor(Editor *editor, UnitHandler *unitHandler, World *world,
 	{
 	case EditorState_Default:
 	{
-		mesh->frameColor *= editorMeshSelectColor;
+		FrameColorSelection(editor, level, editorMeshSelectColor);
 	}break;
 	case EditorState_Rotating:
 	{
-		AABB transformedAABB = mesh->untransformedAABB;
+		v3 averagePos = GetAveragePosForSelection(editor, level);
 
-		transformedAABB.minDim *= mesh->scale;
-		transformedAABB.maxDim *= mesh->scale;
+		//todo not sure about all this being in the z= 0 plane
+		v2 oldP = ScreenZeroToOneToInGame(*cam, input.mouseZeroToOne - input.mouseZeroToOneDelta);
+		v2 newP = ScreenZeroToOneToInGame(*cam, input.mouseZeroToOne);
 
-		m4x4 mat = Translate(QuaternionToMatrix(mesh->orientation), mesh->pos);
-
-		v3 mid = 0.5f * (transformedAABB.maxDim + transformedAABB.minDim);
-		v3 front = V3(transformedAABB.minDim.x, 0.5f * (transformedAABB.maxDim.y + transformedAABB.minDim.y), 0.0f);
-
-		// todo maybe  this should rotate in the plane depending on the pos
-		// right now get projected onto z = 0, probably should be projected onto z = pos.z
-		v2 midPoint = p12(mat * mid); // mid == pos?
-		v2 frontPoint = p12(mat * front);
-		v2 mousePos = ScreenZeroToOneToInGame(world->camera, input.mouseZeroToOne);
-			
-		
-		f32 angle = AngleBetween(frontPoint - midPoint, mousePos - midPoint);
-
+		v2 relP1 = newP - p12(averagePos);
+		v2 relP2 = oldP - p12(averagePos);
+		f32 angle = AngleBetween(relP2, relP1);
 		Quaternion q = QuaternionFromAngleAxis(angle, V3(0, 0, 1));
-			
-		editor->hotMesh->orientation = q * editor->hotMesh->orientation;
-		editor->rotater = q * editor->rotater;
+		m4x4 mat = QuaternionToMatrix(q);
 
+		For(editor->hotMeshInfos)
+		{
+			PlacedMesh *mesh = GetPlacedMesh(level, it->placedSerial);
+			
+			v4 relPos = V4(mesh->pos - averagePos, 1.0f);
+			mesh->orientation = q * mesh->orientation;
+			mesh->pos = averagePos + (mat * relPos).xyz;
+		}
 	}break;
 	case EditorState_Scaling:
 	{
-		AABB transformedAABB = mesh->untransformedAABB;
-
-		transformedAABB.minDim *= mesh->scale;
-		transformedAABB.maxDim *= mesh->scale;
-		m4x4 mat = Translate(QuaternionToMatrix(mesh->orientation), mesh->pos);
-
-		v3 mid = i12(0.5f * (transformedAABB.maxDim + transformedAABB.minDim).xy);
-		v3 midPoint = (mat * mid); // pos?
-
-		m4x4 proj = Projection(world->camera.aspectRatio, world->camera.focalLength) * CameraTransform(cam->basis.d1, cam->basis.d2, cam->basis.d3, cam->pos);
-		v4 projectiveMidPoint = V4(midPoint, 1.0f);
-			 
-		v4 projectedMidPoint = (proj * projectiveMidPoint);
-		Assert(projectedMidPoint.w);
-		v2 screenPoint = (projectedMidPoint / projectedMidPoint.w).xy; // in -1 to 1 range
-		screenPoint = 0.5f * screenPoint + V2(0.5f, 0.5f);
-		screenPoint = V2(screenPoint.x, 1.0f - screenPoint.y);
-		v2 mouseD =  3.0f * input.mouseZeroToOneDelta;
+		v2 mouseD = input.mouseZeroToOneDelta;
 		if (mouseD == V2()) break;
 
+		v3 averagePos = GetAveragePosForSelection(editor, level);
+
+		m4x4 proj = Projection(cam->aspectRatio, cam->focalLength) * CameraTransform(cam->basis.d1, cam->basis.d2, cam->basis.d3, cam->pos);
+		v4 projectiveMidPoint = V4(averagePos, 1.0f);
+		v4 projectedMidPoint = (proj * projectiveMidPoint);
+		Assert(projectedMidPoint.w);
+		v2 screenPoint = projectedMidPoint.xy / projectedMidPoint.w; // in -1 to 1 range
+		screenPoint = 0.5f * screenPoint + V2(0.5f, 0.5f);
+		screenPoint = V2(screenPoint.x, 1.0f - screenPoint.y);
 		v2 p = input.mouseZeroToOne;
 		v2 d = Normalize(p - screenPoint);
-		f32 dot = Dot(mouseD, d);
-
+		f32 dot = 3.0f * Dot(mouseD, d); // scale speed
 		f32 exp = expf(dot);
 
-		editor->scaler *= exp;
-		editor->hotMesh->scale *= exp;
-		editor->hotMesh->pos = V3(p12(midPoint) + exp * p12(editor->hotMesh->pos - midPoint), editor->hotMesh->pos.z);
-
+		For(editor->hotMeshInfos)
+		{
+			PlacedMesh *mesh = GetPlacedMesh(level, it->placedSerial);
+			v3 delta = mesh->pos - averagePos;
+			v3 newPos = exp * delta + averagePos;
+			mesh->pos = newPos;
+			mesh->scale *= exp;
+		}
 	}break;
 	case EditorState_Moving:
 	{	
-		v3 p = editor->hotMesh->pos;
-		v3 cp = cam->pos;
-		v3 diff = cp - p;
-
+		v3 averagePos = GetAveragePosForSelection(editor, level);
 		v3 oldP = ScreenZeroToOneToScreenInGame(*cam, input.mouseZeroToOne - input.mouseZeroToOneDelta);
 		v3 newP = ScreenZeroToOneToScreenInGame(*cam, input.mouseZeroToOne);
+		v3 camPos = cam->pos;
+		v3 diff = camPos - averagePos;
+		v3 oP = SolveLinearSystem((camPos - oldP), cam->b1, cam->b2, diff);
+		v3 nP = SolveLinearSystem((camPos - newP), cam->b1, cam->b2, diff);
 
-		v3 oP = SolveLinearSystem((cp - oldP), cam->b1, cam->b2, diff);
-		v3 nP = SolveLinearSystem((cp - newP), cam->b1, cam->b2, diff);
-			
-		m3x3 mat = Columns3x3((cp - oldP), cam->b1, cam->b2);
-		v3 asd = mat * oP; // == cp - p == 
+		m3x3 mat = Columns3x3((camPos - oldP), cam->b1, cam->b2);
 
-		v3 oI = cp + oP.x * (oldP - cp); // = p + op.y * cam->b1 + op.z * cam->b2
-		v3 nI = cp + nP.x * (newP - cp);
-			
+		v3 oI = camPos + oP.x * (oldP - camPos); // = p + op.y * cam->b1 + op.z * cam->b2
+		v3 nI = camPos + nP.x * (newP - camPos);
 		v3 realDelta = nI - oI;
 
-		editor->hotMesh->pos += realDelta;
-		editor->mover += realDelta;
+		For(editor->hotMeshInfos)
+		{
+			PlacedMesh *mesh = GetPlacedMesh(level, it->placedSerial);
+
+			mesh->pos += realDelta;	
+		}
+
 	}break;
 	case EditorState_DragingPanel:
 	{
-		mesh->frameColor *= editorMeshSelectColor;
+		FrameColorSelection(editor, level, editorMeshSelectColor);
 		editor->panel.pos += input.mouseZeroToOneDelta;
 	}break;
 	case EditorState_PickingColor:
@@ -1696,7 +2472,7 @@ static void UpdateEditor(Editor *editor, UnitHandler *unitHandler, World *world,
 	}break;
 	case EditorState_AlteringValue:
 	{
-		mesh->frameColor *= editorMeshSelectColor;
+		FrameColorSelection(editor, level, editorMeshSelectColor);
 	}break;
 
 	default:
@@ -1705,11 +2481,6 @@ static void UpdateEditor(Editor *editor, UnitHandler *unitHandler, World *world,
 	}break;
 	}
 }
-
-// todo  make the controles as they are in blender
-// num pad keys
-// middle mouse button for roato potato // done?
-// make aabb recalc ? right now it is behind by a frame.
 
 #endif // !RR_EDITOR
 
