@@ -314,6 +314,10 @@ static void PushTriangle(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v4 color = V4(1, 
 {
 	PushTriangle(rg, p1, p2, p3, Pack4x8(color));
 }
+static void PushTriangle(RenderGroup *rg, v2 p1, v2 p2, v2 p3, v4 color = V4(1, 1, 1, 1))
+{
+	PushTriangle(rg, i12(p1), i12(p2), i12(p3), Pack4x8(color));
+}
 static void PushTriangle(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 color)
 {
 	PushTriangle(rg, p1, p2, p3, V4(1.0f, color));
@@ -419,10 +423,10 @@ static void PushCenteredCuboid(RenderGroup *rg, v3 pos, Vector3Basis basis, v4 c
 	PushCuboid(rg, posAd, basis, color);
 }
 
-static void PushDebugPointCuboid(RenderGroup *rg, v3 pos)
+static void PushDebugPointCuboid(RenderGroup *rg, v3 pos, v4 color = V4(1, 1, 1, 1))
 {
 	f32 scale = 0.1f;
-	PushCenteredCuboid(rg, pos, scale * v3StdBasis);
+	PushCenteredCuboid(rg, pos, scale * v3StdBasis, color);
 }
 
 

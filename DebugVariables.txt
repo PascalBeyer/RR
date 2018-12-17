@@ -20,7 +20,7 @@ sliderSlider 0.00999
 pickerFontSize 0.01299
 pickerFontXIncrease 6.00000 
 consoleSelectionColor (1.00000,0.03315,0.03315,0.57870)
-lightPos (4.00000,2.00000,-5.00000)  
+lightPos (4.00000,2.00000,-10.00000) 
 cameraMoveSpeed 0.10000
 DrawMeshOutlines false
 cameraStartingPos (3.00000,3.00000,-4.00000)
@@ -38,7 +38,7 @@ editorPanelFontSize 0.01999
 editorPanelWidth 0.22000
 editorPanelHeight 0.60000
 screenScrollBorder 0.05000
-screenScrollSpeed 0.30000
+screenScrollSpeed 0.15000
 DrawWholeMap true 
 pathCreatorPathColor (1.00000,0.40000,0.40000,1.00000)
 pathCreatorUnitPosColor (1.00000,1.00000,1.00000,0.40000)

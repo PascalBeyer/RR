@@ -19,7 +19,14 @@ struct type##Array				\
 		Assert(i < amount);		\
 		return data[i];			\
 	}							\
-}; 
+};								\
+								\
+static type* operator+(type##Array arr, u32 index)								\
+{																				\
+	Assert(index < arr.amount);													\
+	return arr.data + index;													\
+}																				\
+
 
 
 #define BeginArray(arena, type, name) type##Array name = PushArray(arena, type, 0);
@@ -40,8 +47,15 @@ struct type##DynamicArray														\
 		return data[i];															\
 	}																			\
 };																				\
+static type* operator+(type##DynamicArray arr, u32 index)						\
+{																				\
+	Assert(index < arr.amount);													\
+	return arr.data + index;													\
+}																				\
+																				\
 static u32 ArrayAdd(type##DynamicArray *arr, type t)							\
 {																				\
+	Assert(arr->data);															\
 	if (arr->amount + 1 < arr->capacity)										\
 	{																			\
 		(arr->data)[arr->amount++] = t;											\
@@ -86,6 +100,80 @@ static void Reserve(type##DynamicArray *arr, u32 capacity)						\
 	arr->data = newData;														\
 	return;																		\
 }																				\
+																				\
+static void UnorderedRemove(type##DynamicArray *arr, u32 index)					\
+{																				\
+	Assert(index < arr->amount);												\
+	arr->data[index] = arr->data[--arr->amount];								\
+}																				\
+static bool operator!(type##DynamicArray arr)									\
+{																				\
+	return (!arr.amount);														\
+}																				\
+
+
+#define DefineDynamicFrameArray(type)												\
+struct type##DFArray														\
+{																				\
+	type *data;																	\
+	u32 amount;																	\
+	u32 capacity;																\
+																				\
+	type &operator[] (u32 i)													\
+	{																			\
+		Assert(i < amount);														\
+		return data[i];															\
+	}																			\
+};																				\
+static type* operator+(type##DFArray arr, u32 index)						\
+{																				\
+	Assert(index < arr.amount);													\
+	return arr.data + index;													\
+}																				\
+																				\
+static u32 ArrayAdd(type##DFArray *arr, type t)									\
+{																				\
+	Assert(arr->data);															\
+	if (arr->amount + 1 < arr->capacity)										\
+	{																			\
+		(arr->data)[arr->amount++] = t;											\
+		return (arr->amount - 1);												\
+	}																			\
+																				\
+	u32 newCapacity = 2 * arr->capacity + 1;									\
+																				\
+	type *newData = PushData(frameArena, type, newCapacity);					\
+	memcpy(newData, arr->data, arr->capacity * sizeof(type));					\
+	arr->capacity = newCapacity;												\
+	arr->data = newData;														\
+	arr->data[arr->amount++] = t;												\
+																				\
+	return (arr->amount - 1);													\
+}																				\
+																				\
+static type##DFArray type##CreateDFArray(u32 capacity = 8)						\
+{																				\
+	type##DFArray ret;														\
+	ret.data = PushData(frameArena, type, capacity);						\
+	ret.amount = 0;																\
+	ret.capacity = capacity;													\
+	return ret;																	\
+}																				\
+static void Clear(type##DFArray *arr)											\
+{																				\
+	arr->amount = 0;															\
+}																				\
+																				\
+static void UnorderedRemove(type##DFArray *arr, u32 index)						\
+{																				\
+	Assert(index < arr->amount);												\
+	arr->data[index] = arr->data[--arr->amount];								\
+}																				\
+static bool operator!(type##DFArray arr)										\
+{																				\
+	return (!arr.amount);														\
+}																				\
+
 
 
 #define GET_MACRO3(_1,_2,_3, NAME,...) NAME
@@ -94,10 +182,10 @@ static void Reserve(type##DynamicArray *arr, u32 capacity)						\
 #define BuildStaticArray(arena, arr, item) PushData(arena, u8, sizeof(item)); arr.data[arr.amount++] = item;
 
 #define ForArr(arr) for(auto it = arr.data; it < arr.data + arr.amount; it++)
-#define ForMultiArr(arr, member) for(auto it = arr.member; it < arr.member + arr.amount; it++)
+#define ForVarArr(it, arr) for(auto it = arr.data; it < arr.data + arr.amount; it++)
 
 
-#define For(...) Expand(GET_MACRO3(__VA_ARGS__, Ignored, ForMultiArr, ForArr)(__VA_ARGS__))
+#define For(...) Expand(GET_MACRO3(__VA_ARGS__, Ignored, ForVarArr, ForArr)(__VA_ARGS__))
 
 #include <stdint.h>
 
@@ -109,7 +197,7 @@ typedef int8_t i8;
 typedef int16_t i16;
 typedef int32_t	i32;
 typedef int64_t	i64;
-typedef i32 b32;
+typedef int b32;
 typedef float f32;
 typedef double f64;
 typedef uintptr_t uintptr;
@@ -217,21 +305,21 @@ static v2 V2(f32 x, f32 y)
 	ret.y = y;
 	return ret;
 }
-static v2 V2(f32 x, int y)
+static v2 V2(f32 x, i32 y)
 {
 	v2 ret;
 	ret.x = x;
 	ret.y = (f32)y;
 	return ret;
 }
-static v2 V2(int x, f32 y)
+static v2 V2(i32 x, f32 y)
 {
 	v2 ret;
 	ret.x = (f32)x;
 	ret.y = y;
 	return ret;
 }
-static v2 V2(int x, int y)
+static v2 V2(i32 x, i32 y)
 {
 	v2 ret;
 	ret.x = (f32)x;
@@ -447,6 +535,11 @@ static bool operator!=(v2i a, v2i b)
 }
 
 
+static v2i operator-(v2i a)
+{
+	return { -a.x, -a.y };
+}
+
 static v3 V3()
 {
 	v3 ret;
@@ -472,28 +565,28 @@ static v3 V3(f32 _x, f32 _y, f32 _z)
 	ret.z = _z; return ret;
 	return ret;
 }
-static v3 V3(int _x, int _y, int _z)
+static v3 V3(i32 _x, i32 _y, i32 _z)
 {
 	v3 ret;
 	ret.x = (f32)_x;
 	ret.y = (f32)_y;
 	ret.z = (f32)_z; return ret;
 }
-static v3 V3(f32 _x, f32 _y, int _z)
+static v3 V3(f32 _x, f32 _y, i32 _z)
 {
 	v3 ret;
 	ret.x = _x;
 	ret.y = _y;
 	ret.z = (f32)_z; return ret;
 }
-static v3 V3(f32 _x, int _y, f32 _z)
+static v3 V3(f32 _x, i32 _y, f32 _z)
 {
 	v3 ret;
 	ret.x = _x;
 	ret.y = (f32)_y;
 	ret.z = _z; return ret;
 }
-static v3 V3(int _x, f32 _y, f32 _z)
+static v3 V3(i32 _x, f32 _y, f32 _z)
 {
 	v3 ret;
 	ret.x = (f32)_x;
@@ -501,21 +594,21 @@ static v3 V3(int _x, f32 _y, f32 _z)
 	ret.z = _z; return ret;
 }
 
-static v3 V3(int _x, f32 _y, int _z)
+static v3 V3(i32 _x, f32 _y, i32 _z)
 {
 	v3 ret;
 	ret.x = (f32)_x;
 	ret.y = _y;
 	ret.z = (f32)_z; return ret;
 }
-static v3 V3(f32 _x, int _y, int _z)
+static v3 V3(f32 _x, i32 _y, i32 _z)
 {
 	v3 ret;
 	ret.x = _x;
 	ret.y = (f32)_y;
 	ret.z = (f32)_z; return ret;
 }
-static v3 V3(int _x, int _y, f32 _z)
+static v3 V3(i32 _x, i32 _y, f32 _z)
 {
 	v3 ret;
 	ret.x = (f32)_x;
@@ -571,35 +664,35 @@ static v3 V3(u32 _x, u32 _y, f32 _z)
 	ret.y = (f32)_y;
 	ret.z = (f32)_z; return ret;
 }
-static v3 V3(int _x, int _y, u32 _z)
+static v3 V3(i32 _x, i32 _y, u32 _z)
 {
 	v3 ret;
 	ret.x = (f32)_x;
 	ret.y = (f32)_y;
 	ret.z = (f32)_z; return ret;
 }
-static v3 V3(int _x, u32 _y, int _z)
+static v3 V3(i32 _x, u32 _y, i32 _z)
 {
 	v3 ret;
 	ret.x = (f32)_x;
 	ret.y = (f32)_y;
 	ret.z = (f32)_z; return ret;
 }
-static v3 V3(u32 _x, int _y, int _z)
+static v3 V3(u32 _x, i32 _y, i32 _z)
 {
 	v3 ret;
 	ret.x = (f32)_x;
 	ret.y = (f32)_y;
 	ret.z = (f32)_z; return ret;
 }
-static v3 V3(u32 _x, int _y, u32 _z)
+static v3 V3(u32 _x, i32 _y, u32 _z)
 {
 	v3 ret;
 	ret.x = (f32)_x;
 	ret.y = (f32)_y;
 	ret.z = (f32)_z; return ret;
 }
-static v3 V3(int _x, u32 _y, u32 _z)
+static v3 V3(i32 _x, u32 _y, u32 _z)
 {
 	v3 ret;
 	ret.x = (f32)_x;
@@ -607,7 +700,7 @@ static v3 V3(int _x, u32 _y, u32 _z)
 	ret.z = (f32)_z;
 	return ret;
 }
-static v3 V3(u32 _x, u32 _y, int _z)
+static v3 V3(u32 _x, u32 _y, i32 _z)
 {
 	v3 ret;
 	ret.x = (f32)_x;
@@ -722,6 +815,225 @@ static v3 operator*(f32 scalar, v3 a)
 	return ret;
 }
 static v3 operator-(v3 a)
+{
+	return { -a.x, -a.y, -a.z };
+}
+
+union v3i
+{
+	struct
+	{
+		i32 x, y, z;
+	};
+	struct
+	{
+		v2i xy;
+		i32 z;
+	};
+	struct
+	{
+		i32 x;
+		v2i yz;
+	};
+	i32 v[3];
+};
+
+static v3 V3(v3i a)
+{
+	return V3(a.x, a.y, a.z);
+}
+
+static v3i V3i()
+{
+	v3i ret;
+	ret.x = 0;
+	ret.y = 0;
+	ret.z = 0;
+	return ret;
+}
+
+static v3i V3i(i32 _x, i32 _y, i32 _z)
+{
+	v3i ret;
+	ret.x = _x;
+	ret.y = _y;
+	ret.z = _z; 
+	return ret;
+}
+static v3i V3i(u32 _x, u32 _y, u32 _z)
+{
+	v3i ret;
+	ret.x = (i32)_x;
+	ret.y = (i32)_y;
+	ret.z = (i32)_z; 
+	return ret;
+}
+static v3i V3i(i32 _x, i32 _y, u32 _z)
+{
+	v3i ret;
+	ret.x = (i32)_x;
+	ret.y = (i32)_y;
+	ret.z = (i32)_z; 
+	return ret;
+}
+static v3i V3i(i32 _x, u32 _y, i32 _z)
+{
+	v3i ret;
+	ret.x = (i32)_x;
+	ret.y = (i32)_y;
+	ret.z = (i32)_z; return ret;
+}
+static v3i V3i(u32 _x, i32 _y, i32 _z)
+{
+	v3i ret;
+	ret.x = (i32)_x;
+	ret.y = (i32)_y;
+	ret.z = (i32)_z; return ret;
+}
+static v3i V3i(u32 _x, i32 _y, u32 _z)
+{
+	v3i ret;
+	ret.x = (i32)_x;
+	ret.y = (i32)_y;
+	ret.z = (i32)_z; return ret;
+}
+static v3i V3i(i32 _x, u32 _y, u32 _z)
+{
+	v3i ret;
+	ret.x = (i32)_x;
+	ret.y = (i32)_y;
+	ret.z = (i32)_z;
+	return ret;
+}
+static v3i V3i(u32 _x, u32 _y, i32 _z)
+{
+	v3i ret;
+	ret.x = (i32)_x;
+	ret.y = (i32)_y;
+	ret.z = (i32)_z;
+	return ret;
+}
+static v3i V3i(v2i xy, i32 z)
+{
+	v3i ret;
+	ret.x = xy.x;
+	ret.y = xy.y;
+	ret.z = z;
+	return ret;
+}
+static v3i V3i(v2i xy, u32 z)
+{
+	v3i ret;
+	ret.xy = xy;
+	ret.z = (i32)z;
+	return ret;
+}
+static v3i V3i(i32 x, v2i yz)
+{
+	v3i ret;
+	ret.x = x;
+	ret.yz = yz;
+	return ret;
+}
+static v3i V3i(u32 x, v2i yz)
+{
+	v3i ret;
+	ret.x = (i32)x;
+	ret.yz = yz;
+	return ret;
+}
+
+static v3i operator+(v3i a, v3i b)
+{
+	v3i ret;
+	ret.x = a.x + b.x;
+	ret.y = a.y + b.y;
+	ret.z = a.z + b.z;
+	return ret;
+}
+static v3i& operator+=(v3i &a, v3i b)
+{
+	a = a + b;
+	return a;
+}
+static v3i operator-(v3i a, v3i b)
+{
+	v3i ret;
+	ret.x = a.x - b.x;
+	ret.y = a.y - b.y;
+	ret.z = a.z - b.z;
+	return ret;
+}
+static v3i& operator-=(v3i &a, v3i b)
+{
+	a = a - b;
+	return a;
+}
+static v3i operator*(v3i a, i32 f)
+{
+	v3i ret;
+	ret.x = a.x * f;
+	ret.y = a.y * f;
+	ret.z = a.z * f;
+	return ret;
+}
+static v3i& operator*=(v3i& a, i32 f)
+{
+	a = a * f;
+	return a;
+}
+static v3i operator*(v3i a, v3i b)
+{
+	v3i ret;
+	ret.x = a.x * b.x;
+	ret.y = a.y * b.y;
+	ret.z = a.z * b.z;
+	return ret;
+}
+static v3i& operator*=(v3i &a, v3i b)
+{
+	a = a + b;
+	return a;
+}
+
+static v3i operator/(v3i a, i32 f)
+{
+	v3i ret;
+	ret.x = a.x / f;
+	ret.y = a.y / f;
+	ret.z = a.z / f;
+	return ret;
+}
+
+static v3i& operator/=(v3i& a, i32 f)
+{
+	a = a / f;
+	return a;
+}
+
+static bool operator==(v3i a, v3i b)
+{
+	return (
+		a.x == b.x &&
+		a.y == b.y &&
+		a.z == b.z
+		);
+}
+
+static bool operator!=(v3i a, v3i b)
+{
+	return !(a == b);
+}
+
+static v3i operator*(i32 scalar, v3i a)
+{
+	v3i ret;
+	ret.x = scalar * a.x;
+	ret.y = scalar * a.y;
+	ret.z = scalar * a.z;
+	return ret;
+}
+static v3i operator-(v3i a)
 {
 	return { -a.x, -a.y, -a.z };
 }

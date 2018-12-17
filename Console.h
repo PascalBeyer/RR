@@ -64,10 +64,11 @@ static void InitConsole(Arena *constantArena)
 	BuildStaticArray(constantArena, console.commands, CreateCommand("tweekers", TweekersHelper, 0, 0));
 	BuildStaticArray(constantArena, console.commands, CreateCommand("grisu", GrisuHelper, 1, 1));
 	BuildStaticArray(constantArena, console.commands, CreateCommand("convert", ConvertHelper, 1, 1));
-	BuildStaticArray(constantArena, console.commands, CreateCommand("gameMode", GameModeHelper, 1, 1));
 	BuildStaticArray(constantArena, console.commands, CreateCommand("saveLevel", SaveLevelHelper, 1, 1));
 	BuildStaticArray(constantArena, console.commands, CreateCommand("loadLevel", LoadLevelHelper, 1, 1));
-	
+	BuildStaticArray(constantArena, console.commands, CreateCommand("newLevel", NewLevelHelper, 0, 0));
+	BuildStaticArray(constantArena, console.commands, CreateCommand("addMesh", AddMeshHelper, 1, 1));
+	BuildStaticArray(constantArena, console.commands, CreateCommand("saveCamera", SaveCameraHelper, 0, 0));
 }
 
 static bool ConsoleActive()
@@ -98,7 +99,7 @@ static void AddSingleLineToHistory(String string, HistoryEntryEnum flag)
 	{
 		Die;
 	}
-	if (!console.intendedOpenness) console.intendedOpenness = console.open;
+	if (!console.intendedOpenness) console.intendedOpenness = 4.0f * console.fontSize;
 }
 
 static void AddStringToHistory(String string, HistoryEntryEnum flag = HistoryEntry_Default)
@@ -325,7 +326,7 @@ static void ShiftSelectionUpdate(u32 intendedPos)
 
 }
 
-static void ConsoleHandleKeyMessage(KeyStateMessage message, Input *input)
+static void ConsoleHandleEvent(KeyStateMessage message, Input *input)
 {
 	TimedBlock;
 
@@ -384,6 +385,11 @@ static void ConsoleHandleKeyMessage(KeyStateMessage message, Input *input)
 			console.selecting &= ~SelectTag_Selecting;
 			console.scrollingScrollbar = false;
 		}break;
+		case Key_escape:
+		{
+			console.intendedOpenness = 0.0f;
+		}break;
+
 		}
 
 	}
@@ -397,7 +403,7 @@ static void ConsoleHandleKeyMessage(KeyStateMessage message, Input *input)
 	{
 		switch (message.key)
 		{
-
+		
 		case Key_mouseWheelForward:
 		{
 			f32 lineSize = 1.5f * console.fontSize;
@@ -684,7 +690,7 @@ static void UpdateConsole(Input input)
 
 	if (console.intendedOpenness > console.openness)
 	{
-		console.openness += console.dt * input.secondsPerFrame;
+		console.openness += console.dt * input.dt;
 		if(console.openness > console.intendedOpenness)
 		{ 
 			console.openness = console.intendedOpenness;
@@ -692,7 +698,7 @@ static void UpdateConsole(Input input)
 	}
 	else
 	{
-		console.openness -= console.dt * input.secondsPerFrame;
+		console.openness -= console.dt * input.dt;
 		if (console.openness < console.intendedOpenness)
 		{
 			console.openness = console.intendedOpenness;
@@ -713,7 +719,7 @@ static void UpdateConsole(Input input)
 		console.typeFieldTextScrollOffset = stringLengthUpToCursor - console.cursorScrollEdge;
 	}
 
-	console.cursorTimer += input.secondsPerFrame;
+	console.cursorTimer += input.dt;
 	if (console.cursorTimer > 1.0f)
 	{
 		console.cursorTimer -= 1.0f;

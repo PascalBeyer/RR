@@ -219,50 +219,34 @@ static void ConvertHelper(StringArray args)
 	} 
 	else if(type == "obj")
 	{
-		String nameToSave = FormatCString("mesh/%smesh", name);
+		char *nameToSave = FormatCString("mesh/%smesh", name);
 		TriangleMesh mesh = ReadObj(NULL, nameToLoad, gameState.currentStateArena, gameState.workingArena);
 		if (!mesh.vertices.amount)
 		{
 			ConsoleOutputError("Probably file name wrong. Might have loaded a mesh w/0 vertices.");
 			return;
 		}
-		WriteTriangleMesh(mesh, (char *)nameToSave.data);
-		ConsoleOutput("Converted .obj %c* to .mesh %s", nameToLoad, nameToSave);
+		WriteTriangleMesh(mesh, nameToSave);
+		ConsoleOutput("Converted .obj %c* to .mesh %c*", nameToLoad, nameToSave);
 		return;
 	}
 
 	ConsoleOutputError("Unrecognized Format!");
 }
 
-static void GameModeHelper(StringArray args)
-{
-	if (args[0] == "game")
-	{
-		GameGoToMode(&gameState, Game_PathCreator);
-		ConsoleOutput("Switched to game mode 'Game'.");
-		return;
-	}
-	else if(args[0] == "editor")
-	{ 
-		GameGoToMode(&gameState, Game_Editor);
-		ConsoleOutput("Switched to game mode 'Editor'.");
-		return;
-	}
-
-	ConsoleOutputError("No such game mode.");
-}
-
 static void SaveLevelHelper(StringArray args)
 {
-	String fileName = FormatCString("level/%s.level", args[0]);
+	char *fileName = FormatCString("level/%s.level", args[0]);
 
-	WriteLevel(fileName.cstr, gameState.world, gameState.unitHandler, &gameState.assetHandler);
+	WriteLevel(fileName, gameState.world, gameState.unitHandler, &gameState.assetHandler);
+	gameState.world.loadedLevel.name = CopyString(args[0], gameState.currentStateArena);
+	LoadLevel(CreateString(fileName), &gameState.unitHandler, &gameState.world, gameState.currentStateArena, &gameState.assetHandler, &gameState.editor);
 	ConsoleOutputError("Done!");
 }
 
 static void LoadLevelHelper(StringArray args)
 {
-	if (LoadLevel(args[0], &gameState.unitHandler, &gameState.world, gameState.currentStateArena, &gameState.assetHandler))
+	if (LoadLevel(args[0], &gameState.unitHandler, &gameState.world, gameState.currentStateArena, &gameState.assetHandler, &gameState.editor))
 	{
 		GameGoToMode(&gameState, Game_Editor);
 		ConsoleOutput("Loaded level %s!", args[0]);
@@ -270,6 +254,55 @@ static void LoadLevelHelper(StringArray args)
 	}
 
 	ConsoleOutputError("Tried to load \"level/%s.level\", no such file or directory!", args[0]);
+}
+
+static void NewLevelHelper(StringArray args)
+{
+	ResetLevel(&gameState.world);
+	ResetWorld(&gameState.world);
+	ResetEditor(&gameState.editor);
+	ResetUnitHandler(&gameState.unitHandler);
+	
+
+	ConsoleOutput("New Level! Save with 'saveLevel' command.");
+}
+
+static void AddMeshHelper(StringArray args)
+{
+	if (gameState.editor.state != EditorState_Default)
+	{
+		ConsoleOutputError("Editor is in a mode other then 'Default'. This is not 'yet' allowed.");
+		return;
+	}
+
+	b32 succsess = true;
+	String name = FormatString("%s.mesh", args[0]);
+	u32 id = RegisterAsset(&gameState.assetHandler, Asset_Mesh, name, &succsess);
+
+	if (succsess)
+	{
+		TriangleMesh *mesh = GetMesh(&gameState.assetHandler, id);
+		EntityCopyData data;
+		data.color = V4(1, 1, 1, 1);
+		data.meshId = id;
+		data.orientation = { 1, 0, 0, 0 };
+		data.physicalPos = V3i();
+		data.offset = V3();
+		data.scale = 1.0f;
+		data.type = Entity_None;
+		data.flags = 0;
+		
+		gameState.editor.clipBoard.amount = 1;
+		gameState.editor.clipBoard[0] = data;
+
+		gameState.editor.state = EditorState_PlacingNewMesh;
+		EditorSelectNothing(&gameState.editor);
+	}
+}
+
+static void SaveCameraHelper(StringArray args)
+{
+	gameState.world.loadedLevel.camera = gameState.world.camera;
 }
 
 

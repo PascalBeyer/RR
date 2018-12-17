@@ -78,6 +78,27 @@ static v2 ScreenZeroToOneToInGame(Camera cam, v2 point)
 	return p12(ctPos * (inGameP - cam.pos) + cam.pos);
 }
 
+static v3 ScreenZeroToOneToZ(Camera cam, v2 point, i32 z)
+{
+
+	m4x4 proj = Projection(cam.aspectRatio, cam.focalLength) * CameraTransform(cam.basis.d1, cam.basis.d2, cam.basis.d3, cam.pos);
+	m4x4 inv = InvOrId(proj);
+
+	v3 p1 = inv * V3(-1, -1, -1);
+	v3 p2 = inv * V3(1, -1, -1);
+	v3 p3 = inv * V3(-1, 1, -1);
+	//v3 p4 = inv * V3(1, 1, -1);
+
+	f32 posXinGame = point.x;
+	f32 posYinGame = 1.0f - point.y;
+
+	// this works as the screen in game is again a Rectangle
+	v3 inGameP = p1 + posXinGame * (p2 - p1) + posYinGame * (p3 - p1);
+
+	float ctPos = ((f32)z - cam.pos.z) / (inGameP.z - cam.pos.z);
+	return (ctPos * (inGameP - cam.pos) + cam.pos);
+}
+
 static v3 ScreenZeroToOneToScreenInGame(Camera cam, v2 point)
 {
 
@@ -215,394 +236,6 @@ struct LightingSolution
 
 };
 
-enum TileMapType
-{
-	Tile_Empty,
-	Tile_Spawner,
-	Tile_Goal,
-	Tile_Blocked,
-};
-
-struct Tile
-{
-	TileMapType type;
-	u32 meshIndex;
-};
-
-DefineArray(Tile);
-
-struct TileMap
-{
-	Tile *tiles;
-	u32 height, width;
-	//u16 tileSize;
-};
-
-struct PlacedMesh
-{
-	u32 meshId;
-	f32 scale;
-	Quaternion orientation;
-	v3 pos;
-	v4 color;
-	v4 frameColor;
-	AABB untransformedAABB;
-};
-
-DefineDynamicArray(PlacedMesh);
-
-static PlacedMesh CreatePlacedMesh(u32 meshID, f32 scale, Quaternion orientation, v3 pos, v4 color, AABB aabb)
-{
-	PlacedMesh ret;
-	ret.meshId = meshID;
-	ret.scale = scale;
-	ret.orientation = orientation;
-	ret.pos = pos;
-	ret.color = color;
-	ret.frameColor = V4(1, 1, 1, 1);
-	ret.untransformedAABB = aabb;
-	return ret;
-};
-
-struct World
-{
-	LightingSolution light;
-	TriangleArray triangles;
-	Camera camera;
-	Camera debugCamera;
-	v3 lightSource;
-	PlacedMeshDynamicArray placedMeshes;
-
-	TileMap tileMap;
-};
-
-
-static bool InBounds(TileMap tileMap, v2 vec)
-{
-	return (0.0f <= vec.x + 0.5f) && (vec.x + 0.5f < (f32)tileMap.width) && (0.0f <= vec.y + 0.5f) && (vec.y + 0.5f < (f32)tileMap.height);
-}
-
-static Tile* GetTile(TileMap tileMap, v2 pos)
-{
-	if (!InBounds(tileMap, pos))
-	{
-		return NULL;
-	}
-
-	u32 x = (u32)(pos.x + 0.5f);
-	u32 y = (u32)(pos.y + 0.5f);
-
-	return (tileMap.tiles + x + y * tileMap.width);
-}
-
-
-static bool InBounds(TileMap tileMap, v2i vec)
-{
-	return (0 <= vec.x) && (vec.x < (i32)tileMap.width) && (0 <= vec.y) && (vec.y < (i32)tileMap.height);
-}
-
-
-static Tile* GetTile(TileMap tileMap, v2i pos)
-{
-	if (!InBounds(tileMap, pos))
-	{
-		return NULL;
-	}
-
-	u32 x = pos.x;
-	u32 y = pos.y;
-
-	return (tileMap.tiles + x + y * tileMap.width);
-}
-
-
-static Tile* GetTile(TileMap tileMap, float x, float y)
-{
-	return GetTile(tileMap, V2(x, y));
-}
-
-static Tile* GetTile(TileMap tileMap, u32 x, u32 y)
-{
-	return GetTile(tileMap, V2(x, y));
-}
-
-static void LinearIntersectionOneDim(float *input, float speedX, float speedY, float minX, float posX, float posY, float minY, float maxY)
-{
-	if (!(speedX == 0))
-	{
-		float intersection = (minX - posX) / speedX;
-		if ((0 <= intersection && intersection < *input))
-		{
-			float newY = posY + speedY * intersection;
-			if (minY < newY && newY < maxY)
-			{
-				*input = intersection;
-			}
-		}
-	}
-}
-
-static float LineToFunctCapped(v2 a, v2 b, u32 x)
-{
-	float t = ((float)x - b.x) / a.x;
-	if (t > 0.0f)
-	{
-		if (t < 1.0f)
-		{
-			return (a.y * t + b.y);
-		}
-		else
-		{
-			return a.y + b.y;
-		}
-
-	}
-	else
-	{
-		return b.y;
-	}
-
-}
-
-static Tile *GetFirstTileWithType(TileMap tilemap, v2 pos, v2 goal, u16 type)
-{
-	TileMap *tileMap = &tilemap;
-	v2 a = goal - pos;
-	if (a.x != 0) {
-		int signx;
-		if (a.x > 0)
-		{
-			signx = 1;
-		}
-		else
-		{
-			signx = -1;
-		}
-
-		int signy;
-		if (a.y > 0)
-		{
-			signy = 1;
-		}
-		else
-		{
-			signy = -1;
-		}
-
-		u32 xBegin = (u32)pos.x;
-		u32 xEnd = ((u32)goal.x + signx);
-
-		for (u32 x = xBegin; x != xEnd; x += signx)
-		{
-			float yx = LineToFunctCapped(a, pos, x);
-			float yx1 = LineToFunctCapped(a, pos, (x + 1));
-
-			u32 yBegin;
-			u32 yEnd;
-
-
-			if ((signy > 0))
-			{
-				if (yx > yx1)
-				{
-
-					yEnd = (u32)ceilf(yx);
-					yBegin = (u32)yx1;
-				}
-				else
-				{
-					yEnd = (u32)ceilf(yx1);
-					yBegin = (u32)yx;
-				}
-			}
-			else
-			{
-
-				if (yx > yx1)
-				{
-					yBegin = (u32)yx;
-					yEnd = (u32)floorf(yx1 - 1.0f);
-				}
-				else
-				{
-					yBegin = (u32)yx1;
-					yEnd = (u32)floorf(yx - 1.0f);
-				}
-			}
-
-			if (yBegin == yEnd)
-			{
-				int asda = 123;
-			}
-
-			for (u32 y = yBegin; y != yEnd; y += signy)
-			{
-				Tile *tile = GetTile(tilemap, x, y);
-				if (tile->type == type)
-				{
-					return tile;
-				}
-			}
-		}
-	}
-	else
-	{
-		int signy;
-		if (a.y > 0)
-		{
-			signy = 1;
-		}
-		else
-		{
-			signy = -1;
-		}
-		float ybegin = pos.y;
-		float yend = a.y + pos.y;
-
-		for (u32 y = (u32)ybegin; y != (u32)yend; y += signy)
-		{
-			Tile* tile = GetTile(tilemap, V2(pos.x, y));
-			if (tile->type == type)
-			{
-				return tile;
-			}
-		}
-	}
-
-	return NULL;
-}
-
-
-/*
-static Tile* RectIsCollidingWithTileMap(TileMap *tileMap, rr::Rectangle *rect)
-{
-unsigned int xmin = (int)rect->GetPos().x / tileMap->tileSize - 1;
-if (xmin < 0) xmin = 0;
-unsigned int ymin = (int)rect->GetPos().y / tileMap->tileSize - 1;
-if (ymin < 0) ymin = 0;
-
-unsigned int xmax = (int)rect->GetPos().x / tileMap->tileSize + 1;
-if (xmax > tileMap->width) xmax = tileMap->width;
-unsigned int ymax = (int)rect->GetPos().y / tileMap->tileSize + 1;
-if (ymax > tileMap->height) ymax = tileMap->height;
-
-
-for (unsigned int x = xmin; x <= xmax; x++)
-{
-for (unsigned int y = ymin; y <= ymax; y++)
-{
-
-Tile *tile = &tileMap->tiles[x][y];
-//tile->type = 2;
-if ((tile->type == 0) || (tile->type == 3))
-{
-tile->type = 3;
-
-rr::Rectangle tileRect = rr::Rectangle(tile->pos, tileMap->tileSize, tileMap->tileSize);
-if (rr::Rectangle::Colliding(*rect, tileRect))
-return tile;
-}
-}
-}
-return NULL;
-}*/
-/*
-struct RelativeTile
-{
-Tile *tile;
-float lengthFromPos;
-RelativeTile *prev;
-};
-static bool FindTileInVector(std::vector<RelativeTile*> *tileVector, Tile* tile)
-{
-for (unsigned int i = 0; i < tileVector->size(); i++)
-if (tile == (*tileVector)[i]->tile)
-return true;
-return false;
-}
-static bool FindV3InVector(std::vector<v2> *v3Vector, v2 v)
-{
-for (unsigned int i = 0; i < v3Vector->size(); i++)
-if (v == (*v3Vector)[i])
-return true;
-return false;
-}
-static void AStarAlgorithm(std::vector<v2> *outputWay, v2 goalVector, v2 position, TileMap *tileMap)
-{
-outputWay->clear();
-//find Way
-std::vector<v2> closedSet;
-std::vector<RelativeTile*> openSet;
-
-RelativeTile goal;
-goal.tile = tileMap->GetTile(goalVector);
-
-RelativeTile start;
-start.tile = tileMap->GetTile(position);
-start.lengthFromPos = 0;
-start.prev = NULL;
-openSet.push_back(&start);
-
-while (!openSet.empty())
-{
-RelativeTile* current = openSet.front();
-std::vector<RelativeTile*>::iterator cur = openSet.begin();
-for (std::vector<RelativeTile*>::iterator i = openSet.begin(); i != openSet.end(); i++)
-{
-if (current->lengthFromPos + v2::Dist(current->tile->pos, goal.tile->pos) > (*i)->lengthFromPos + v2::Dist((*i)->tile->pos, goal.tile->pos))
-{
-current = *i;
-cur = i;
-}
-}
-if (current->tile == goal.tile)
-{
-//find way back
-while (current)
-{
-outputWay->push_back(current->tile->pos);
-current = current->prev;
-}
-
-break;
-}
-else
-{
-
-v2 currPos = current->tile->pos;
-
-
-openSet.erase(cur);
-closedSet.push_back(currPos);
-
-std::vector<Tile*> neighboors;
-neighboors.push_back(tileMap->GetTile(currPos + v2(tileMap->tileSize, 0)));
-neighboors.push_back(tileMap->GetTile(currPos + v2(-tileMap->tileSize, 0)));
-neighboors.push_back(tileMap->GetTile(currPos + v2(0, tileMap->tileSize)));
-neighboors.push_back(tileMap->GetTile(currPos + v2(0, -tileMap->tileSize)));
-
-for (std::vector<Tile*>::iterator i = neighboors.begin(); i != neighboors.end(); i++)
-{
-if ((*i)->type != 0)
-{
-if (!(FindV3InVector(&closedSet, (*i)->pos)))
-{
-if (!(FindTileInVector(&openSet, *i)))
-{
-RelativeTile *neighboorTile = new RelativeTile;
-neighboorTile->tile = *i;
-neighboorTile->lengthFromPos = current->lengthFromPos + 1;
-neighboorTile->prev = current;
-openSet.push_back(neighboorTile);
-}
-}
-}
-}
-}
-}
-}
-*/
-
 
 
 struct RockCorner
@@ -730,7 +363,8 @@ static RockCorner CreateRockCorner(v3 p, u32 colorSeed)
 	return ret;
 }
 
-static void ColorForTileMap(World *world)
+#if 0
+static void ColorForTileMap(Level *world)
 {
 	v3 screenPos = world->camera.pos;
 
@@ -776,19 +410,19 @@ static void ColorForTileMap(World *world)
 				{
 				case Tile_Blocked:
 				{
-					world->placedMeshes[tile->meshIndex].frameColor *= slightlyRed;
+					world->entities[tile->meshIndex].frameColor *= slightlyRed;
 				}break;
 				case Tile_Empty:
 				{
-					world->placedMeshes[tile->meshIndex].frameColor *= slightlyGreen;
+					world->entities[tile->meshIndex].frameColor *= slightlyGreen;
 				}break;
 				case Tile_Goal:
 				{
-					world->placedMeshes[tile->meshIndex].frameColor *= slightlyYellow;
+					world->entities[tile->meshIndex].frameColor *= slightlyYellow;
 				}break;
 				case Tile_Spawner:
 				{
-					world->placedMeshes[tile->meshIndex].frameColor *= slightlyBlue;
+					world->entities[tile->meshIndex].frameColor *= slightlyBlue;
 				}break;
 
 				}
@@ -796,7 +430,7 @@ static void ColorForTileMap(World *world)
 		}
 	}
 }
-
+#endif
 
 static void UpdateCamGame(Input *input, Camera *camera)
 {
@@ -856,8 +490,6 @@ static void UpdateCamFocus(Input *input, Camera *camera, DEBUGKeyTracker *tracke
 static void UpdateCamGodMode(Input *input, Camera *cam, DEBUGKeyTracker tracker)
 {
 	Tweekable(f32, cameraMoveSpeed);
-	//GET_MACRO3(f32, cameraMoveSpeed, Tweekable1, Tweekable2)(f32, cameraMoveSpeed);
-	//Tweekable2(f32, cameraMoveSpeed);
 #if 0
 	if (input->keybord[Key_shift].flag & KeyState_Down)
 	{
@@ -895,363 +527,6 @@ static void UpdateCamGodMode(Input *input, Camera *cam, DEBUGKeyTracker tracker)
 
 	
 }
-
-static v3 AABBCorner(AABB aabb, u32 index)
-{
-	Assert(index < 8);
-
-	v3 corners[8]
-	{
-		aabb.minDim,
-		V3(aabb.maxDim.x, p23(aabb.minDim)),
-		V3(p12(aabb.minDim), aabb.maxDim.z),
-		V3(aabb.minDim.x, aabb.maxDim.y, aabb.minDim.z),
-
-		aabb.maxDim,
-		V3(aabb.minDim.x, p23(aabb.maxDim)),
-		V3(p12(aabb.maxDim), aabb.minDim.z),
-		V3(aabb.maxDim.x, aabb.minDim.y, aabb.maxDim.z)
-	};
-
-
-	return corners[index];
-}
-
-static void PushTriangleToArena(Arena *arena, v3 p1, v3 p2, v3 p3, u32 c1, u32 c2, u32 c3, v3 normal)
-{
-	Triangle *tri = PushStruct(arena, Triangle);
-	tri->p1 = p1;
-	tri->c1 = c1;
-	tri->p2 = p2;
-	tri->c2 = c2;
-	tri->p3 = p3;
-	tri->c3 = c3;
-}
-static void PushTriangleToArena(Arena *arena, ColoredVertex cv1, ColoredVertex cv2, ColoredVertex cv3, v3 normal)
-{
-	Triangle *tri = PushStruct(arena, Triangle);
-	tri->cv1 = cv1;
-	tri->cv2 = cv2;
-	tri->cv3 = cv3;
-}
-static void PushTriangleToArena(Arena *arena, v3 p1, v3 p2, v3 p3, u32 c, v3 normal)
-{
-	PushTriangleToArena(arena, p1, p2, p3, c, c, c, normal);
-}
-static void PushTriangleToArenaIntendedNormal(Arena *arena, v3 p1, v3 p2, v3 p3, u32 c1, u32 c2, u32 c3, v3 intendedPosNormalDot)
-{
-	v3 proposedNormal = Normalize(CrossProduct(p2 - p1, p3 - p1));
-	//v3 normal = Dot(intendedPosNormal, proposedNormal) > 0 ? proposedNormal : -proposedNormal;
-	Assert(proposedNormal != V3());
-	if (Dot(intendedPosNormalDot, proposedNormal) > 0)
-	{
-		PushTriangleToArena(arena, p1, p2, p3, c1, c2, c3, proposedNormal);
-	}
-	else
-	{
-		//adjust for face culling
-		PushTriangleToArena(arena, p1, p3, p2, c1, c3, c2, -proposedNormal);
-	}
-}
-static void PushTriangleToArenaIntendedNormal(Arena *arena, v3 p1, v3 p2, v3 p3, u32 c, v3 intendedPosNormalDot)
-{
-	v3 proposedNormal = Normalize(CrossProduct(p2 - p1, p3 - p1));
-	//v3 normal = Dot(intendedPosNormal, proposedNormal) > 0 ? proposedNormal : -proposedNormal;
-	Assert(proposedNormal != V3());
-	if (Dot(intendedPosNormalDot, proposedNormal) > 0)
-	{
-		PushTriangleToArena(arena, p1, p2, p3, c, c, c, proposedNormal);
-	}
-	else
-	{
-		//adjust for face culling
-		PushTriangleToArena(arena, p1, p3, p2, c, c, c, -proposedNormal);
-	}
-}
-
-static void PushTriangleToArenaIntendedNormal(Arena *arena, ColoredVertex cv1, ColoredVertex cv2, ColoredVertex cv3, v3 intendedPosNormal)
-{
-	PushTriangleToArenaIntendedNormal(arena, cv1.pos, cv2.pos, cv3.pos, cv1.color, cv2.color, cv3.color, intendedPosNormal);
-}
-static void PushTriangleToArena(Arena *arena, v3 p1, v3 p2, v3 p3, v3 normal)
-{
-	u32 c = 0xFFFFFFFF;
-	PushTriangleToArena(arena, p1, p2, p3, c, c, c, normal);
-}
-
-static void SetNeighborPointerToNULL(RockCorner **neighbors, RockCorner *corner)
-{
-
-	for (u32 j = 0; j < 3; j++)
-	{
-		if (!neighbors[j])
-		{
-			continue;
-		}
-		RockCorner **arr = neighbors[j]->adjacentCorners;
-
-		for (u32 i = 0; i < 3; i++)
-		{
-			if (arr[i] == corner)
-			{
-				arr[i] = NULL;
-			}
-		}
-	}
-}
-
-
-static u32 faculty(u32 n)
-{
-	u32 ret = 1;
-	for (u32 i = 1; i <= n; i++)
-	{
-		ret *= i;
-	}
-	return ret;
-}
-
-static u32 Over(u32 n, u32 k)
-{
-	Assert(n >= k);
-	u32 ret = faculty(n) / (faculty(k) * faculty(n - k));
-	return ret;
-}
-
-static TriangleArray CreateSkyBoxAndPush(AABB aabb, u32 color, Arena *arena)
-{
-	TriangleArray ret;
-	ret.data = PushData(arena, Triangle, 0);
-	ret.amount = 12;
-	v3 d1 = V3(aabb.maxDim.x - aabb.minDim.x, V2());
-	v3 d2 = V3(0.0f, aabb.maxDim.y - aabb.minDim.y, 0.0f);
-	v3 d3 = V3(V2(), aabb.maxDim.z - aabb.minDim.z);
-
-	v3 p = aabb.minDim;
-
-	v3 p1 = p + d1;
-	v3 p2 = p + d2;
-	v3 p3 = p + d3;
-
-	v3 p12 = p + d1 + d2;
-	v3 p13 = p + d1 + d3;
-	v3 p23 = p + d2 + d3;
-
-	v3 p123 = p + d1 + d2 + d3;
-	RandomSeries series = {RandomSeed()};
-
-	u32 randomGray = GrayFromU32(RandomU32(&series) % 15);
-	PushTriangleToArenaIntendedNormal(arena, p, p1, p2, color + randomGray, V3(0, 0, 1)); //front
-	PushTriangleToArenaIntendedNormal(arena, p12, p1, p2, color + randomGray, V3(0, 0, 1));
-
-	randomGray = GrayFromU32(RandomU32(&series) % 15);
-	PushTriangleToArenaIntendedNormal(arena, p, p1, p3, color + randomGray, V3(0, 1, 0));//bottom
-	PushTriangleToArenaIntendedNormal(arena, p13, p1, p3, color + randomGray, V3(0, 1, 0));
-
-	randomGray = GrayFromU32(RandomU32(&series) % 15);
-	PushTriangleToArenaIntendedNormal(arena, p, p2, p3, color + randomGray, V3(1, 0, 0)); //left
-	PushTriangleToArenaIntendedNormal(arena, p23, p2, p3, color + randomGray, V3(1, 0, 0));
-
-	randomGray = GrayFromU32(RandomU32(&series) % 15);
-	PushTriangleToArenaIntendedNormal(arena, p3, p13, p23, color + randomGray, V3(0, 0, -1)); //back
-	PushTriangleToArenaIntendedNormal(arena, p123, p13, p23, color + randomGray, V3(0, 0, -1));
-
-	randomGray = GrayFromU32(RandomU32(&series) % 15);
-	PushTriangleToArenaIntendedNormal(arena, p2, p12, p23, color + randomGray, V3(0, -1, 0)); //top
-	PushTriangleToArenaIntendedNormal(arena, p123, p12, p23, color + randomGray, V3(0, -1, 0));
-
-	randomGray = GrayFromU32(RandomU32(&series) % 15);
-	PushTriangleToArenaIntendedNormal(arena, p1, p12, p13, color + randomGray, V3(-1, 0, 0)); //right
-	PushTriangleToArenaIntendedNormal(arena, p123, p12, p13, color + randomGray, V3(-1, 0, 0));
-
-	return ret;
-
-}
-
-static TriangleArray CreateStoneAndPush(AABB aabb, f32 desiredVolume, Arena *arena, u32 iterations, Arena *workingArena)
-{
-	Clear(workingArena);
-
-	TriangleArray ret = PushArray(arena, Triangle, 0);
-
-	v3 aabbMidPoint = 0.5f * (aabb.minDim + aabb.maxDim);
-
-	const u32 logAmountOfSamples = 6; 
-	const u32 amountOfRings = logAmountOfSamples + 1;
-
-	RandomSeries series = { RandomSeed() };
-
-	RockCorner *rings[amountOfRings];
-	rings[0] = PushStruct(workingArena, RockCorner);
-	*rings[0] = CreateRockCorner(V3(aabb.minDim.x, 0.5f * p23(aabb.maxDim + aabb.minDim)), RandomU32(&series) % 10 + 40);
-	
-	rings[amountOfRings - 1] = PushStruct(workingArena, RockCorner);
-	*rings[amountOfRings - 1] = CreateRockCorner(V3(aabb.maxDim.x, 0.5f * p23(aabb.maxDim + aabb.minDim)), RandomU32(&series) % 10 + 40);
-
-
-	for (u32 ringIndex = 1; ringIndex < logAmountOfSamples; ringIndex++)
-	{
-		u32 amountOfSamples = Over(logAmountOfSamples, ringIndex);
-		f32 xPos = aabb.minDim.x + ((aabb.maxDim.x - aabb.minDim.x) / (f32)logAmountOfSamples) * ringIndex;
-		RockCorner *lastCorner = NULL;
-		for (u32 angleIndex = 0; angleIndex < amountOfSamples; angleIndex++)
-		{
-			f32 angle = ((f32)angleIndex) * 2.0f * PI / (f32)amountOfSamples;
-
-			f32 xPercent = ringIndex / (f32)amountOfRings;
-
-			f32 a = xPercent * (aabb.maxDim.y - aabb.minDim.y) * 0.5f; //these should be on an elipse, but what evs
-			f32 b = xPercent * (aabb.maxDim.z - aabb.minDim.z) * 0.5f;;
-			
-			f32 sin = Sin(angle);
-			f32 cos = Cos(angle);
-
-			f32 r = a * b / (Sqrt(Square(a * sin) + Square(b *cos)));
-
-			f32 yVal = r * cos + (aabb.maxDim.y + aabb.minDim.y) * 0.5f;
-			f32 zVal = r * sin + (aabb.maxDim.z + aabb.minDim.z) * 0.5f;
-
-			RockCorner *c = PushStruct(workingArena, RockCorner);
-			*c = CreateRockCorner(V3(xPos, yVal, zVal), RandomU32(&series) % 10 + 40);
-			c->prev = lastCorner;
-			lastCorner = c;
-		}
-
-		RockCorner *next = lastCorner;
-		while (next->prev)
-		{
-			next->prev->next = next;
-			next = next->prev;
-		}
-		next->prev = lastCorner;
-		lastCorner->next = next;
-
-		rings[ringIndex] = lastCorner;
-	}
-
-	for (u32 ringIndex = 1; ringIndex < amountOfRings - 2; ringIndex++) // does not deal with the corner points
-	{
-		RockCorner *leftCorner = rings[ringIndex];
-		RockCorner *rightCorner = rings[ringIndex + 1];
-		f32 minDist = QuadDist(rightCorner->p, leftCorner->p);
-		for (RockCorner *it = rings[ringIndex + 1]->next; it != rings[ringIndex + 1]; it = it->next)
-		{
-			f32 dist = QuadDist(it->p, leftCorner->p);
-			if (dist < minDist)
-			{
-				rightCorner = it;
-				minDist = dist;
-			}
-		}
-		RockCorner *leftIt = leftCorner;
-		RockCorner *rightIt = rightCorner;
-
-		do
-		{
-			while (QuadDist(rightIt->next->p, leftIt->p) < QuadDist(leftIt->next->p, rightIt->next->p))
-			{
-				PushTriangleToArenaIntendedNormal(arena, leftIt->p, rightIt->next->p, rightIt->p, leftIt->color, rightIt->next->color, rightIt->color, leftIt->p - aabbMidPoint);
-				ret.amount++;
-				rightIt = rightIt->next;
-			}
-			PushTriangleToArenaIntendedNormal(arena, leftIt->p, rightIt->p, leftIt->next->p, leftIt->color, rightIt->color, leftIt->next->color, leftIt->p - aabbMidPoint);
-			leftIt = leftIt->next;
-			ret.amount++;
-		} while (leftIt != leftCorner);
-
-		while (rightIt != rightCorner)
-		{
-			PushTriangleToArenaIntendedNormal(arena, leftIt->p, rightIt->next->p, rightIt->p, leftIt->color, rightIt->next->color, rightIt->color, leftIt->p - aabbMidPoint);
-			ret.amount++;
-			rightIt = rightIt->next;
-		}
-	}
-
-	RockCorner *zeroRock = rings[0];
-	PushTriangleToArenaIntendedNormal(arena, rings[1]->p, rings[1]->next->p, zeroRock->p, rings[1]->color, rings[1]->next->color, zeroRock->color, zeroRock->p - aabbMidPoint);
-	ret.amount++;
-	for (RockCorner *it = rings[1]->next; it != rings[1]; it = it->next)
-	{
-		PushTriangleToArenaIntendedNormal(arena, it->p, it->next->p, zeroRock->p, it->color, it->next->color, zeroRock->color, zeroRock->p - aabbMidPoint);
-		ret.amount++;
-	}
-
-	RockCorner *endRock = rings[amountOfRings - 1];
-	PushTriangleToArenaIntendedNormal(arena, rings[amountOfRings - 2]->p, rings[amountOfRings - 2]->next->p, endRock->p, rings[amountOfRings - 2]->color, rings[amountOfRings - 2]->next->color, endRock->color, endRock->p - aabbMidPoint);
-	ret.amount++;
-	
-	for (RockCorner *it = rings[amountOfRings - 2]->next; it != rings[amountOfRings - 2]; it = it->next)
-	{
-		PushTriangleToArenaIntendedNormal(arena, it->p, it->next->p, endRock->p, it->color, it->next->color, endRock->color, endRock->p - aabbMidPoint);
-		ret.amount++;
-	}
-
-	return ret;
-	
-}
-
-
-#if 0
-static TriangleMesh GenerateAndPushTriangleFloorMesh(AABB aabb, Arena* arena, u32 meshSize = 255)
-{
-	TriangleMesh ret;
-
-	ret.type = TrianlgeMeshType_Strip;
-	u32 blackBrown = RGBAfromHEX(0x553A26);
-	u32 grassGreen = RGBAfromHEX(0x4B6F44);
-
-	ret.amountOfVerticies = meshSize * meshSize; // 1600
-	Assert(ret.amountOfVerticies < 65536);
-	ret.vertices = PushData(arena, v3, ret.amountOfVerticies);
-	ret.colors = PushData(arena, u32, ret.amountOfVerticies);
-
-	RandomSeries series = { RandomSeed() };
-
-	for (u32 x = 0; x < meshSize; x++)
-	{
-		for (u32 y = 0; y < meshSize; y++)
-		{
-			f32 xEntropy = 0.15f * RandomSignedPercent(&series);
-			f32 yEntropy = 0.15f * RandomSignedPercent(&series);
-			f32 zEntropy = 0.3f * RandomPercent(&series);
-
-			f32 xVal = (xEntropy + (f32)x) / (meshSize) * (aabb.maxDim.x - aabb.minDim.x) + (aabb.minDim.x);
-			f32 yVal = (yEntropy + (f32)y) / (meshSize) * (aabb.maxDim.y - aabb.minDim.y) + (aabb.minDim.y);
-
-			ret.vertices[x + meshSize * y] = 0.5f * V3(xVal, yVal, zEntropy + aabb.minDim.z);
-			ret.colors  [x + meshSize * y] = Pack3x8(LerpVector3(Unpack3x8(blackBrown), Unpack3x8(grassGreen), zEntropy * 3.0f));
-		}
-	}
-
-	ret.amountOfIndicies = (meshSize - 1) * (3 + 2 * (meshSize - 1));
-	ret.indecies = PushData(constantArena, u16, ret.amountOfIndicies);
-
-	u32 index = 0;
-
-	for (u32 x = 0; x < meshSize - 1; x++) 
-	{
-		ret.indecies[index++] = 0xFFFF; // reset Index
-
-		ret.indecies[index++] = x * meshSize + 0; // (x, 0)
-
-		//move up
-		for (u32 y = 0; y < meshSize - 1; y++) // 2* (meshSize - 1)
-		{	
-			ret.indecies[index++] = (x + 1) * meshSize + y;
-			ret.indecies[index++] = x       * meshSize + (y + 1);
-		}
-
-		ret.indecies[index++] = (x + 1) * meshSize + (meshSize - 1);
-	}
-	
-	Assert(ret.amountOfIndicies == index);
-
-	RegisterTriangleMesh(&ret);
-
-	return ret;
-}
-
-#endif
 
 #endif 
 

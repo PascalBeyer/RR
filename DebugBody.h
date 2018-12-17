@@ -226,7 +226,7 @@ static void DrawDebugRecords(RenderGroup *rg, Font font, f32 secondsPerFrame, In
 	Arena *arena = globalDebugState.arena;
 
 	u32 startCycles = firstEvent->cycles;
-	f32 amountOfFramesPerCycle = 1.0f / 20000000.0f;
+	f32 amountOfFramesPerCycle = 1.0f / 60000000.0f;
 
 	u32 depth = 0;	
 	for (DebugEvent *it = firstEvent; it < firstEvent + amountOfEventsToHandle; it++)

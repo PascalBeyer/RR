@@ -11,14 +11,23 @@ Make everything an entity, like they have in Sokoban? // no.
 Maybe make a catalog system, which looks at whats there on startup // done?
 Move to front Asset system? // done?
 Make meshes assets again. // done?
+grid positions and offsets // done?
+move the main render loop into each state. // done?
+linear array of events waiting for results, i.e. spawned bock, waiting for put into goal. // done?
+do actual level in path creator, and just render the "Level" (constant, that we load from) // done?
+progress bar // done?
+detect whether or not a in the path creator suggested move is possible. // done?
+escape to close console. // done?
+we could do it so you can pass in NULL instead of exe, so the path creator does not need to know. // done?
+FIX EDITOR PASTE + MAKE EDITOR ARROW KEYS BE DEPENDEndent on cam direction. // done?
+
 
 Asset:
 how to handle textured and untextured entities? Should there be such a thing as untextured entity, probably not.
 Asset system has to handle materials. // no, well maybe
 Get PNG loader
 make font into asset, would also make the draw String call way better, also solves the problem where I do not currently know where it is supposed to be stored
-
-
+Newly added assets should go into the asset system, not sure how.
 
 Tweekers:
 make tweek search the file, if no loaded tweeker variable is found. maybe write out the tweekerfile instead of writing out all tweeker values.
@@ -30,13 +39,68 @@ Do the "start" of a level and make it so we can save levels. Should we do like a
 maybe we place the goals
 reduce api calls in opengl
 associating data to triangles, to open gl... like normals.
-
+We need to handle dt of more then one cycle at some point
+We could go from a "tileMap" system to a "traversables" system?
+render strings leftbound
 make debug Ui for amount of memory used.
 
+add starting cam pos to level // done?
+add lightPos to the level
+add Blocks needed to level
 
 EDITOR : 
-save (crtl-s)
-copy paste
-undo, redo, 
-camera for tilemap editor, 
+save (crtl-s) //done?
+camera for tilemap editor //done ?
+make us able to shift click to remove, if already in selection // done?
+multi select // done?
+copy paste // done?
+undo, redo, // done?
+double click = 'numpad .'
+box select
+make the orbiting more of a always usable flag, maybe just a bool.
+make the cancel work off of the undo system, once it is in place
 (brightness/ negative colors?)
+Euler thing
+paste of rows
+
+
+
+Level idears
+2 guys, stone.
+halving the path (path that one guy has to do half of no space to manouver)
+pushable maze (one stone in a maze, can push from the outside)
+stone ride. get up a stone and a guy, then ride em around
+Bridge.
+
+
+
+Execute:
+rotations
+interpolation // done?
+undoing path // done?
+win // done?
+maybe simulate to x while making path for x (in alpha?) // done?
+UI stuff // done?
+falling // done?
+dying  // should this exist ? // insome sense done?
+render numbers in path //done ?
+clear, and let cubes fall, that go of the stage. // done?
+
+
+redo lighting
+// make it just 4 u16 per triangle and work with the old system?
+kd-tree for AABB's?
+QuatTree for Entity phisical stuff?
+speed meter
+
+get rid of meshes having color? lighting should go into a seperate buffer that stores those colors
+
+victory currupts position right now
+
+shift click for multi walk / control for unit select
+units should stop in pathcreator mode, maybe I should not check for collision, and just let eveything go to shit in the execute. that sounds fun
+carrying does not work, as its kind of a hack.
+stones jump to interpolation offset, and somehow look really ugly..
+
+Undo data for game, so we can play in both directions, maybe the events are enought?
+undo does not really have to be a thing, if I do a Least commom multiple system.

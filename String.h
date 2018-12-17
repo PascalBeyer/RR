@@ -745,6 +745,17 @@ static u32 StoU(String string, b32 *success)
 	return sum;
 }
 
+static i32 StoI(String string, b32 *success)
+{
+	if (string[0] == '-')
+	{
+		Eat1(&string);
+		return - (i32)StoU(string, success);
+	}
+
+	return StoU(string, success);
+}
+
 static b32 StoB(String string, b32 *success)
 {
 	if (string == "false") return 0;
@@ -1315,14 +1326,14 @@ static String FormatString(char *format, ...)
 	return ret;
 }
 
-static String FormatCString(char *format, ...)
+static char* FormatCString(char *format, ...)
 {
 	va_list argList;
 	va_start(argList, format);
 	String ret = StringFormatHelper(frameArena, format, argList);
 	PushZeroStruct(frameArena, char);
 	va_end(argList);
-	return ret;
+	return ret.cstr;
 }
 
 

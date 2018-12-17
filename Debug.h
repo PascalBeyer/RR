@@ -58,8 +58,11 @@ enum TweekerType
 	Tweeker_v2,
 	Tweeker_v3,
 	Tweeker_v4,
-	Tweeker_String,
 
+	Tweeker_v3i,
+	Tweeker_EulerAngle,
+	Tweeker_String,
+	Tweeker_EntityType,
 };
 
 union TweekerValue

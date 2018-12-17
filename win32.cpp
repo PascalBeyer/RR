@@ -204,13 +204,13 @@ static bool WriteEntireFile(char * fileName, File file) //zero terminated
 // note path ending in '/' filetype includes '.'. Strings get loaded into arenaForStrings
 static StringArray FindAllFiles(char *path, char *fileType, Arena *arenaForStrings)
 {
-	String searchString = FormatCString("%c**%c*", path, fileType);
+	char* searchString = FormatCString("%c**%c*", path, fileType);
 
 	Arena *arena = PushArena(frameArena, 8000);
 
 	BeginArray(arena, String, ret);
 	WIN32_FIND_DATAA data = {};
-	HANDLE handle = FindFirstFile((char *)searchString.data, &data);
+	HANDLE handle = FindFirstFile(searchString, &data);
 	if (handle != INVALID_HANDLE_VALUE)
 	{
 		*PushStruct(arena, String) = S(data.cFileName, arenaForStrings);
@@ -715,10 +715,11 @@ static void win32InitOpenGL(HWND window)
 	if (wglMakeCurrent(windowDC, context))
 	{
 		openGLInfo = OpenGLGetInfo(modernContext);
+		// vsinc
 		wgl_swap_inverval_ext *wglSwapIntervalEXT= (wgl_swap_inverval_ext *)wglGetProcAddress("wglSwapIntervalEXT");
 		if (wglSwapIntervalEXT)
 		{
-			wglSwapIntervalEXT(20);
+			wglSwapIntervalEXT(1);
 		}
 
 		WGLPROC(glTexImage2DMultisample);
@@ -829,50 +830,56 @@ static void HandleWindowsMassages(KeyMessageBuffer *buffer) //todo make this buf
 {
 	buffer->amountOfMessages = 0;
 	MSG message;
+
+	// todo should these be values in the buffer?
+	static b32 shiftDown = false;
+	static b32 controlDown = false;
+
 	while (PeekMessageA(&message, 0, 0, 0, PM_REMOVE))
 	{
+		u32 shiftCtrlFlag = ((shiftDown > 0) * KeyState_ShiftDown) | ((controlDown > 0) * KeyState_ControlDown);
 
 		switch (message.message)
 		{
 		case WM_LBUTTONDOWN:
 		{
 			KeyStateMessage keyMessage;
-			keyMessage.flag = KeyState_Down | KeyState_PressedThisFrame;
+			keyMessage.flag = KeyState_Down | KeyState_PressedThisFrame | shiftCtrlFlag;
 			keyMessage.key = Key_leftMouse;
 			DispatchKeyMessage(buffer, keyMessage);
 		}break;
 		case WM_LBUTTONUP: 
 		{
 			KeyStateMessage keyMessage;
-			keyMessage.flag = KeyState_Up | KeyState_ReleasedThisFrame;
+			keyMessage.flag = KeyState_Up | KeyState_ReleasedThisFrame | shiftCtrlFlag;
 			keyMessage.key = Key_leftMouse;
 			DispatchKeyMessage(buffer, keyMessage);
 		}break;
 		case WM_RBUTTONDOWN:
 		{
 			KeyStateMessage keyMessage;
-			keyMessage.flag = KeyState_Down | KeyState_PressedThisFrame;
+			keyMessage.flag = KeyState_Down | KeyState_PressedThisFrame | shiftCtrlFlag;
 			keyMessage.key = Key_rightMouse;
 			DispatchKeyMessage(buffer, keyMessage);
 		}break;
 		case WM_RBUTTONUP:
 		{
 			KeyStateMessage keyMessage;
-			keyMessage.flag = KeyState_Up | KeyState_ReleasedThisFrame;
+			keyMessage.flag = KeyState_Up | KeyState_ReleasedThisFrame | shiftCtrlFlag;
 			keyMessage.key = Key_rightMouse;
 			DispatchKeyMessage(buffer, keyMessage);
 		}break;
 		case WM_MBUTTONDOWN:
 		{
 			KeyStateMessage keyMessage;
-			keyMessage.flag = KeyState_Down | KeyState_PressedThisFrame;
+			keyMessage.flag = KeyState_Down | KeyState_PressedThisFrame | shiftCtrlFlag;
 			keyMessage.key = Key_middleMouse;
 			DispatchKeyMessage(buffer, keyMessage);
 		}break;
 		case WM_MBUTTONUP:
 		{
 			KeyStateMessage keyMessage;
-			keyMessage.flag = KeyState_Up | KeyState_ReleasedThisFrame;
+			keyMessage.flag = KeyState_Up | KeyState_ReleasedThisFrame | shiftCtrlFlag;
 			keyMessage.key = Key_middleMouse;
 			DispatchKeyMessage(buffer, keyMessage);
 		}break;
@@ -882,7 +889,7 @@ static void HandleWindowsMassages(KeyMessageBuffer *buffer) //todo make this buf
 			int zDelta = GET_WHEEL_DELTA_WPARAM(message.wParam);
 
 			KeyStateMessage keyMessage;
-			keyMessage.flag = KeyState_PressedThisFrame | KeyState_Down;
+			keyMessage.flag = KeyState_PressedThisFrame | KeyState_Down | shiftCtrlFlag;
 			keyMessage.key = (zDelta > 0) ? Key_mouseWheelForward : Key_mouseWheelBack;
 
 			DispatchKeyMessage(buffer, keyMessage);
@@ -911,10 +918,7 @@ static void HandleWindowsMassages(KeyMessageBuffer *buffer) //todo make this buf
 		case WM_SYSKEYDOWN:
 		{
 
-			//todo is making them static actually good?
-			static b32 shiftDown = false;
-			static b32 controlDown = false;
-
+			
 			u64 vkCode = message.wParam;
 			u32 repeaded = message.lParam & 0xFF;
 			b32 wasDown = ((message.lParam &(1 << 30)) != 0);
@@ -932,7 +936,7 @@ static void HandleWindowsMassages(KeyMessageBuffer *buffer) //todo make this buf
 				controlDown = isDown;
 			}
 			
-			keyMessage.flag = ((shiftDown > 0) * KeyState_ShiftDown) | ((controlDown > 0) * KeyState_ControlDown);
+			keyMessage.flag = shiftCtrlFlag;
 
 			if (isDown) //todo could make this better, just oring em together
 			{
@@ -957,7 +961,7 @@ static void HandleWindowsMassages(KeyMessageBuffer *buffer) //todo make this buf
 
 			DispatchKeyMessage(buffer, keyMessage);
 
-			if (isDown && vkCode == VK_ESCAPE)
+			if (isDown && vkCode == VK_F4)
 			{
 				running = false;
 			}
@@ -1113,6 +1117,11 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
 
 				TimedBlock;
 
+				LARGE_INTEGER endCounter;
+				QueryPerformanceCounter(&endCounter);
+				f32 deltaTime = win32GetSecondsElapsed(timeCounter, endCounter);
+				timeCounter = endCounter;
+
 				CollectDebugRecords(); // collect for last frame
 				
 				HandleWindowsMassages(&keyMessageBuffer);
@@ -1144,7 +1153,7 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
 				}
 				soundOutput.sampleAmount = bytesToWrite / soundOutput.bytesPerSample;
 				Input input;
-				UpdateInput(&input, globalMouseInput, windowWidth, windowHeight, targetSecondsPerFrame, keyMessageBuffer);
+				UpdateInput(&input, globalMouseInput, windowWidth, windowHeight, deltaTime, keyMessageBuffer);
 
 				GameUpdateAndRender(&gameState, &renderCommands, input, &soundOutput);
 				
@@ -1165,12 +1174,6 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
 				RenderGroup *rg = &renderGroup;
 				Font font = gameState.font;
 
-				LARGE_INTEGER endCounter;
-				QueryPerformanceCounter(&endCounter);
-				f32 deltaTime = win32GetSecondsElapsed(timeCounter, endCounter);
-				timeCounter = endCounter;
-
-				
 				String s = FtoS(deltaTime);
 
 				float screenWidth = (f32)renderCommands.width;

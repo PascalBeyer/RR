@@ -96,6 +96,14 @@ static v2 p23(v3 a)
 	return V2(a.y, a.z);
 }
 
+static v3 p123(v4 a)
+{
+	return a.xyz;
+}
+static v3 Round(v3 a)
+{
+	return V3((i32)(a.x + 0.5f), (i32)(a.y + 0.5f), (i32)(a.z + 0.5f));
+}
 
 static bool PointInQuadraliteral(v2 p1, v2 p2, v2 p3, v2 p4, v2 pointToCheck);
 static bool PointInCenteredRectangle(v2 pos, float width, float height, v2 pointToCheck);
@@ -131,6 +139,29 @@ bool PointInCenteredRectangle(v2 pos, float width, float height, v2 pointToCheck
 bool PointInRectangle(v2 pos, float width, float height, v2 pointToCheck)
 {
 	return ((pos.x <= pointToCheck.x) && (pointToCheck.x <= pos.x + width)) && ((pos.y <= pointToCheck.y) && (pointToCheck.y <= pos.y + height));
+}
+
+
+struct Rectangle2D
+{
+	v2 pos;
+	f32 width;
+	f32 height;
+};
+
+static bool PointInRectangle(Rectangle2D rect, v2 point)
+{
+	return PointInRectangle(rect.pos, rect.width, rect.height, point);
+}
+
+static Rectangle2D CreateRectangle2D(v2 pos, f32 width, f32 height)
+{
+	Rectangle2D ret;
+	ret.pos = pos;
+	ret.width = width;
+	ret.height = height;
+
+	return ret;
 }
 
 

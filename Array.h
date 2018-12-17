@@ -5,6 +5,7 @@
 
 typedef u32* u32Ptr;
 DefineDynamicArray(u32Ptr);
+DefineDynamicArray(u32);
 
 
 typedef v3* v3Ptr;

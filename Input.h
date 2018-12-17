@@ -26,7 +26,11 @@ enum KeyEnum
 	Key_enter = 0xD,
 	Key_shift = 0x10,
 	Key_control = 0x11,
+
+	Key_escape = 0x1B,
+
 	Key_space = 0x20,
+
 	Key_end = 0x23,
 	Key_pos1 = 0x24,
 	Key_left = 0x25,
@@ -106,7 +110,7 @@ enum KeyEnum
 	Key_comma = 0xBC,
 	Key_minus = 0xBD,
 	Key_dot = 0xBE,
-
+	
 	
 	//non keyBord Key events
 	 Key_mouseWheelForward = 0xFF,
@@ -157,10 +161,10 @@ struct Input
 	v2 mouseZeroToOne;
 	v2 mouseZeroToOneDelta;
 
-	f32 secondsPerFrame;
+	f32 dt;
 };
 
-static void UpdateInput(Input *input, MouseInput mouseInput, int windowWidth, int windowHeight, f32 targetSecondsPerFrame, KeyMessageBuffer messages)
+static void UpdateInput(Input *input, MouseInput mouseInput, int windowWidth, int windowHeight, f32 secondsPerFrame, KeyMessageBuffer messages)
 {
 	v2 mousePos = V2((float)mouseInput.x, (float)mouseInput.y);
 	input->oldMousePos = input->mousePos;
@@ -171,7 +175,7 @@ static void UpdateInput(Input *input, MouseInput mouseInput, int windowWidth, in
 	v2 mouseZeroToOne = V2((float)mouseInput.x / (float)windowWidth, (float)mouseInput.y / (float)windowHeight);
 	input->mouseZeroToOneDelta = mouseZeroToOne - input->mouseZeroToOne;
 	input->mouseZeroToOne = mouseZeroToOne;
-	input->secondsPerFrame = targetSecondsPerFrame;
+	input->dt = secondsPerFrame;
 	input->buffer = messages;
 }
 

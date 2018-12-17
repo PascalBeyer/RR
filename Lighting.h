@@ -88,7 +88,7 @@ static f32Wide RandomPercentWide(u32Wide *seed)
 
 struct RayCastWork
 {
-	World world;
+	LightingSolution light;
 	Bitmap bitmap;
 	ClipRect clipRect;
 };
@@ -1448,22 +1448,22 @@ static IrradianceSample SampleIrradiance(v3 initialP, LightingTriangle *initialT
 	return ret;
 }
 
-static RayCastResult CastRaysCache(Bitmap bitmap, ClipRect clipRect, World world)
+static RayCastResult CastRaysCache(Bitmap bitmap, ClipRect clipRect, LightingSolution light)
 {
 	u32 rayAmountPerBounceAmount = 1u;
 	u32 maxBounceCount = 2u;
 
-	LightingTriangle *triangles = world.light.lightingTriangles;
-	IrradianceCache *cache = world.light.cache;
+	LightingTriangle *triangles = light.lightingTriangles;
+	IrradianceCache *cache = light.cache;
 
 	RayCastResult ret = {};
 
-	Camera camera = world.camera;
+	Camera camera = camera;
 
-	KdNode *kdTree = world.light.kdTree;
+	KdNode *kdTree = light.kdTree;
 	RandomSeries entropy = { RandomSeed() };
 	//RandomSeries entropy = { 123 };
-	v3 lightSource = world.lightSource;
+	v3 lightSource = lightSource;
 
 	f32 aspectRatio = ((float)globalLightingImageWidth / (float)globalLightingImageHeight);
 
@@ -1560,25 +1560,25 @@ static RayCastResult CastRaysCache(Bitmap bitmap, ClipRect clipRect, World world
 	return ret;
 }
 
-static RayCastResult CastRaysCacheWide(Bitmap bitmap, ClipRect clipRect, World world)
+static RayCastResult CastRaysCacheWide(Bitmap bitmap, ClipRect clipRect, LightingSolution light, v3 wlightSource)
 {
 	u32 rayAmountPerBounceAmount = 1024u; //todo  tweekable
 	u32 maxBounceCount = 2u;
 
-	IrradianceCache *cache = world.light.cache;
-	LightingTriangle *triangles = world.light.lightingTriangles;
+	IrradianceCache *cache = light.cache;
+	LightingTriangle *triangles = light.lightingTriangles;
 
 	RayCastResult ret = {};
 
-	Camera camera = world.camera;
+	Camera camera = camera;
 
-	KdNode *kdTree = world.light.kdTree;
+	KdNode *kdTree = light.kdTree;
 
 	//RandomSeries entropy = { 123 };
 
 	u32Wide entropy = Load(RandomSeed(), RandomSeed(), RandomSeed(), RandomSeed());
 
-	v3Wide lightSource = Load(world.lightSource);
+	v3Wide lightSource = Load(wlightSource);
 
 	f32Wide aspectRatio = Load((float)globalLightingImageWidth / (float)globalLightingImageHeight);
 
@@ -1750,7 +1750,7 @@ static RayCastResult CastRaysCacheWide(Bitmap bitmap, ClipRect clipRect, World w
 			KdNode *newLeaf = initialLeaf[firstZeroLane];
 
 			IrradianceSample newEntry = {};
-			newEntry = SampleIrradiance(newP, newT, newLeaf, world.lightSource, Lane(initialAttenuation, firstZeroLane), rayAmountPerBounceAmount, maxBounceCount, (RandomSeries *)&entropy, kdTree->aabb);
+			newEntry = SampleIrradiance(newP, newT, newLeaf, wlightSource, Lane(initialAttenuation, firstZeroLane), rayAmountPerBounceAmount, maxBounceCount, (RandomSeries *)&entropy, kdTree->aabb);
 			InsertSample(kdTree, &newEntry, triangles, cache);
 
 
@@ -1773,7 +1773,7 @@ static RayCastResult CastRaysCacheWide(Bitmap bitmap, ClipRect clipRect, World w
 static void RayCastWorker(void *data)
 {
 	RayCastWork *work = (RayCastWork *)data;
-	CastRaysCache(work->bitmap, work->clipRect, work->world);
+	CastRaysCache(work->bitmap, work->clipRect, work->light);
 }
 
 static void RenderAABBOutline(AABB aabb, RenderGroup *rg)
@@ -1794,9 +1794,10 @@ static void RenderKdTree(KdNode *node, RenderGroup *rg)
 	RenderKdTree(node->negative, rg);
 }
 
-static void InitLighting(World *world, Arena *constantArena)
+static void InitLighting(LightingSolution *light, Arena *constantArena)
 {
-	Assert(!world->light.lightingTriangles);
+#if 0
+	Assert(!light->lightingTriangles);
 	dummyLeaf = PushStruct(constantArena, KdNode);
 	dummyLeaf->amountOfTriangles = 1;
 	dummyLeaf->triangles = PushStruct(constantArena, LightingTriangle*);
@@ -1826,6 +1827,7 @@ static void InitLighting(World *world, Arena *constantArena)
 		world->light.cache->triangleSamples[i].entries = PushData(constantArena, IrradianceSample, world->light.cache->maxEntriesPerTriangle);
 		world->light.cache->triangleSamples[i].amount = 0;
 	}
+	#endif
 }
 
 static bool lightingInitialized = false;
@@ -1838,11 +1840,11 @@ static void PushLightingImage(RenderGroup *rg)
 }
 
 
-static void CalculateLightingSolution(World *world, Arena *arena)
+static void CalculateLightingSolution(LightingSolution *light, Arena *arena)
 {
 	if (!lightingInitialized)
 	{
-		InitLighting(world, arena);
+		InitLighting(light, arena);
 		lightingInitialized = true;
 	}
 	ClipRect wholeScreen;
@@ -1851,7 +1853,7 @@ static void CalculateLightingSolution(World *world, Arena *arena)
 	wholeScreen.xMax = globalLightingImageWidth;
 	wholeScreen.yMax = globalLightingImageHeight;
 
-	CastRaysCache(globalLightingBitmap, wholeScreen, *world);
+	CastRaysCache(globalLightingBitmap, wholeScreen, *light);
 	//CastRaysCacheWide(bitmap, wholeScreen, *world);
 
 }
@@ -2111,7 +2113,7 @@ void LightingMain(RenderCommands *renderComands, WorkHandler *workHandler, Input
 
 				Work work;
 				work.callback = RayCastWorker;
-				work.data = rayWork;
+				work.executeData = rayWork;
 
 				workHandler->PushBack(work);
 			}

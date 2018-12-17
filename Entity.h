@@ -1,16 +1,275 @@
 #ifndef RR_ENTITY
 #define RR_ENTITY
 
-#define MaxUnitCount 200
+#define MaxUnitCount 100
+#define MaxUnitInstructions 100
 
-
-
-struct UnitInfo
+enum EntityType
 {
-	v2i initialPos;
-	v2 pos;
-	v2i physicalPos;
+	Entity_None,
+
+	Entity_Dude,
+	Entity_Wall,
+	Entity_Block,
+	Entity_Spawner,
+	Entity_Goal,
+
+	Entity_Count,
 };
+enum EntityFlags
+{
+	EntityFlag_SupportsUnit = 0x1,
+	EntityFlag_BlocksUnit = 0x2,
+	EntityFlag_Dead = 0x4,
+	EntityFlag_PushAble = 0x8,
+	
+	EntityFlag_IsFalling = 0x10,
+	EntityFlag_IsMoving = 0x20,
+	//EntityFlag_BeingPushed = 0x20,
+};
+
+enum InterpolationType
+{
+	Interpolation_Push,
+	Interpolation_Move,
+	Interpolation_Fall,
+};
+
+struct EntityInterpolation
+{
+	u32 type;
+	v3i dir;
+};
+
+struct Entity
+{
+	u32 meshId;
+	f32 scale;
+	Quaternion orientation;
+	v3i physicalPos;
+	v3 offset;
+	v4 color;
+
+	v4 frameColor;
+
+	u32 serialNumber;
+
+	EntityType type;
+	u64 flags;
+
+	EntityInterpolation interpolation;
+};
+
+
+static v3 GetRenderPos(Entity e)
+{
+	return V3(e.physicalPos) + e.offset;
+}
+
+
+static void ApplyStandardtFlags(Entity *e)
+{
+	switch (e->type)
+	{
+	case Entity_None:
+	{
+		e->flags = 0;
+	}break;
+	case Entity_Dude:
+	{
+		e->flags = EntityFlag_SupportsUnit | EntityFlag_BlocksUnit;
+	}break;
+	case Entity_Wall:
+	{
+		e->flags = EntityFlag_SupportsUnit | EntityFlag_BlocksUnit;
+	}break;
+	case Entity_Block:
+	{
+		e->flags = EntityFlag_SupportsUnit | EntityFlag_PushAble;
+	}break;
+	case Entity_Spawner:
+	{
+		e->flags = 0;
+	}break;
+	case Entity_Goal:
+	{
+		e->flags = 0;
+	}break;
+	InvalidDefaultCase;
+	};
+}
+
+typedef Entity* EntityPtr;
+
+DefineDynamicArray(Entity);
+DefineDynamicArray(EntityPtr);
+DefineArray(Entity);
+
+struct EntityCopyData
+{
+	u32 meshId;
+	f32 scale;
+	Quaternion orientation;
+	v3i physicalPos;
+	v3 offset;
+	v4 color;
+
+	EntityType type;
+	u64 flags;
+};
+
+static v3 GetRenderPos(EntityCopyData e)
+{
+	return V3(e.physicalPos) + e.offset;
+}
+
+DefineArray(EntityCopyData);
+
+DefineDynamicArray(EntityInterpolation);
+
+struct Level
+{
+	Camera camera;
+	v3 lightSource;
+	EntityCopyDataArray entities;
+	String name;
+	u32 blocksNeeded;
+
+};
+
+
+enum ExecuteEventType
+{
+	ExecuteEvent_SpawnedBlock,
+	ExecuteEvent_ReceivedBlock,
+};
+
+struct ExecuteEvent
+{
+	ExecuteEventType type;
+	u32 causingEntitySerial;
+	u32 effectingEntitySerial;
+};
+
+DefineDynamicArray(ExecuteEvent);
+
+struct World
+{
+	Level loadedLevel;
+
+	Camera camera;
+	Camera debugCamera;
+	v3 lightSource; // maybe we want to change it on some change... not sure.
+	EntityDynamicArray entities;
+	ExecuteEventDynamicArray activeEvents;
+
+	u32 entitySerializer;
+	u32DynamicArray entitySerialMap;
+	
+	u32 wallMeshId;
+	u32 blockMeshId;
+	u32 dudeMeshId;
+};
+
+static Entity *GetEntity(World *world, u32 serialNumber)
+{
+	u32 index = world->entitySerialMap[serialNumber];
+	Entity *ret = world->entities + index;
+	return ret;
+}
+
+static void RemoveEntity(World *world, u32 serial)
+{
+	u32 index = world->entitySerialMap[serial];
+	world->entitySerialMap[serial] = 0xFFFFFFFF;
+
+	u32 lastIndex = world->entities.amount - 1;
+	if (index != lastIndex)
+	{
+		u32 serialNumberToChange = world->entities[lastIndex].serialNumber;
+		world->entitySerialMap[serialNumberToChange] = index;
+	}
+	UnorderedRemove(&world->entities, index);
+}
+
+static Entity CreateEntity(World *world, u32 meshID, f32 scale, Quaternion orientation, v3i pos, v3 offset, v4 color, EntityType type, u64 flags)
+{
+	Entity ret;
+	ret.meshId = meshID;
+	ret.scale = scale;
+	ret.orientation = orientation;
+	ret.physicalPos = pos;
+	ret.offset = offset;
+	ret.color = color;
+	ret.frameColor = V4(1, 1, 1, 1);
+	ret.serialNumber = world->entitySerializer++;
+	ret.type = type;
+	ret.flags = flags;
+
+	u32 arrayIndex = ArrayAdd(&world->entities, ret);
+	Assert(ret.serialNumber == world->entitySerialMap.amount);
+	ArrayAdd(&world->entitySerialMap, arrayIndex);
+	return ret;
+};
+
+static Entity RestoreEntity(World *world, u32 serial, u32 meshID, f32 scale, Quaternion orientation, v3i pos, v3 offset, v4 color, EntityType type, u64 flags)
+{
+	u32 index = world->entitySerialMap[serial];
+	Assert(index == 0xFFFFFFFF); // maybe handle this and allow it, just returning the curently loaded one
+	Entity ret;
+	ret.meshId = meshID;
+	ret.scale = scale;
+	ret.orientation = orientation;
+	ret.physicalPos = pos;
+	ret.offset = offset;
+	ret.color = color;
+	ret.frameColor = V4(1, 1, 1, 1);
+	ret.serialNumber = serial;
+	ret.type = type;
+	ret.flags = flags;
+
+	u32 arrayIndex = ArrayAdd(&world->entities, ret);
+	world->entitySerialMap[serial] = arrayIndex;
+	return ret;
+}
+
+static Level EmptyLevel()
+{
+	Level ret;
+	ret.camera.pos = V3(0, 0, -5);
+	ret.camera.basis = v3StdBasis;
+	ret.camera.aspectRatio = (f32)16 / (f32)9;
+	ret.camera.focalLength = 1.0f;
+	ret.blocksNeeded = 10000;
+
+	ret.lightSource = V3(20, 0, -20);
+	ret.name = {};
+	ret.entities = {};
+
+	return ret;
+}
+
+static void ResetLevel(World *world)
+{
+	world->loadedLevel = EmptyLevel();
+}
+
+static void ResetWorld(World *world)
+{
+	world->camera = world->loadedLevel.camera;
+	world->debugCamera = world->camera;
+	world->entitySerialMap.amount = 0;
+	world->entitySerializer = 0;
+	world->entities.amount = 0;
+	world->lightSource = V3(0, 0, -10);
+	world->activeEvents.amount = 0;
+
+	For(world->loadedLevel.entities)
+	{
+		CreateEntity(world, it->meshId, it->scale, it->orientation, it->physicalPos, it->offset, it->color, it->type, it->flags);
+	}
+}
+
 
 enum UnitInstruction
 {
@@ -19,236 +278,41 @@ enum UnitInstruction
 	Unit_MoveDown,
 	Unit_MoveLeft,
 	Unit_MoveRight,
-	
+	Unit_Fall,
 };
 
-DefineDynamicArray(UnitInstruction);
-struct UnitProgram
-{
-	UnitInstructionDynamicArray instructions;
-	u32 at;
-};
+DefineArray(UnitInstruction);
 
+#define UnitIndexOffset (64 - 16)
 struct UnitHandler
 {
 	u32 amount;
-	
-	u32 serializer;
 
-	UnitInfo *infos;
-	Quaternion *orientations;
-	UnitProgram *programs;
-	u32 *ids;
+	u32 *entitySerials;
+	UnitInstructionArray *programs;
+	
+	u64 at;
 
 	f32 t; // between 0 and 1
-
-	f32 meshScale;
-	u32 meshId; // for now all units have the same mesh
-	AABB meshAABB;
 };
 
-static UnitHandler CreateUnitHandler(Arena *arena, AssetHandler *assetHandler)
-{
-	UnitHandler ret;
-
-	ret.amount = 0;
-	ret.serializer = 0; // todo maybe start this at 1, so dead units have serialnumber 0
-	ret.infos = PushData(arena, UnitInfo, MaxUnitCount);
-	ret.meshId = RegisterAsset(assetHandler, Asset_Mesh, "dude.mesh");
-	ret.orientations = PushData(arena, Quaternion, MaxUnitCount);
-	ret.ids = PushData(arena, u32, MaxUnitCount);
-	ret.programs = PushData(arena, UnitProgram, MaxUnitCount);
-	ret.meshScale = 16.0f;
-	ret.meshAABB = GetMesh(assetHandler, ret.meshId)->aabb;
-
-	return ret;
-}
-
-static void CreateUnit(UnitHandler *unitHandler, v2 pos, Quaternion orientation)
-{
-	if (unitHandler->amount < MaxUnitCount)
-	{
-		u32 index = unitHandler->amount++;
-		unitHandler->t = 0.0f;
-		unitHandler->ids[index] = unitHandler->serializer++;
-		unitHandler->infos[index].pos = pos;
-		unitHandler->infos[index].physicalPos = V2i(pos);
-		unitHandler->infos[index].initialPos = V2i(pos);
-		unitHandler->orientations[index] = orientation;
-		unitHandler->programs[index].instructions = UnitInstructionCreateDynamicArray();
-#if 0
-		unitHandler->programs[index].instructions.amount = unitHandler->programs[index].instructions.capacity;
-		RandomSeries series = GetRandomSeries();
-		For(unitHandler->programs[index].instructions)
-		{
-			*it = (UnitInstruction)(RandomU32(&series) % 5);
-		}
-		
-#endif
-
-	}
-	else
-	{
-		Die;
-	}
-
-}
-
-static void ResetUnits(UnitHandler *handler)
-{
-	ConsoleOutputError("Handler Reset!");
-
-	for (u32 i = 0; i < handler->amount; i++)
-	{
-		handler->infos[i].physicalPos = handler->infos[i].initialPos;
-		handler->infos[i].pos = V2(handler->infos[i].initialPos);
-		handler->programs[i].at = 0;
-	}
-}
-
-static void UpdateUnits(UnitHandler *handler, TileMap tileMap, f32 dt)
-{
-	b32 instructionChange = false;
-
-	handler->t += dt;
-	if (handler->t > 1.0f)
-	{
-		handler->t -= 1.0f;
-		instructionChange = true;
-	}
-
-	if (instructionChange)
-	{
-		for (u32 i = 0; i < handler->amount; i++)
-		{
-			UnitProgram *p = handler->programs + i;
-			if (!p->instructions.amount) continue;
-			switch (p->instructions[p->at])
-			{
-			case Unit_Wait:
-			{
-
-			}break;
-			case Unit_MoveDown:
-			{
-				handler->infos[i].physicalPos.y--;
-			}break;
-			case Unit_MoveUp:
-			{
-				handler->infos[i].physicalPos.y++;
-			}break;
-			case Unit_MoveLeft:
-			{
-				handler->infos[i].physicalPos.x--;
-			}break;
-			case Unit_MoveRight:
-			{
-				handler->infos[i].physicalPos.x++;
-			}break;
-			default:
-			{
-				Die;
-			}break;
-
-			}
-
-			//todo resolve non movement commands. exist?
-
-			Tile *tile = GetTile(tileMap, V2(handler->infos[i].physicalPos));
-			if (!tile || tile->type == Tile_Blocked)
-			{
-				ResetUnits(handler);
-				return;
-			}
-
-
-			p->at = (p->at + 1) % p->instructions.amount;
-		}
-	}
-
-	// todo unit collision here
-
-	// todo: we could save the current instruction in the info, so we do not have to load the program every frame. for now we dont do that for sake of complexity
-	for (u32 index = 0; index < handler->amount; index++) 
-	{
-		UnitProgram *p = handler->programs + index;
-		UnitInfo *i = handler->infos + index;
-
-		v2i nextPos = i->physicalPos;
-
-		if (!p->instructions.amount) continue;
-
-		switch (p->instructions[p->at])
-		{
-		case Unit_Wait:
-		{
-
-		}break;
-		case Unit_MoveDown:
-		{	
-			nextPos += V2i(0, -1);
-		}break;
-		case Unit_MoveUp:
-		{
-			nextPos += V2i(0, +1);
-		}break;
-		case Unit_MoveLeft:
-		{
-			nextPos += V2i(-1, 0);
-		}break;
-		case Unit_MoveRight:
-		{
-			nextPos += V2i(1, 0);
-		}break;
-		default:
-		{
-			Die;
-		}break;
-		}
-
-
-		i->pos = Lerp(V2(i->physicalPos), handler->t, V2(nextPos));
-	}
-
-}
-
-static void RenderUnits(RenderGroup *rg, UnitHandler *handler)
-{
-	for (u32 i = 0; i < handler->amount; i++)
-	{
-		PushTriangleMesh(rg, handler->meshId, handler->orientations[i], i12(handler->infos[i].pos), handler->meshScale, V4(1, 1, 1, 1));
-	}
-}
-
-enum PathCreatorState
-{
-	PathCreator_None,
-	PathCreator_CreatingPath,
-	PathCreator_PlacingUnits, // or something
-};
-
-struct PathCreator
-{
-	u32 hotUnit;
-	v2i lastPosOfCurrentPath;
-	PathCreatorState state;
-
-};
-
-static u32 GetHotUnit(UnitHandler *unitHandler, v2 mousePosZeroToOne, f32 aspectRatio, f32 focalLength, Camera camera)
+static u32 GetHotUnit(World *world, UnitHandler *unitHandler, AssetHandler *assetHandler, v2 mousePosZeroToOne, Camera camera)
 {
 	v3 camP = camera.pos; // todo camera or debugCamera? Maybe we should again unify them
 	v3 camD = ScreenZeroToOneToDirecion(camera, mousePosZeroToOne);
 
-	for(u32 i = 0; i < unitHandler->amount; i++)
+	for (u32 i = 0; i < unitHandler->amount; i++)
 	{
-		auto it = &unitHandler->infos[i];
-		m4x4 mat = QuaternionToMatrix(Inverse(unitHandler->orientations[i]));
-		v3 rayP = mat * (camP - i12(it->pos));
+		Entity *e = GetEntity(world, unitHandler->entitySerials[i]);
+		m4x4 mat = QuaternionToMatrix(Inverse(e->orientation));
+		v3 rayP = mat * (camP - GetRenderPos(*e));
 		v3 rayD = mat * camD;
-		AABB aabb = unitHandler->meshAABB;
-		aabb.maxDim *= unitHandler->meshScale; // todo can pre compute this
-		aabb.minDim *= unitHandler->meshScale;
+
+		MeshInfo *info = GetMeshInfo(assetHandler, e->meshId);
+		if (!info)continue;
+		AABB aabb = info->aabb;
+		aabb.maxDim *= e->scale; // todo can pre compute this
+		aabb.minDim *= e->scale;
 		f32 curIntersectionMin = MAXF32;
 
 		f32 x = rayP.x;
@@ -308,9 +372,81 @@ static u32 GetHotUnit(UnitHandler *unitHandler, v2 mousePosZeroToOne, f32 aspect
 	return 0xFFFFFFFF;
 }
 
-static v2i GetAdvanceForOneStep(UnitInstruction step)
+static Entity CreateDude(World *world, UnitHandler *handler, v3i pos, f32 scale = 1.0f, Quaternion orientation = {1, 0, 0, 0}, v3 offset = V3(), v4 color = V4(1, 1, 1, 1))
 {
-	v2i advance = {};
+	u32 index = handler->amount++;
+	if (index > MaxUnitCount) return {};
+
+	u64 flags = EntityFlag_BlocksUnit | EntityFlag_PushAble | EntityFlag_SupportsUnit | ((u64)index << UnitIndexOffset);
+	Entity e = CreateEntity(world, world->dudeMeshId, scale, orientation, pos, offset, color, Entity_Dude, flags);
+
+	handler->entitySerials[index] = e.serialNumber;
+	handler->programs[index].amount = 0;
+	//handler->programs[index].at = 0x0;
+
+	return e;
+}
+
+static Entity CreateBlock(World *world, v3i pos, f32 scale = 1.0f, Quaternion orientation = { 0.707106769f, -0.707106769f, 0, 0 }, v3 offset = V3(0, 0, 0.27f), v4 color = V4(1, 1, 1, 1))
+{
+	u64 flags = EntityFlag_BlocksUnit | EntityFlag_PushAble | EntityFlag_SupportsUnit;
+	return CreateEntity(world, world->blockMeshId, scale, orientation, pos, offset, color, Entity_Block, flags);
+}
+
+static Entity RestoreBlock(World *world, u32 serial, v3i pos, f32 scale = 1.0f, Quaternion orientation = { 0.707106769f, -0.707106769f, 0, 0 }, v3 offset = V3(0, 0, 0.27f), v4 color = V4(1, 1, 1, 1))
+{
+	u64 flags = EntityFlag_BlocksUnit | EntityFlag_PushAble | EntityFlag_SupportsUnit;
+	return RestoreEntity(world, serial, world->blockMeshId, scale, orientation, pos, offset, color, Entity_Block, flags);
+}
+
+static Entity CreateWall(World *world, u32 meshId, v3i pos, f32 scale = 1.0f, Quaternion orientation = { 1, 0, 0, 0 }, v3 offset = V3(), v4 color = V4(1, 1, 1, 1))
+{
+	u64 flags = EntityFlag_BlocksUnit | EntityFlag_SupportsUnit;
+	return CreateEntity(world, meshId, scale, orientation, pos, offset, color, Entity_Wall, flags);
+}
+
+static Entity CreateSpawner(World *world, u32 meshId, v3i pos, f32 scale = 1.0f, Quaternion orientation = { 1, 0, 0, 0 }, v3 offset = V3(), v4 color = V4(1, 1, 1, 1))
+{
+	u64 flags = EntityFlag_BlocksUnit | EntityFlag_SupportsUnit;
+	return CreateEntity(world, meshId, scale, orientation, pos, offset, color, Entity_Spawner, flags);
+}
+
+static Entity CreateGoal(World *world, u32 meshId, v3i pos, f32 scale = 1.0f, Quaternion orientation = { 1, 0, 0, 0 }, v3 offset = V3(), v4 color = V4(1, 1, 1, 1))
+{
+	u64 flags = EntityFlag_BlocksUnit | EntityFlag_SupportsUnit;
+	return CreateEntity(world, meshId, scale, orientation, pos, offset, color, Entity_Goal, flags);
+}
+
+
+static u32 GetUnitIndex(Entity *e)
+{
+	return (e->flags >> UnitIndexOffset);
+}
+
+static void ResetUnitHandler(UnitHandler *unitHandler)
+{
+	unitHandler->amount = 0;
+	unitHandler->t = 0;
+	// I guess this is everything?
+}
+static UnitHandler CreateUnitHandler(Arena *arena, AssetHandler *assetHandler)
+{
+	UnitHandler ret;
+
+	ret.amount = 0;
+	ret.entitySerials = PushData(arena, u32, MaxUnitCount);
+	ret.programs = PushData(arena, UnitInstructionArray, MaxUnitCount);
+	for (u32 i = 0; i < MaxUnitCount; i++)
+	{
+		ret.programs[i] = PushArray(arena, UnitInstruction, MaxUnitInstructions);
+	}
+
+	return ret;
+}
+
+static v3i GetAdvanceForOneStep(UnitInstruction step)
+{
+	v3i advance = {};
 	switch (step)
 	{
 	case Unit_Wait:
@@ -319,19 +455,23 @@ static v2i GetAdvanceForOneStep(UnitInstruction step)
 	}break;
 	case Unit_MoveDown:
 	{
-		advance = V2i(0, -1);
+		advance = V3i(0, -1, 0);
 	}break;
 	case Unit_MoveUp:
 	{
-		advance = V2i(0, 1);
+		advance = V3i(0, 1, 0);
 	}break;
 	case Unit_MoveLeft:
 	{
-		advance = V2i(-1, 0);
+		advance = V3i(-1, 0, 0);
 	}break;
 	case Unit_MoveRight:
 	{
-		advance = V2i(1, 0);
+		advance = V3i(1, 0, 0);
+	}break;
+	case Unit_Fall:
+	{
+		advance = V3i(0, 0, 1);
 	}break;
 	default:
 	{
@@ -342,224 +482,10 @@ static v2i GetAdvanceForOneStep(UnitInstruction step)
 	return advance;
 }
 
-static v2i GetLastPosForPath(v2i unitPos, UnitInstructionDynamicArray path)
+
+static void ResetDudeAts(UnitHandler *handler)
 {
-	v2i ret = unitPos;
-	For(path)
-	{
-		switch (*it)
-		{
-		case Unit_Wait:
-		{
-
-		}break;
-		case Unit_MoveDown:
-		{
-			ret.y--;
-		}break;
-		case Unit_MoveUp:
-		{
-			ret.y++;
-		}break;
-		case Unit_MoveLeft:
-		{
-			ret.x--;
-		}break;
-		case Unit_MoveRight:
-		{
-			ret.x++;
-		}break;
-		default:
-		{
-			Die;
-		}break;
-
-		}
-	}
-	return ret;
+	handler->at = 0;
 }
-
-static void PathCreatorHandleEvent(PathCreator *pathCreator, UnitHandler *unitHandler, KeyStateMessage message, Input input, f32 focalLength, f32 aspectRatio, Camera cam)
-{
-	if (message.flag & KeyState_PressedThisFrame)
-	{
-		switch (message.key)
-		{
-		case Key_leftMouse:
-		{
-			switch (pathCreator->state)
-			{
-			case PathCreator_None:
-			{
-				u32 unitIndex = GetHotUnit(unitHandler, input.mouseZeroToOne, aspectRatio, focalLength, cam);
-				if (unitIndex < unitHandler->amount)
-				{
-					pathCreator->hotUnit = unitIndex;
-					Assert(unitHandler->infos[unitIndex].physicalPos == unitHandler->infos[unitIndex].initialPos);
-					pathCreator->lastPosOfCurrentPath = GetLastPosForPath(unitHandler->infos[unitIndex].physicalPos, unitHandler->programs[unitIndex].instructions);
-					pathCreator->state = PathCreator_CreatingPath;
-				}
-				return;
-			}break;
-			case PathCreator_CreatingPath:
-			{
-				Assert(pathCreator->hotUnit < unitHandler->amount);
-				v2 p = ScreenZeroToOneToInGame(cam, input.mouseZeroToOne);
-				v2 d = p - V2(pathCreator->lastPosOfCurrentPath);
-
-				if (BoxNorm(d) < 0.5f)
-				{
-					ArrayAdd(&unitHandler->programs[pathCreator->hotUnit].instructions, Unit_Wait);
-					break;
-				}
-
-				i32 xSign = (d.x > 0) ? 1 : -1;
-				i32 ySign = (d.y > 0) ? 1 : -1;
-				
-				if ((f32)ySign * d.y > (f32)xSign * d.x)
-				{
-					if (ySign > 0)
-					{
-						ArrayAdd(&unitHandler->programs[pathCreator->hotUnit].instructions, Unit_MoveUp);
-						pathCreator->lastPosOfCurrentPath.y++; // todo checking
-					}
-					else
-					{
-						ArrayAdd(&unitHandler->programs[pathCreator->hotUnit].instructions, Unit_MoveDown);
-						pathCreator->lastPosOfCurrentPath.y--;
-					}
-				}
-				else
-				{
-					if (xSign > 0)
-					{
-						ArrayAdd(&unitHandler->programs[pathCreator->hotUnit].instructions, Unit_MoveRight);
-						pathCreator->lastPosOfCurrentPath.x++; // todo checking
-					}
-					else
-					{
-						ArrayAdd(&unitHandler->programs[pathCreator->hotUnit].instructions, Unit_MoveLeft);
-						pathCreator->lastPosOfCurrentPath.x--;
-					}
-				}
-
-			}break;
-			case PathCreator_PlacingUnits:
-			{
-
-			}break;
-			default:
-			{
-				Die;
-			}break;
-			}
-
-		}break;
-
-		}
-
-	}
-}
-
-static void ColorForPathEditor(UnitHandler *unitHandler, PathCreator *pathCreator, World *world, Input input)
-{
-	if (pathCreator->hotUnit >= unitHandler->amount) return;
-	
-	Assert(pathCreator->hotUnit < unitHandler->amount);
-	v2 mouseP = ScreenZeroToOneToInGame(world->camera, input.mouseZeroToOne);
-	v2 mouseToPath = mouseP - V2(pathCreator->lastPosOfCurrentPath);
-
-	TileMap tileMap = world->tileMap;
-	Tweekable(v4, pathCreatorPathColor, V4(1.0f, 0.4f, 0.4f, 1.0f));
-	Tweekable(v4, pathCreatorUnitPosColor, V4(1.0f, 1.0f, 1.0f, 0.4f));
-
-	
-	if (BoxNorm(mouseToPath) > 0.5f)
-	{
-		i32 xSign = (mouseToPath.x > 0) ? 1 : -1;
-		i32 ySign = (mouseToPath.y > 0) ? 1 : -1;
-
-		if ((f32)ySign * mouseToPath.y > (f32)xSign * mouseToPath.x)
-		{
-			if (ySign > 0)
-			{
-				v2i pos = pathCreator->lastPosOfCurrentPath + V2i(0, 1);
-				Tile *tile = GetTile(tileMap, pos);
-				if (tile)
-				{
-					PlacedMesh *mesh = world->placedMeshes.data + tile->meshIndex;
-
-					mesh->frameColor *= pathCreatorPathColor;
-				}
-			}
-			else
-			{
-				v2i pos = pathCreator->lastPosOfCurrentPath + V2i(0, -1);
-				Tile *tile = GetTile(tileMap, pos);
-				if (tile)
-				{
-					PlacedMesh *mesh = world->placedMeshes.data + tile->meshIndex;
-
-					mesh->frameColor *= pathCreatorPathColor;
-				}
-			}
-		}
-		else
-		{
-			if (xSign > 0)
-			{
-				v2i pos = pathCreator->lastPosOfCurrentPath + V2i(1, 0);
-				Tile *tile = GetTile(tileMap, pos);
-				if (tile)
-				{
-					PlacedMesh *mesh = world->placedMeshes.data + tile->meshIndex;
-
-					mesh->frameColor *= pathCreatorPathColor;
-				}
-			}
-			else
-			{
-				v2i pos = pathCreator->lastPosOfCurrentPath + V2i(-1, 0);
-				Tile *tile = GetTile(tileMap, pos);
-				if (tile)
-				{
-					PlacedMesh *mesh = world->placedMeshes.data + tile->meshIndex;
-
-					mesh->frameColor *= pathCreatorPathColor;
-				}
-			}
-		}
-
-	}
-	
-	
-	UnitInstructionDynamicArray path = unitHandler->programs[pathCreator->hotUnit].instructions;
-	
-	v2i pos = unitHandler->infos[pathCreator->hotUnit].initialPos;
-
-	{
-		Tile *tile = GetTile(tileMap, pos);
-		if (tile)
-		{
-			PlacedMesh *mesh = world->placedMeshes.data + tile->meshIndex;
-
-			mesh->frameColor *= pathCreatorUnitPosColor;
-		}
-	}
-
-	For(path)
-	{
-		pos += GetAdvanceForOneStep(*it);
-
-		Tile *tile = GetTile(tileMap, pos);
-		if (tile)
-		{
-			PlacedMesh *mesh = world->placedMeshes.data + tile->meshIndex;
-
-			mesh->frameColor *= pathCreatorPathColor;
-		}
-	}
-}
-
 
 #endif

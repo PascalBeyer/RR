@@ -175,7 +175,7 @@ static float QuadNorm(v2 a)
 
 static float BoxNorm(v2 a)
 {
-	return fmaxf(fabsf(a.x), fabsf(a.y));
+	return Max(Abs(a.x), Abs(a.y));
 }
 
 static float BoxDist(v2 a, v2 b)
@@ -251,7 +251,7 @@ static float Dot(v3 a, v3 b)
 
 static float BoxNorm(v3 a)
 {
-	return Max(a.x, Max(a.x, a.y));
+	return Max(Abs(a.x), Max(Abs(a.x), Abs(a.y)));
 }
 
 static float Norm(v3 a)

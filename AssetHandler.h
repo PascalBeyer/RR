@@ -14,6 +14,18 @@ enum AssetType
 #define Asset_Mesh_Amount 100
 #define Asset_Bitmap_Size 1024
 
+struct MeshInfo
+{
+	u32 type;
+	AABB aabb;
+};
+
+struct TextureInfo
+{
+	u32 width;
+	u32 height;
+};
+
 struct AssetInfo
 {
 	String name;
@@ -21,6 +33,12 @@ struct AssetInfo
 	bool currentlyLoaded;
 	u32 id;
 	u32 loadedIndex;
+	
+	union
+	{
+		MeshInfo	*meshInfo;
+		TextureInfo *textureInfo;
+	};
 };
 
 DefineArray(AssetInfo);
@@ -70,11 +88,11 @@ struct AssetHandler
 		};
 		AssetCatalog catalogs[Asset_Type_Count];
 	};
-	u32 serializer;
+
+	Arena *infoArena;
 
 	LoadedTextureList textureList;
 	LoadedMeshList meshList;
-
 };
 
 static AssetCatalog LoadAssetCatalog(char *path, char *fileType, AssetType assetType, Arena *arena)
@@ -91,6 +109,7 @@ static AssetCatalog LoadAssetCatalog(char *path, char *fileType, AssetType asset
 		it->name = meshFiles[it_index];
 		it->type = assetType;
 		it->loadedIndex = it_index;
+		it->meshInfo = NULL;
 	}
 
 	return ret;
@@ -121,7 +140,10 @@ static AssetHandler CreateAssetHandler(Arena *arena)
 
 	ret.meshCatalog = LoadAssetCatalog("mesh/", ".mesh", Asset_Mesh, arena);
 
-	ret.serializer = 0;
+	// todo growing arena?
+	ret.infoArena = PushArena(arena, ret.textureCatalog.amount * sizeof(TextureInfo) + ret.meshCatalog.amount * sizeof(MeshInfo));
+
+	// todo maybe load new Assets and then redo the above
 	
 	ret.textureList.base = PushData(arena, LoadedTexture, Asset_Texture_Amount);
 	ret.textureList.front = ret.textureList.base;
@@ -155,7 +177,7 @@ static AssetHandler CreateAssetHandler(Arena *arena)
 	return ret;
 }
 
-static u32 RegisterAsset(AssetHandler *handler, AssetType type, char *fileName)
+static u32 RegisterAsset(AssetHandler *handler, AssetType type, char *fileName, b32 *succsess = NULL)
 {
 	String tail = CreateString(fileName);
 	tail = EatToCharFromBackReturnTail(&tail, '/');
@@ -170,12 +192,14 @@ static u32 RegisterAsset(AssetHandler *handler, AssetType type, char *fileName)
 		}
 	}
 
+	if (succsess) *succsess = false;
+
 	ConsoleOutputError("Tried finding Asset \"%c*\" but it does not exist.", fileName);
 
 	return (type << Asset_Type_Offset);
 }
 
-static u32 RegisterAsset(AssetHandler *handler, AssetType type, String fileName)
+static u32 RegisterAsset(AssetHandler *handler, AssetType type, String fileName, b32 *succsess = NULL)
 {
 	String tail = fileName;
 	tail = EatToCharFromBackReturnTail(&tail, '/');
@@ -191,6 +215,8 @@ static u32 RegisterAsset(AssetHandler *handler, AssetType type, String fileName)
 	}
 
 	ConsoleOutputError("Tried finding Asset \"%s\" but it does not exist.", fileName);
+
+	if (succsess) *succsess = false;
 
 	return (type << Asset_Type_Offset);
 }
@@ -321,8 +347,23 @@ static AssetInfo GetAssetInfo(AssetHandler *handler, u32 id)
 	u32 type = (id >> Asset_Type_Offset);
 	u32 index = id - (type << Asset_Type_Offset);
 
-	return handler->catalogs[type][index];
+	return handler->catalogs[type][index]; // do fail?
 }
+
+static MeshInfo *GetMeshInfo(AssetHandler *handler, u32 id)
+{
+	AssetInfo info = GetAssetInfo(handler, id);
+
+	return info.meshInfo;
+}
+
+static TextureInfo *GetTextureInfo(AssetHandler *handler, u32 id)
+{
+	AssetInfo info = GetAssetInfo(handler, id);
+
+	return info.textureInfo;
+}
+
 
 static TriangleMesh *GetMesh(AssetHandler *handler, u32 id)
 {
@@ -369,9 +410,17 @@ static TriangleMesh *GetMesh(AssetHandler *handler, u32 id)
 	handler->meshList.front = toAlter;
 	toAlter->prev = NULL;
 
-	String filePath = FormatCString("mesh/%s", entry->name);
+	char* filePath = FormatCString("mesh/%s", entry->name);
 
-	toAlter->mesh = LoadMesh(handler, (char *)filePath.data);
+	toAlter->mesh = LoadMesh(handler, filePath);
+
+	if (!entry->meshInfo)
+	{
+		MeshInfo *info = PushStruct(handler->infoArena, MeshInfo);
+		info->aabb = toAlter->mesh.aabb;
+		info->type = toAlter->mesh.type;
+		entry->meshInfo = info;
+	}
 
 	return &toAlter->mesh;
 
@@ -452,10 +501,18 @@ static Bitmap *GetTexture(AssetHandler *handler, u32 id)
 	toAlter->entry = entry;
 	toAlter->entry->loadedIndex = (u32)(toAlter - handler->textureList.base);
 
-	String filePath = FormatCString("textures/%s", entry->name);
-	if (!LoadBitmapIntoBitmap(filePath.cstr, &listBase[entry->loadedIndex].bitmap))
+	char *filePath = FormatCString("textures/%s", entry->name);
+	if (!LoadBitmapIntoBitmap(filePath, &listBase[entry->loadedIndex].bitmap))
 	{
 		return NULL;
+	}
+
+	if (!entry->textureInfo)
+	{
+		TextureInfo *info = PushStruct(handler->infoArena, TextureInfo);
+		info->width  = toAlter->bitmap.width;
+		info->height = toAlter->bitmap.height;
+		entry->textureInfo = info;
 	}
 	
 	if (handler->textureList.back->entry)
@@ -463,8 +520,6 @@ static Bitmap *GetTexture(AssetHandler *handler, u32 id)
 		handler->textureList.back->entry->currentlyLoaded = false;
 	}
 	
-	
-
 	handler->textureList.front->prev = toAlter;
 	toAlter->next = handler->textureList.front;
 	handler->textureList.front = toAlter;
@@ -485,7 +540,7 @@ static MaterialDynamicArray LoadMTL(AssetHandler *assetHandler, String path, Str
 	MaterialDynamicArray ret = MaterialCreateDynamicArray();
 	DeferRestore(frameArena);
 
-	File file = LoadFile((char *)FormatCString("%s%s\0", path, fileName).data, frameArena);
+	File file = LoadFile(FormatCString("%s%s\0", path, fileName), frameArena);
 	Assert(file.fileSize);
 	String string = CreateString((Char *)file.memory, file.fileSize);
 
@@ -656,7 +711,7 @@ static MaterialDynamicArray LoadMTL(AssetHandler *assetHandler, String path, Str
 			Assert(ident == "map_Kd");
 			EatSpaces(&line);
 			String tail = EatToCharFromBackReturnTail(&line, '\\');
-			cur.texturePath = CopyString(FormatCString("%s.texture", GetToChar(tail, '.')), arena);
+			cur.texturePath = CopyString(CreateString(FormatCString("%s.texture", GetToChar(tail, '.'))), arena);
 
 			//if(assetHandler) cur.bitmapID = RegisterAsset(assetHandler, Asset_Texture, (char *)cur.texturePath.data);
 		}
@@ -713,6 +768,15 @@ static String GetFilePathFromName(String fileName)
 	return ret;
 }
 
+struct UVList
+{
+	u16 uvIndex;
+	u16 flattendIndex;
+	u16 normalIndex;
+	UVList *next;
+};
+typedef UVList * UVListPtr;
+DefineArray(UVListPtr);
 
 static TriangleMesh ReadObj(AssetHandler *assetHandler, char *fileName, Arena *arena, Arena *workingArena)
 {
@@ -875,16 +939,7 @@ static TriangleMesh ReadObj(AssetHandler *assetHandler, char *fileName, Arena *a
 		while (string.length && line.length == 0 || line[0] == '#') { line = ConsumeNextLineSanitize(&string); }
 		if (!string.length) break;
 
-		struct UVList
-		{
-			u16 uvIndex;
-			u16 flattendIndex;
-			u16 normalIndex;
-			UVList *next;
-		};
-		typedef UVList * UVListPtr;
-		DefineArray(UVListPtr);
-
+		
 		Clear(workingArena);
 		UVListPtrArray flatten = PushZeroArray(workingArena, UVListPtr, tempVertexArray.amount);
 		u32 vertexArrayLength = 0;
@@ -1005,23 +1060,23 @@ static void ConvertNewAssets(AssetHandler *handler, Arena *currentStateArena, Ar
 	{
 		String type = GetBackToChar(*it, '.');
 
-		String nameToLoad = FormatCString("import/%s", *it);
+		char* nameToLoad = FormatCString("import/%s", *it);
 
 		if (type == "bmp")
 		{
 			if (AssetExits(handler, *it, Asset_Texture)) continue;
-			String nameToSave = FormatCString("textures/%s.texture", GetToChar(*it, '.'));
+			char* nameToSave = FormatCString("textures/%s.texture", GetToChar(*it, '.'));
 			Bitmap bitmap = CreateBitmap(nameToLoad);
 			
 			if (!bitmap.pixels)
 			{
-				ConsoleOutputError("Could not read bitmap %s.", nameToLoad);
+				ConsoleOutputError("Could not read bitmap %c*.", nameToLoad);
 				continue;
 			}
 
 			if (!IsPowerOfTwo(bitmap.height)|| !IsPowerOfTwo(bitmap.width))
 			{
-				ConsoleOutputError("Could not import new Asset. Bitmap %s is not quatdratic with size power of two!", nameToLoad);
+				ConsoleOutputError("Could not import new Asset. Bitmap %c* is not quatdratic with size power of two!", nameToLoad);
 				continue;
 			}
 
@@ -1030,22 +1085,22 @@ static void ConvertNewAssets(AssetHandler *handler, Arena *currentStateArena, Ar
 				bitmap = DownSampleTexture(bitmap);
 			}
 			
-			WriteTexture((char *)nameToSave.data, bitmap);
-			ConsoleOutput("Converted bitmap %s to texture %s", nameToLoad, nameToSave);
+			WriteTexture(nameToSave, bitmap);
+			ConsoleOutput("Converted bitmap %c* to texture %c*", nameToLoad, nameToSave);
 			continue;
 		}
 		else if (type == "obj")
 		{
 			if (AssetExits(handler, *it, Asset_Mesh)) continue;
-			String nameToSave = FormatCString("mesh/%s.mesh", GetToChar(*it, '.'));
-			TriangleMesh mesh = ReadObj(NULL, (char *)nameToLoad.data, currentStateArena, workingArena);
+			char *nameToSave = FormatCString("mesh/%s.mesh", GetToChar(*it, '.'));
+			TriangleMesh mesh = ReadObj(NULL, nameToLoad, currentStateArena, workingArena);
 			if (!mesh.vertices.amount)
 			{
 				ConsoleOutputError("Probably file name wrong. Might have loaded a mesh w/0 vertices.");
 				continue;
 			}
-			WriteTriangleMesh(mesh, (char *)nameToSave.data);
-			ConsoleOutput("Converted .obj %s to .mesh %s", nameToLoad, nameToSave);
+			WriteTriangleMesh(mesh, nameToSave);
+			ConsoleOutput("Converted .obj %c* to .mesh %c*", nameToLoad, nameToSave);
 			continue;
 		}
 
