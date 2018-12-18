@@ -19,53 +19,9 @@ struct SimData
 	f32 timeScale;
 };
 
-enum ExecuteUndoType
-{
-	ExecuteUndo_None,
-
-	//ExecuteUndo_FrameBegin,
-	ExecuteUndo_FrameEnd,
-	ExecuteUndo_Move,
-	ExecuteUndo_Remove,
-	ExecuteUndo_SpawnBlock,
-	ExecuteUndo_ReceivedBlock,
-
-	ExecuteUndo_Count,
-};
-
-struct ExecuteUndoRemove
-{
-	EntityType entityType;
-	v3i position;
-};
-
-struct ExecuteUndoCreate
-{
-	EntityType entityType;
-	v3i position;
-};
-
-// todo packing? todo less data?
-struct ExecuteUndo
-{
-	u32 entitySerial;
-	ExecuteUndoType type;
-
-	union
-	{
-		EntityInterpolation move;
-		ExecuteUndoRemove remove;
-		ExecuteUndoCreate create;
-	};
-};
-
-DefineDynamicArray(ExecuteUndo);
-
 struct ExecuteData
 {
 	u32 state;
-
-	ExecuteUndoDynamicArray undo;
 
 	PathCreator pathCreator;
 	SimData simData;
@@ -73,7 +29,6 @@ struct ExecuteData
 static ExecuteData InitExecute()
 {
 	ExecuteData ret;
-	ret.undo = ExecuteUndoCreateDynamicArray(100);
 	ret.state = Execute_None;
 	return ret;
 }
@@ -117,7 +72,6 @@ static void ChangeExecuteState(World *world, UnitHandler *unitHandler, ExecuteDa
 	case Execute_PathCreator:
 	{
 		exe->pathCreator = InitPathCreator();
-		exe->undo.amount = 0;
 		ResetWorld(world);
 	}break;
 	case Execute_Simulation:
@@ -125,7 +79,6 @@ static void ChangeExecuteState(World *world, UnitHandler *unitHandler, ExecuteDa
 		exe->simData.timeScale = 1.0f;
 		exe->simData.blocksCollected = 0;
 		exe->simData.blocksNeeded = 1000;
-		exe->undo.amount = 0;
 		StartSimulation(world, unitHandler);
 	}break;
 	case Execute_Victory:
@@ -139,12 +92,10 @@ static void ChangeExecuteState(World *world, UnitHandler *unitHandler, ExecuteDa
 
 static Entity *TileBlocked(World *world, v3i tile)
 {
-	For(world->entities)
+	Entity *e = GetEntity(world, tile);
+	if (e && e->flags & EntityFlag_BlocksUnit)
 	{
-		if (it->physicalPos == tile && (it->flags & EntityFlag_BlocksUnit))
-		{
-			return it;
-		}
+		return e;
 	}
 
 	return NULL;
@@ -153,7 +104,7 @@ static Entity *TileBlocked(World *world, v3i tile)
 // make dir an enum? so we cant push in something weird?
 static void MaybeMoveEntity(Entity *e, v3i dir, World *world, InterpolationType type)
 {
-	if (e->flags & EntityFlag_IsMoving)
+	if (e->temporaryFlags & EntityFlag_IsMoving)
 	{
 		if ((u32)type < e->interpolation.type) // '=' ?
 		{
@@ -173,7 +124,7 @@ static void MaybeMoveEntity(Entity *e, v3i dir, World *world, InterpolationType 
 	e->interpolation.dir = dir;
 	e->interpolation.type = type;
 
-	e->flags |= EntityFlag_IsMoving;
+	e->temporaryFlags |= EntityFlag_IsMoving;
 }
 
 typedef Entity* EntityPtr;
@@ -199,7 +150,6 @@ static u32 SpawnerTryToSpawn(World *world, u32 serial, u32 oldSerial = 0xFFFFFFF
 		}
 		
 		return other.serialNumber;
-
 	}
 
 	return 0xFFFFFFFF;
@@ -236,58 +186,135 @@ static void MaybeFallEntity(World *world, Entity *e)
 {
 	if (EntityIsSupported(world, e)) return;
 
-	e->flags |= EntityFlag_IsFalling;
+	e->temporaryFlags |= EntityFlag_IsFalling;
 	v3i dir = V3i(0, 0, 1);
 	MaybeMoveEntity(e, dir, world, Interpolation_Fall);
 
 }
 
+struct EntityMoveResolve
+{
+	Entity *e;
+	Entity *waitingOn;
+};
+
+DefineDynamicFrameArray(EntityMoveResolve);
+
+struct EntityCollision
+{
+	v3i tile;
+	Entity *e;
+	EntityCollision *next;
+};
+
+DefineDynamicFrameArray(EntityCollision);
+
 static void AdvanceGameState(World *world, UnitHandler *unitHandler, ExecuteData *exe, b32 checkForVictory = true)
 {
+	TimedBlock;
 	SimData *sim = exe ? &exe->simData : NULL;
 
+	EntityPtrDFArray movingEntities = EntityPtrCreateDFArray();
+	EntityPtrDFArray resetEntities = EntityPtrCreateDFArray();
+	
 	For(world->entities)
 	{
-		if (it->flags & EntityFlag_IsMoving)
+		if (it->temporaryFlags & EntityFlag_IsMoving)
 		{
-			it->physicalPos += it->interpolation.dir;
-			it->flags &= ~EntityFlag_IsMoving;
-			it->offset = V3();
-
-			ExecuteUndo undo;
-			undo.entitySerial = it->serialNumber;
-			undo.type = ExecuteUndo_Move;
-			undo.move = it->interpolation;
-			ArrayAdd(&exe->undo, undo);
-
-			if (it->flags & EntityFlag_IsFalling) // falling implies moving right now, as we go through the maybe move entity path
+#if 0
+			if (it->temporaryFlags & EntityFlag_IsFalling) // falling implies moving right now, as we go through the maybe move entity path
 			{
-				it->flags &= ~EntityFlag_IsFalling;
 				if (it->physicalPos.z > 10)
 				{
-					ExecuteUndo undo;
-					undo.entitySerial = it->serialNumber;
-					undo.type = ExecuteUndo_Remove;
-					ExecuteUndoRemove remove;
-					remove.entityType = it->type;
-					remove.position = it->physicalPos;
-					undo.remove = remove;
-					ArrayAdd(&exe->undo, undo);
-
 					RemoveEntity(world, it->serialNumber);
 					it--;
 				}
 			}
+#endif
+			ArrayAdd(&movingEntities, it);
 		}
-		
 	}
 
+	EntityCollisionDFArray collisions = EntityCollisionCreateDFArray();
+
+	For(movingEntities)
 	{
-		ExecuteUndo end;
-		end.type = ExecuteUndo_FrameEnd;
-		ArrayAdd(&exe->undo, end);
+		Entity *e = *it;
+		RemoveEntityFromTree(world, e);
+
+		v3i nextPos = e->physicalPos + e->interpolation.dir;
+		
+		b32 found = false;
+		For(c, collisions)// maybe this can be made faster?
+		{
+			if (nextPos == c->tile)
+			{
+				found = true;
+				EntityCollision *collision = PushStruct(frameArena, EntityCollision);
+				collision->e = e;
+				collision->next = c->next;
+				collision->tile = c->tile;
+
+				c->next = collision;
+				break;
+			}
+		}
+
+		if (!found)
+		{
+			EntityCollision collision;
+			collision.e = e;
+			collision.next = NULL;
+			collision.tile = nextPos;
+
+			ArrayAdd(&collisions, collision);
+		}
 	}
 
+	For(collisions)
+	{
+		if (!it->next)
+		{
+			//move for non-colliding Entities
+			it->e->physicalPos += it->e->interpolation.dir;
+			Entity *blockingEntity = InsertEntity(world, it->e);
+
+			if (blockingEntity)
+			{
+				it->e->physicalPos -= it->e->interpolation.dir;
+				ArrayAdd(&resetEntities, it->e);
+			}
+			continue;
+		}
+
+		for (EntityCollision *c = it; c; c = c->next)
+		{
+			ArrayAdd(&resetEntities, c->e);
+		}
+	}
+
+	For(resetEntities)
+	{
+		Entity *blockingEntity = InsertEntity(world, *it, true);
+		if (blockingEntity)
+		{
+			blockingEntity->physicalPos -= blockingEntity->interpolation.dir;
+			*it = blockingEntity;
+		}
+		else
+		{
+			UnorderedRemove(&resetEntities, (u32)(it - resetEntities.data));
+		}
+
+		it--;	
+	}
+
+	For(world->entities)
+	{
+		it->temporaryFlags = 0;
+	}
+
+	// this should get "passed in" and what ever.
 	u64 at = unitHandler->at++;
 
 	For(world->entities)
@@ -308,13 +335,14 @@ static void AdvanceGameState(World *world, UnitHandler *unitHandler, ExecuteData
 			u32 unitIndex = GetUnitIndex(it);
 			Assert(unitIndex < unitHandler->amount);
 			UnitInstructionArray *p = unitHandler->programs + unitIndex;
+
+			MaybeFallEntity(world, it);
+
 			if (!p->amount) continue;
 
 			u32 unitAt = (at % p->amount);
 
 			auto command = (*p)[unitAt];
-
-			MaybeFallEntity(world, it);
 
 			// this does nothing if allready falling.
 			MaybeMoveEntity(it, GetAdvanceForOneStep(command), world, Interpolation_Move); 
@@ -351,21 +379,13 @@ static void AdvanceGameState(World *world, UnitHandler *unitHandler, ExecuteData
 					
 					return;
 				}
+				TileBlocked(world, posToSpawn);
+
 				For(ev, world->activeEvents)
 				{
 					if (ev->type == ExecuteEvent_SpawnedBlock && ev->effectingEntitySerial == above->serialNumber)
 					{
-						{
-							ExecuteUndo undo;
-							undo.entitySerial = it->serialNumber;
-							undo.type = ExecuteUndo_ReceivedBlock;
-							ExecuteUndoRemove remove;
-							remove.entityType = it->type;
-							remove.position = it->physicalPos;
-							undo.remove = remove;
-							ArrayAdd(&exe->undo, undo);
-						}
-
+					
 						u32 aboveSerial = above->serialNumber;
 						RemoveEntity(world, aboveSerial);
 						
@@ -374,19 +394,6 @@ static void AdvanceGameState(World *world, UnitHandler *unitHandler, ExecuteData
 						if (newSerial != 0xFFFFFFFF)
 						{
 							ev->effectingEntitySerial = newSerial;
-
-							{
-								ExecuteUndo undo;
-								undo.entitySerial = it->serialNumber;
-								undo.type = ExecuteUndo_SpawnBlock;
-								ExecuteUndoCreate create;
-								create.entityType = it->type;
-								create.position = it->physicalPos;
-								undo.create = create;
-								ArrayAdd(&exe->undo, undo);
-							}
-
-
 							break;
 						}
 
@@ -404,10 +411,9 @@ static void AdvanceGameState(World *world, UnitHandler *unitHandler, ExecuteData
 	}
 }
 
-
-
 static void UpdateSimulation(World *world, UnitHandler *unitHandler, ExecuteData *execute, f32 dt)
 {
+	//dt = 0.333333f;
 	unitHandler->t += dt * execute->simData.timeScale;
 
 	while (unitHandler->t > 1.0f)
@@ -417,19 +423,8 @@ static void UpdateSimulation(World *world, UnitHandler *unitHandler, ExecuteData
 		AdvanceGameState(world, unitHandler, execute);
 		if (execute->state == Execute_Victory) break;
 	}
-
-	f32 t = unitHandler->t;
-	For(world->entities)
-	{
-		if (it->flags & EntityFlag_IsMoving)
-		{
-			v3 delta = V3(it->interpolation.dir);
-			f32 ease = -2.0f * t * t * t + 3.0f * t * t;
-			it->offset = ease * delta;
-		}
-	}
-
 }
+
 static void GameExecuteUpdate(World *world, UnitHandler *unitHandler, ExecuteData *exe, f32 dt)
 {
 	SimData *sim = &exe->simData;
