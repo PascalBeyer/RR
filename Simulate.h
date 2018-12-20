@@ -12,6 +12,12 @@ enum ExecuteState
 	Execute_Count,
 };
 
+// place units on release, so we can use it both for moving em it the path creator and the inital thing
+struct PlacingUnitsData 
+{
+	EntityPtrDynamicArray unitsToPlace;
+};
+
 struct SimData
 {
 	u32 blocksNeeded;
@@ -25,35 +31,14 @@ struct ExecuteData
 
 	PathCreator pathCreator;
 	SimData simData;
+	PlacingUnitsData placingUnits;
 };
 static ExecuteData InitExecute()
 {
 	ExecuteData ret;
 	ret.state = Execute_None;
+	ret.placingUnits.unitsToPlace = EntityPtrCreateDynamicArray();
 	return ret;
-}
-static void StartSimulation(World *world, UnitHandler *unitHandler)
-{
-	ResetDudeAts(unitHandler);
-	ResetWorld(world);
-
-	For(world->entities)
-	{
-		switch (it->type)
-		{
-		case Entity_Spawner:
-		{
-			v3i posToSpawn = it->physicalPos + V3i(0, 0, -1);
-			Entity other = CreateBlock(world, posToSpawn);
-			ExecuteEvent ev;
-			ev.type = ExecuteEvent_SpawnedBlock;
-			ev.effectingEntitySerial = other.serialNumber;
-			ev.causingEntitySerial = it->serialNumber;
-			ArrayAdd(&world->activeEvents, ev);
-		}break;
-
-		}
-	}
 }
 
 static void ChangeExecuteState(World *world, UnitHandler *unitHandler, ExecuteData *exe, ExecuteState state)
@@ -79,7 +64,7 @@ static void ChangeExecuteState(World *world, UnitHandler *unitHandler, ExecuteDa
 		exe->simData.timeScale = 1.0f;
 		exe->simData.blocksCollected = 0;
 		exe->simData.blocksNeeded = 1000;
-		StartSimulation(world, unitHandler);
+		ResetWorld(world);
 	}break;
 	case Execute_Victory:
 	{
@@ -131,74 +116,17 @@ typedef Entity* EntityPtr;
 
 DefineDynamicFrameArray(EntityPtr);
 
-static u32 SpawnerTryToSpawn(World *world, u32 serial, u32 oldSerial = 0xFFFFFFFF)
-{
-	Entity *e = GetEntity(world, serial); 
-	Assert(e->type == Entity_Spawner);
-	v3i posToSpawn = e->physicalPos + V3i(0, 0, -1);
-
-	if (!TileBlocked(world, posToSpawn))
-	{
-		Entity other;
-		if (oldSerial != 0xFFFFFFFF)
-		{
-			other = RestoreBlock(world, oldSerial, posToSpawn);
-		}
-		else
-		{
-			other = CreateBlock(world, posToSpawn);
-		}
-		
-		return other.serialNumber;
-	}
-
-	return 0xFFFFFFFF;
-}
-
-static Entity *GetEntityInTile(World *world, v3i tile)
-{
-	For(world->entities)
-	{
-		if (it->physicalPos == tile && (it->flags & EntityFlag_SupportsUnit))
-		{
-			return it;
-		}
-	}
-	return NULL;
-}
-
-static Entity *EntityIsSupported(World *world, Entity *e)
-{
-	v3i tile = e->physicalPos + V3i(0, 0, 1);
-	For(world->entities)
-	{
-		if (it->physicalPos == tile && (it->flags & EntityFlag_SupportsUnit))
-		{
-			return it;
-		}
-	}
-	return NULL;
-	
-
-}
-
 static void MaybeFallEntity(World *world, Entity *e)
 {
-	if (EntityIsSupported(world, e)) return;
+	Entity *supporter = GetEntity(world, e->physicalPos + V3i(0, 0, 1));
+	
+	if (supporter) return;
 
 	e->temporaryFlags |= EntityFlag_IsFalling;
 	v3i dir = V3i(0, 0, 1);
 	MaybeMoveEntity(e, dir, world, Interpolation_Fall);
 
 }
-
-struct EntityMoveResolve
-{
-	Entity *e;
-	Entity *waitingOn;
-};
-
-DefineDynamicFrameArray(EntityMoveResolve);
 
 struct EntityCollision
 {
@@ -221,16 +149,6 @@ static void AdvanceGameState(World *world, UnitHandler *unitHandler, ExecuteData
 	{
 		if (it->temporaryFlags & EntityFlag_IsMoving)
 		{
-#if 0
-			if (it->temporaryFlags & EntityFlag_IsFalling) // falling implies moving right now, as we go through the maybe move entity path
-			{
-				if (it->physicalPos.z > 10)
-				{
-					RemoveEntity(world, it->serialNumber);
-					it--;
-				}
-			}
-#endif
 			ArrayAdd(&movingEntities, it);
 		}
 	}
@@ -315,7 +233,7 @@ static void AdvanceGameState(World *world, UnitHandler *unitHandler, ExecuteData
 	}
 
 	// this should get "passed in" and what ever.
-	u64 at = unitHandler->at++;
+	u64 at = world->at++;
 
 	For(world->entities)
 	{
@@ -327,7 +245,37 @@ static void AdvanceGameState(World *world, UnitHandler *unitHandler, ExecuteData
 
 		}break;
 		case Entity_Block:
-		{
+		{			
+			if (it->flags & BlockFlag_TryingToSpawn)
+			{
+				if (it->physicalPos == it->initialPos)
+				{
+					it->flags &= ~BlockFlag_TryingToSpawn; 
+					//it->flags |= EntityFlag_PushAble; 
+					//this does not work this way, as it might be pushed _before_ this gets set.maybe move the pushing code into the eval ?
+					break;
+				}
+				
+				if (checkForVictory && ++sim->blocksCollected >= sim->blocksNeeded)
+				{
+					ChangeExecuteState(world, unitHandler, exe, Execute_Victory);
+					return;
+				}
+
+				it->interpolation.dir = it->initialPos - it->physicalPos;
+				it->interpolation.type = Interpolation_PhaseMove;
+				it->temporaryFlags |= EntityFlag_IsMoving;
+			}
+
+			Entity *supportingEntity = GetEntity(world, it->physicalPos + V3i(0, 0, 1));
+
+			if (supportingEntity && supportingEntity->type == Entity_Goal)
+			{
+				it->flags |= BlockFlag_TryingToSpawn;
+				//it->flags &= ~EntityFlag_PushAble;
+				break;
+			}
+
 			MaybeFallEntity(world, it);
 		}break;
 		case Entity_Dude:
@@ -350,71 +298,41 @@ static void AdvanceGameState(World *world, UnitHandler *unitHandler, ExecuteData
 		}break;
 		case Entity_Spawner:
 		{
-			v3i posToSpawn = it->physicalPos + V3i(0, 0, -1);
-			For(ev, world->activeEvents)
-			{
-				if (ev->type == ExecuteEvent_ReceivedBlock && ev->effectingEntitySerial == it->serialNumber)
-				{
-					u32 placedSerial = SpawnerTryToSpawn(world, it->serialNumber);
-					if( placedSerial != 0xFFFFFFFF)
-					{
-						ev->type = ExecuteEvent_SpawnedBlock;
-						ev->effectingEntitySerial = placedSerial;
-						ev->causingEntitySerial = it->serialNumber;
 
-					}
-					break;
-				}
-			}
 		}break;
 		case Entity_Goal:
 		{
-			v3i posToSpawn = it->physicalPos + V3i(0, 0, -1);
-			Entity *above = TileBlocked(world, posToSpawn);
-			if (above && above->type == Entity_Block)
-			{
-				if (checkForVictory && ++sim->blocksCollected > sim->blocksNeeded)
-				{
-					ChangeExecuteState(world, unitHandler, exe, Execute_Victory);
-					
-					return;
-				}
-				TileBlocked(world, posToSpawn);
 
-				For(ev, world->activeEvents)
-				{
-					if (ev->type == ExecuteEvent_SpawnedBlock && ev->effectingEntitySerial == above->serialNumber)
-					{
-					
-						u32 aboveSerial = above->serialNumber;
-						RemoveEntity(world, aboveSerial);
-						
-
-						u32 newSerial = SpawnerTryToSpawn(world, ev->causingEntitySerial, aboveSerial);
-						if (newSerial != 0xFFFFFFFF)
-						{
-							ev->effectingEntitySerial = newSerial;
-							break;
-						}
-
-						
-						ev->type = ExecuteEvent_ReceivedBlock;
-						ev->effectingEntitySerial = ev->causingEntitySerial;
-						ev->causingEntitySerial = it->serialNumber;
-						break;
-					}
-				}
-			}
 		}break;
 
 		}
 	}
 }
 
+static u32 GetLeastCommonMultipleForUnits(UnitHandler *unitHandler)
+{
+	if (unitHandler->amount == 0) return 0;
+
+	u32 ret = unitHandler->programs->amount;
+	for (u32 i = 1; i < unitHandler->amount; i++)
+	{
+		ret = LCM(ret, unitHandler->programs[i].amount);
+	}
+	return ret;
+}
+
 static void UpdateSimulation(World *world, UnitHandler *unitHandler, ExecuteData *execute, f32 dt)
 {
 	//dt = 0.333333f;
 	unitHandler->t += dt * execute->simData.timeScale;
+
+#if 0
+	u32 amountOfIterationPerCycles = GetLeastCommonMultipleForUnits(unitHandler);
+	u32 utime = (u32)unitHandler->t;
+	u32 relativeTime = utime % amountOfIterationPerCycles; // we would have to do this with _all_ entities
+
+	u32 currentAt = unitHandler->at % amountOfIterationPerCycles;
+#endif
 
 	while (unitHandler->t > 1.0f)
 	{

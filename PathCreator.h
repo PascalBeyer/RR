@@ -39,28 +39,12 @@ static void AddInstruction(UnitInstructionArray *p, UnitInstruction i)
 
 }
 
-static v3i PositionAfterMove(World *world, Entity *e)
+static v3i GetPhysicalPositionAfterMove(Entity *e)
 {
-	if (!(e->flags & EntityFlag_IsMoving))
+	if ((e->temporaryFlags & EntityFlag_IsMoving))
 	{
-		return e->physicalPos;
+		return e->interpolation.dir + e->physicalPos;
 	}
 
-	return e->interpolation.dir + e->physicalPos;
-}
-
-static bool CheckForCollision(World *world) // todo this really should not be n^2
-{
-	For(world->entities)
-	{
-		for (auto other = world->entities.data; other < it; other++)
-		{
-			if (PositionAfterMove(world, it) == PositionAfterMove(world, other))
-			{
-				return true;
-			}
-		}
-	}
-
-	return false;
+	return e->physicalPos;
 }

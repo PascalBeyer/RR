@@ -111,7 +111,7 @@ static void GameGoToMode(GameState *state, GameMode mode)
 	{
 	case Game_Execute:
 	{
-		StartSimulation(&state->world, &state->unitHandler);
+		ResetWorld(&state->world);
 		state->mode = Game_Execute;
 	}break;
 	case Game_Editor:
@@ -148,17 +148,17 @@ static GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHa
 	ret.soundMixer = {};
 	ret.unitHandler = CreateUnitHandler(constantArena, &ret.assetHandler);
 	ret.editor = InitEditor(constantArena);
-	ret.world = InitWorld(&ret.assetHandler, (u32)screenWidth, (u32)screenHeight);
-	ret.executeData = InitExecute();
-
-	ChangeExecuteState(&ret.world, &ret.unitHandler, &ret.executeData, Execute_PathCreator);
-
-
 	ret.workingArena = InitArena(PushData(constantArena, u8, MegaBytes(50)), MegaBytes(50));
 	
 	u32 constantArenaRestCapacity = constantArena->capacity - (u32)(constantArena->current - constantArena->base) - 1;
 
 	ret.currentStateArena = InitArena(PushData(constantArena, u8, constantArenaRestCapacity), constantArenaRestCapacity);
+
+	ret.world = InitWorld(ret.currentStateArena, &ret.assetHandler, (u32)screenWidth, (u32)screenHeight);
+	ret.executeData = InitExecute();
+
+	ChangeExecuteState(&ret.world, &ret.unitHandler, &ret.executeData, Execute_PathCreator);
+
 
 	f32 pifac = 6.0f * 0.25f * pi32;
 	Quaternion standartRotation = QuaternionFromAngleAxis(pifac, V3(1, 0, 0));
@@ -180,7 +180,7 @@ static GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHa
 
 	ConvertNewAssets(&ret.assetHandler, ret.currentStateArena, ret.workingArena);
 	
-	LoadLevel(CreateString("workTogether"), &ret.unitHandler, &ret.world, ret.currentStateArena, &ret.assetHandler, &ret.editor);
+	LoadLevel(CreateString("weAreNumberOne"), &ret.unitHandler, &ret.world, ret.currentStateArena, &ret.assetHandler, &ret.editor);
 
 	GameGoToMode(&ret, Game_Execute);
 
@@ -311,7 +311,7 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 			transformedAABB.minDim *= it->scale;
 			transformedAABB.maxDim *= it->scale;
 
-			m4x4 mat = Translate(QuaternionToMatrix(it->orientation), GetRenderPos(*it));
+			m4x4 mat = Translate(QuaternionToMatrix(it->orientation), GetRenderPos(*it, unitHandler->t));
 
 
 			v3 d1 = V3(transformedAABB.maxDim.x - transformedAABB.minDim.x, 0, 0);
@@ -413,6 +413,13 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 		PushQuadrilateral(rg, pp1, pp2, pp3, pp4, V4(0.5f, 0.0f, 1.0f, 0.0f));
 	}
 
+	Tweekable(b32, drawEntityTree, 1);
+
+	if (drawEntityTree)
+	{
+		RenderEntityQuadTree(rg, &world->entityTree.root);
+	}
+
 	switch (gameState->mode)
 	{
 	case Game_Editor:
@@ -421,7 +428,7 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 	}break;
 	case Game_Execute:
 	{
-		RenderExecute(rg, world, exe, unitHandler, input);
+		RenderExecute(rg, world, exe, unitHandler, assetHandler, input);
 	}break;
 
 	}

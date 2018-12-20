@@ -1,5 +1,3 @@
-
-
 Make a good general purpose allocator // done?
 reenable shadow mapping // done?
 do a good StoF, so that we have a better mesh. // done ? (at least for now)
@@ -20,7 +18,6 @@ detect whether or not a in the path creator suggested move is possible. // done?
 escape to close console. // done?
 we could do it so you can pass in NULL instead of exe, so the path creator does not need to know. // done?
 FIX EDITOR PASTE + MAKE EDITOR ARROW KEYS BE DEPENDEndent on cam direction. // done?
-
 
 Asset:
 how to handle textured and untextured entities? Should there be such a thing as untextured entity, probably not.
@@ -62,17 +59,17 @@ make the cancel work off of the undo system, once it is in place
 (brightness/ negative colors?)
 Euler thing
 paste of rows
-
-
+UndoRedo has error with scale pushing one even if nothing selected
 
 Level idears
 2 guys, stone.
 halving the path (path that one guy has to do half of no space to manouver)
 pushable maze (one stone in a maze, can push from the outside)
 stone ride. get up a stone and a guy, then ride em around
-Bridge.
+Bridge with dudes,
+Bridge with blocks, that fall down.
 
-
+remove entity serials ?
 
 Execute:
 rotations
@@ -85,22 +82,31 @@ falling // done?
 dying  // should this exist ? // insome sense done?
 render numbers in path //done ?
 clear, and let cubes fall, that go of the stage. // done?
+QuatTree for Entity phisical stuff? // done?
+carrying does not work, as its kind of a hack. // done?
+stones jump to interpolation offset, and somehow look really ugly.. // done?
+units should stop in pathcreator mode, maybe I should not check for collision, and just let eveything go to shit in the execute. that sounds fun // done?
+do we have initiative? does stuff bump into each other and then back? I like that, that should look really "errory / errorish / ???" // done?
+probably make the tree update based on create / restore / delete calls // done?
 
-
-redo lighting
-// make it just 4 u16 per triangle and work with the old system?
-kd-tree for AABB's?
-QuatTree for Entity phisical stuff?
+Undo data for game, so we can play in both directions, maybe the events are enought? // no, done.
+undo does not really have to be a thing, if I do a Least commom multiple system.
 speed meter
+redo lighting, kd-tree for AABB's?
+// make it just 4 u16 per triangle and work with the old system?
 
 get rid of meshes having color? lighting should go into a seperate buffer that stores those colors
-
-victory currupts position right now
-
 shift click for multi walk / control for unit select
-units should stop in pathcreator mode, maybe I should not check for collision, and just let eveything go to shit in the execute. that sounds fun
-carrying does not work, as its kind of a hack.
-stones jump to interpolation offset, and somehow look really ugly..
+victory currupts position right now  //does it tho?
 
-Undo data for game, so we can play in both directions, maybe the events are enought?
-undo does not really have to be a thing, if I do a Least commom multiple system.
+upscale bmps
+
+teleporters, moving platforms
+blocks on dudes? maybe only on blocks?, but what should be the fail? kill the guy?
+
+make tags _existedInInitialLevel_, _alteredFromOriginalState_, so level load is faster? This seems hard
+
+make _unit_ into active entity and gather infos about the stones and maybe platforms and such, 
+	so we can actually generate the _production cycle_ and proof throughput and latency
+
+clear flags in the begining, but do the sim at the end?

@@ -1024,6 +1024,7 @@ u32 HeaderSize(RenderGroupEntryHeader *header)
 
 void RenderIntoShadowMap(RenderCommands *rg)
 {
+	TimedBlock;
 	glDisable(GL_CULL_FACE);
 	//glCullFace(GL_FRONT);
 

@@ -39,7 +39,10 @@ struct LightingTriangle
 	v3 d2;
 	v3 normal;
 	v3 color;
+	u32 textureId;
 };
+
+DefineArray(LightingTriangle);
 
 //save planePos?
 struct KdNode

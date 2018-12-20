@@ -53,43 +53,48 @@ static void DrawNumberOnTile(RenderGroup *rg, u32 number, v3i pos, v4 color = V4
 	}
 }
 
-static void RenderPathCreator(RenderGroup *rg, World *world, PathCreator *pathCreator, UnitHandler *unitHandler, Input input)
+static void RenderPathCreator(RenderGroup *rg, World *world, ExecuteData *exe, PathCreator *pathCreator, UnitHandler *unitHandler, Input input)
 {
-
 	if (pathCreator->hotUnit < unitHandler->amount)
 	{
-
 		auto path = unitHandler->programs[pathCreator->hotUnit];
 		
 		u32 serial = unitHandler->entitySerials[pathCreator->hotUnit];
 		Entity *e = GetEntity(world, serial);
 		u32 pathCounter = 0;
 
-		v3i pos = world->loadedLevel.entities[serial].physicalPos;
-		
-		DrawNumberOnTile(rg, pathCounter, pos);
-		
+		ResetWorld(world);
+
 		For(path)
 		{
+			AdvanceGameState(world, unitHandler, exe, false);
+			DrawNumberOnTile(rg, pathCounter, e->physicalPos);
 			pathCounter++;
-			pos += GetAdvanceForOneStep(*it);
-
-			DrawNumberOnTile(rg, pathCounter, pos);
 		}
 
-		v3 mouseP = ScreenZeroToOneToZ(world->camera, input.mouseZeroToOne, pos.z);
-		v3 mouseToPath = mouseP - V3(pos);
+		// this is advancing into the future, so interpolation is from the first frame.... 
+		//maybe I should just use PhysicalPositionAfterMove()?, but this is more accurate
+		AdvanceGameState(world, unitHandler, exe, false); 
+		DrawNumberOnTile(rg, pathCounter, e->physicalPos);
+
+		v3i pos = e->physicalPos;
+		v3 mouseP = ScreenZeroToOneToZ(world->camera, input.mouseZeroToOne, e->physicalPos.z);
+		v3 mouseToPath = mouseP - GetRenderPos(*e);
 
 		pathCounter++;
 
 		v4 newTileColor = V4(1, 0.4f, 0.1f, 0.3f);
 
-		Entity *suppotingEntity = GetEntityInTile(world, PositionAfterMove(world, e) + V3i(0, 0, 1));
+#if 0
+		Entity *suppotingEntity = GetEntityInTile(world, GetPhysicalPositionAfterMove(e) + V3i(0, 0, 1));
 		if (!suppotingEntity || !(suppotingEntity->flags & EntityFlag_SupportsUnit))
 		{
 			DrawNumberOnTile(rg, pathCounter, pos + V3i(0, 0, 1), newTileColor);
 		}
-		else if (BoxNorm(mouseToPath) > 0.5f)
+		else
+#endif // !0
+
+		if (BoxNorm(mouseToPath) > 0.5f)
 		{
 			i32 xSign = (mouseToPath.x > 0) ? 1 : -1;
 			i32 ySign = (mouseToPath.y > 0) ? 1 : -1;
@@ -146,11 +151,11 @@ static void RenderPathCreator(RenderGroup *rg, World *world, PathCreator *pathCr
 		{
 		case Entity_Dude:
 		{
-			PushTriangleMesh(rg, it->meshId, it->orientation, V3(PositionAfterMove(world, it)), it->scale, V4(0.75f, 0.0f, 0.0f, 0.0f));
+			PushTriangleMesh(rg, it->meshId, it->orientation, V3((it->physicalPos)), it->scale, V4(0.75f, 0.0f, 0.0f, 0.0f));
 		}break;
 		case Entity_Block:
 		{
-			PushTriangleMesh(rg, it->meshId, it->orientation, V3(PositionAfterMove(world, it)), it->scale, V4(0.75f, 0.0f, 0.0f, 0.0f));
+			PushTriangleMesh(rg, it->meshId, it->orientation, V3((it->physicalPos)), it->scale, V4(0.75f, 0.0f, 0.0f, 0.0f));
 		}break;
 		default:
 		{
@@ -189,30 +194,69 @@ static void RenderSimulateUI(RenderGroup *rg, SimData *sim)
 
 }
 
-static void RenderSimulate(RenderGroup *rg, World *world)
+static void RenderSimulate(RenderGroup *rg, World *world, UnitHandler *unitHandler)
 {
+#if 1
+	For(world->entities)
+	{
+		PushTriangleMesh(rg, it->meshId, it->orientation, GetRenderPos(*it, unitHandler->t), it->scale, it->color * it->frameColor);
+	}
+#else
+	For(world->entities)
+	{
+		PushTriangleMesh(rg, it->meshId, it->orientation, GetRenderPos(*it), it->scale, it->color * it->frameColor);
+	}
+#endif
+}
+
+static void RenderPlacingUnits(RenderGroup *rg, ExecuteData *exe, World *world, AssetHandler *assetHandler, Input input)
+{
+	Entity *clickedE = GetHotEntity(world, assetHandler, input.mouseZeroToOne);
+	if (clickedE)
+	{
+		v3i pos = clickedE->physicalPos + V3i(0, 0, -1);
+
+		Entity *e = exe->placingUnits.unitsToPlace[0];
+		if (!TileBlocked(world, pos))
+		{
+			PushTriangleMesh(rg, world->dudeMeshId, e->orientation, V3(pos), e->scale, V4(1.0f, 0.2f, 1.0f, 0.3f));
+		}
+		else
+		{
+			PushTriangleMesh(rg, world->dudeMeshId, e->orientation, V3(pos), e->scale, V4(1.0f, 1.0f, 0.2f, 0.3f));
+		}
+	}
+
+	For(exe->placingUnits.unitsToPlace)
+	{
+		(*it)->frameColor.a = 0.0f;
+	}
+
 	For(world->entities)
 	{
 		PushTriangleMesh(rg, it->meshId, it->orientation, GetRenderPos(*it), it->scale, it->color * it->frameColor);
 	}
 }
 
-static void RenderExecute(RenderGroup *rg, World *world, ExecuteData *exe, UnitHandler *unitHandler, Input input)
+static void RenderExecute(RenderGroup *rg, World *world, ExecuteData *exe, UnitHandler *unitHandler, AssetHandler *assetHandler, Input input)
 {
-
 	switch (exe->state)
 	{
+	case Execute_PlacingUnits:
+	{
+		RenderPlacingUnits(rg, exe, world, assetHandler, input);
+	}break;
 	case Execute_PathCreator:
 	{
-		RenderPathCreator(rg, world, &exe->pathCreator, unitHandler, input);
+		RenderPathCreator(rg, world, exe, &exe->pathCreator, unitHandler, input);
 	}break;
 	case Execute_Simulation:
 	{
-		RenderSimulate(rg, world);
+		RenderSimulate(rg, world, unitHandler);
 	}break;
 	case Execute_Victory:
 	{
-		RenderSimulate(rg, world);
+		RenderSimulate(rg, world, unitHandler);
 	}break;
 	InvalidDefaultCase;
 
@@ -229,6 +273,10 @@ static void RenderExecuteUI(RenderGroup *rg, ExecuteData *exe)
 {
 	switch (exe->state)
 	{
+	case Execute_PlacingUnits:
+	{
+
+	}break;
 	case Execute_PathCreator:
 	{
 		RenderPathCreatorUI(rg, &exe->pathCreator);
@@ -715,8 +763,6 @@ static void RenderEditor(RenderGroup *rg, AssetHandler *assetHandler, Editor edi
 		PushLine(rg, p[4], p[7]);
 	}
 
-
-
 }
 
 static void RenderEditorUI(RenderGroup *rg, Editor editor, Font font)
@@ -742,9 +788,59 @@ static void RenderEditorUI(RenderGroup *rg, Editor editor, Font font)
 		}break;
 
 		}
-
 	}
-
 }
 
+static void RenderEntityQuadTree(RenderGroup *rg, TileOctTreeNode *node)
+{
+	if (!node) return;
+
+	AABB aabb = { V3(node->bound.minDim) - V3(0.5f, 0.5f, 0.5f), V3(node->bound.maxDim) - V3(0.5f, 0.5f, 0.5f) };
+
+	v3 d1 = V3(aabb.maxDim.x - aabb.minDim.x, 0, 0);
+	v3 d2 = V3(0, aabb.maxDim.y - aabb.minDim.y, 0);
+	v3 d3 = V3(0, 0, aabb.maxDim.z - aabb.minDim.z);
+
+	v3 p[8] =
+	{
+		aabb.minDim,			//0
+
+		(aabb.minDim + d1),		//1
+		(aabb.minDim + d2),		//2
+		(aabb.minDim + d3),		//3
+
+		(aabb.minDim + d1 + d2),	//4
+		(aabb.minDim + d2 + d3),	//5
+		(aabb.minDim + d3 + d1),	//6
+
+		aabb.maxDim,			//7
+
+	};
+
+	//_upper_ square
+	PushLine(rg, p[0], p[1]);
+	PushLine(rg, p[1], p[4]);
+	PushLine(rg, p[4], p[2]);
+	PushLine(rg, p[2], p[0]);
+
+	//_lower_ square
+	PushLine(rg, p[7], p[5]);
+	PushLine(rg, p[5], p[3]);
+	PushLine(rg, p[3], p[6]);
+	PushLine(rg, p[6], p[7]);
+
+	//_connecting_ lines
+	PushLine(rg, p[0], p[3]);
+	PushLine(rg, p[2], p[5]);
+	PushLine(rg, p[1], p[6]);
+	PushLine(rg, p[4], p[7]);
+
+	if (!node->isLeaf)
+	{
+		for (u32 i = 0; i < 8; i++)
+		{
+			RenderEntityQuadTree(rg, node->children[i]);
+		}
+	}
+}
 

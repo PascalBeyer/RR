@@ -239,8 +239,7 @@ static void SaveLevelHelper(StringArray args)
 	char *fileName = FormatCString("level/%s.level", args[0]);
 
 	WriteLevel(fileName, gameState.world, gameState.unitHandler, &gameState.assetHandler);
-	gameState.world.loadedLevel.name = CopyString(args[0], gameState.currentStateArena);
-	LoadLevel(CreateString(fileName), &gameState.unitHandler, &gameState.world, gameState.currentStateArena, &gameState.assetHandler, &gameState.editor);
+	gameState.world.loadedLevel.name = CopyString(args[0], gameState.currentStateArena); // todo leak
 	ConsoleOutputError("Done!");
 }
 
@@ -258,7 +257,7 @@ static void LoadLevelHelper(StringArray args)
 
 static void NewLevelHelper(StringArray args)
 {
-	ResetLevel(&gameState.world);
+	UnloadLevel(&gameState.world);
 	ResetWorld(&gameState.world);
 	ResetEditor(&gameState.editor);
 	ResetUnitHandler(&gameState.unitHandler);

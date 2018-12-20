@@ -227,16 +227,6 @@ DefineDynamicArray(TriangleMesh);
 
 void RegisterTriangleMesh(TriangleMesh *mesh);
 
-struct LightingSolution
-{
-	struct IrradianceCache *cache;
-	struct KdNode *kdTree;
-	struct LightingTriangle *lightingTriangles;
-	u32 amountOfTriangles;
-
-};
-
-
 
 struct RockCorner
 {

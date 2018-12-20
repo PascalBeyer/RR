@@ -44,3 +44,4 @@ pathCreatorPathColor (1.00000,0.40000,0.40000,1.00000)
 pathCreatorUnitPosColor (1.00000,1.00000,1.00000,0.40000)
 renderCycleThreshhold 1000
 debugDisplayBarSize 0.02999
+drawEntityTree false

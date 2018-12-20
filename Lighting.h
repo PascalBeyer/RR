@@ -86,6 +86,13 @@ static f32Wide RandomPercentWide(u32Wide *seed)
 	return CastToF32(x32) / (f32)MAXU32;
 }
 
+struct LightingSolution
+{
+	LightingTriangleArray triangles;
+	IrradianceCache *cache;
+	KdNode *kdTree;
+};
+
 struct RayCastWork
 {
 	LightingSolution light;
@@ -358,9 +365,6 @@ struct TriangleSearchResultWide
 	KdNode *initialLeaf[4];
 };
 
-
-
-static KdNode *dummyLeaf;
 static TriangleSearchResult GetInitialTriangle(v3 rayEntry, v3 xyD, KdNode *entryLeaf)
 {
 	TriangleSearchResult ret;
@@ -753,7 +757,7 @@ static TriangleSearchResultWide GetInitialTriangleWide(v3Wide rayEntry, v3Wide x
 		KdNode *dummiedLeafs[4];
 		for (u32 i = 0; i < 4; i++)
 		{
-			dummiedLeafs[i] = currentLeaf[i]->amountOfTriangles ? currentLeaf[i] : dummyLeaf;
+			Die; // dummiedLeafs[i] = currentLeaf[i]->amountOfTriangles ? currentLeaf[i] : dummyLeaf;
 		}
 
 		u32 i = 0;
@@ -933,7 +937,7 @@ static v3Wide CastRayToLightSourceWide(v3Wide initialP, v3Wide lightSource, KdNo
 		KdNode *dummiedLeafs[4];
 		for (u32 i = 0; i < 4; i++)
 		{
-			dummiedLeafs[i] = currentLeaf[i]->amountOfTriangles ? currentLeaf[i] : dummyLeaf;
+			Die; // dummiedLeafs[i] = currentLeaf[i]->amountOfTriangles ? currentLeaf[i] : dummyLeaf;
 		}
 
 		u32 i = 0;
@@ -1453,7 +1457,7 @@ static RayCastResult CastRaysCache(Bitmap bitmap, ClipRect clipRect, LightingSol
 	u32 rayAmountPerBounceAmount = 1u;
 	u32 maxBounceCount = 2u;
 
-	LightingTriangle *triangles = light.lightingTriangles;
+	LightingTriangleArray triangles = light.triangles;
 	IrradianceCache *cache = light.cache;
 
 	RayCastResult ret = {};
@@ -1512,7 +1516,7 @@ static RayCastResult CastRaysCache(Bitmap bitmap, ClipRect clipRect, LightingSol
 			v3 initialP = FitV3ToAABB(firstTResult.initialP, kdTree->aabb);
 			KdNode *initialLeaf = firstTResult.initialLeaf;
 
-			u32 initialTriangleIndex = GetTriangleIndex(triangles, initialT);
+			u32 initialTriangleIndex = GetTriangleIndex(triangles.data, initialT);
 			v3 initialN = initialT->normal;
 			v3 initialAttenuation = Max(0.0f, Dot(-xyD, initialN)) * initialT->color;
 
@@ -1546,7 +1550,7 @@ static RayCastResult CastRaysCache(Bitmap bitmap, ClipRect clipRect, LightingSol
 			//calculate Indirect Lighting
 			IrradianceSample newEntry = {};
 			newEntry = SampleIrradiance(initialP, initialT, initialLeaf, lightSource, initialAttenuation, rayAmountPerBounceAmount, maxBounceCount, &entropy, kdTree->aabb);
-			u32 insetedSamples = InsertSample(kdTree, &newEntry, triangles, cache);
+			u32 insetedSamples = InsertSample(kdTree, &newEntry, triangles.data, cache);
 
 			*xIt++ = (Pack3x8(directColor + newEntry.color));
 		}
@@ -1566,7 +1570,7 @@ static RayCastResult CastRaysCacheWide(Bitmap bitmap, ClipRect clipRect, Lightin
 	u32 maxBounceCount = 2u;
 
 	IrradianceCache *cache = light.cache;
-	LightingTriangle *triangles = light.lightingTriangles;
+	LightingTriangleArray triangles = light.triangles;
 
 	RayCastResult ret = {};
 
@@ -1705,7 +1709,7 @@ static RayCastResult CastRaysCacheWide(Bitmap bitmap, ClipRect clipRect, Lightin
 			u32 triangleSampleAmountLane[4];
 			for (u32 laneIndex = 0; laneIndex < 4; laneIndex++)
 			{
-				u32 initialTriangleIndex = GetTriangleIndex(triangles, initialT[laneIndex]);
+				u32 initialTriangleIndex = GetTriangleIndex(triangles.data, initialT[laneIndex]);
 				IrradianceSampleArray currentSamples = cache->triangleSamples[initialTriangleIndex];
 				v3 laneP = Lane(initialP, laneIndex);
 				triangleSampleAmountLane[laneIndex] = currentSamples.amount;
@@ -1751,7 +1755,7 @@ static RayCastResult CastRaysCacheWide(Bitmap bitmap, ClipRect clipRect, Lightin
 
 			IrradianceSample newEntry = {};
 			newEntry = SampleIrradiance(newP, newT, newLeaf, wlightSource, Lane(initialAttenuation, firstZeroLane), rayAmountPerBounceAmount, maxBounceCount, (RandomSeries *)&entropy, kdTree->aabb);
-			InsertSample(kdTree, &newEntry, triangles, cache);
+			InsertSample(kdTree, &newEntry, triangles.data, cache);
 
 
 			*GetPixel(bitmap, w, h) = Pack3x8(Lane(directColor, 0) + newEntry.color);
@@ -1830,8 +1834,6 @@ static void InitLighting(LightingSolution *light, Arena *constantArena)
 	#endif
 }
 
-static bool lightingInitialized = false;
-
 static void PushLightingImage(RenderGroup *rg)
 {
 	PushRenderSetup(rg, {}, V3(), Setup_Orthogonal);
@@ -1839,23 +1841,30 @@ static void PushLightingImage(RenderGroup *rg)
 	PushBitmap(rg, V2(), globalLightingBitmap);
 }
 
-
-static void CalculateLightingSolution(LightingSolution *light, Arena *arena)
+static void CalculateLightingSolution(World *world, AssetHandler *assetHandler)
 {
-	if (!lightingInitialized)
+	LightingSolution light;
+	BeginArray(frameArena, LightingTriangle, triangles);
+
+	Die;
+
+	For(e, world->entities)
 	{
-		InitLighting(light, arena);
-		lightingInitialized = true;
+		//TriangleMesh *mesh = GetMesh(assetHandler, e->meshId);
+		
 	}
+
+	EndArray(frameArena, LightingTriangle, triangles);
+
+
 	ClipRect wholeScreen;
 	wholeScreen.xMin = 0;
 	wholeScreen.yMin = 0;
 	wholeScreen.xMax = globalLightingImageWidth;
 	wholeScreen.yMax = globalLightingImageHeight;
 
-	CastRaysCache(globalLightingBitmap, wholeScreen, *light);
+	CastRaysCache(globalLightingBitmap, wholeScreen, light);
 	//CastRaysCacheWide(bitmap, wholeScreen, *world);
-
 }
 
 #if 0

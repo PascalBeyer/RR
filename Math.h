@@ -555,6 +555,10 @@ static f32 Norm(Quaternion a)
 {
 	return Sqrt(a.w * a.w + a.x * a.x + a.y * a.y + a.z * a.z);
 }
+static Quaternion Normalize(Quaternion a)
+{
+	return (a / Norm(a));
+}
 
 static Quaternion Conjugate(Quaternion a)
 {
@@ -1138,94 +1142,28 @@ static v3 SolveLinearSystem(v3 column1, v3 column2, v3 column3, v3 c)
 	return inv * c;
 }
 
-
-
-#if 0
-static v3 SolveLinearSystem(v3 row1, v3 row2, v3 row3, v3 c, b32 *success)
+static u32 GCD(u32 a, u32 b)
 {
-	v3 ret;
+	if (b == 0 || a == 0) return 0;
 
-	v3 c1 = V3(row1.x, row2.x, row3.x);
-	v3 c2 = V3(row1.y, row2.y, row3.y);
-	v3 c3 = V3(row1.z, row2.z, row3.z);
-
-LinearSystemReset3:
-	if (c1.x)
+	u32 ret = b;
+	u32 r = a % b;
+	
+	while (r)
 	{
-		f32 c1Inv = 1.0f / c1.x;
-
-		c.x *= c1Inv;
-		c.y -= (c2.x * c.x);
-		c.z -= (c3.x * c.x);
-
-		c1 *= c1Inv;
-		c2 -= c2.x * c1;
-		c3 -= c3.x * c1;
-
-	} 
-	else if (c2.x)
-	{
-		f32 tempf = c.x;
-		c.x = c.y;
-		c.y = tempf;
-
-		v3 temp = c1;
-		c1 = c2;
-		c2 = temp;
-		goto LinearSystemReset3;
-	}
-	else if(c3.x)
-	{
-		f32 tempf = c.x;
-		c.x = c.z;
-		c.z = tempf;
-
-		v3 temp = c1;
-		c1 = c3;
-		c3 = temp;
-		goto LinearSystemReset3;
-	}
-	else
-	{
-		//...
+		u32 temp = r;
+		r = ret % r;
+		ret = temp;
 	}
 
-LinearSystemReset2:
-	if (c2.y)
-	{
-		f32 c2Inv = 1.0f / c2.y;
-
-		c.y *= c2Inv;
-		c.z -= (c3.x * c.y);
-
-		c2 *= c2Inv;
-		c3 -= c3.x * c2;
-	}
-	else if (c3.y)
-	{
-		f32 tempf = c.y;
-		c.y = c.z;
-		c.z = tempf;
-
-		v3 temp = c2;
-		c2 = c3;
-		c3 = temp;
-		goto LinearSystemReset2;
-	}
-	else
-	{
-		//...
-	}
-
-	if (c3.z)
-	{
-		f32 c3Inv = 1.0f / c3.z;
-		c3.z = 1.0f;
-		c.z *= c3Inv;
-	}
-
+	return ret;
 }
-#endif
+
+static u32 LCM(u32 a, u32 b)
+{
+	return (a * b) / GCD(a, b);
+}
+
 static m4x4 QuaternionToMatrix(Quaternion a)
 {
 

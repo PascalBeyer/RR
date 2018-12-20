@@ -1,4 +1,39 @@
 
+static void PlacingUnitsHandleEvent(ExecuteData *exe, World *world, UnitHandler *unitHandler, AssetHandler *assetHandler, KeyStateMessage message, Input input)
+{
+	if (message.flag & KeyState_ReleasedThisFrame)
+	{
+		switch (message.key)
+		{
+		case Key_leftMouse:
+		{
+			// todo only ones that are in the tree, i.e. are gamePlay related
+			Entity *clickedE = GetHotEntity(world, assetHandler, input.mouseZeroToOne); 
+			if (clickedE)
+			{
+				Quaternion q = { 1, 1, 0, 0 };
+
+				if (!TileBlocked(world, clickedE->physicalPos + V3i(0, 0, -1)))
+				{
+					Entity *e = exe->placingUnits.unitsToPlace[0];
+					e->physicalPos = clickedE->physicalPos + V3i(0, 0, -1);
+					UnorderedRemove(&exe->placingUnits.unitsToPlace, 0);
+
+					if (!exe->placingUnits.unitsToPlace)
+					{
+						ChangeExecuteState(world, unitHandler, exe, Execute_PathCreator);
+						exe->pathCreator.hotUnit = GetUnitIndex(e);
+						exe->pathCreator.state = PathCreator_CreatingPath;
+						return;
+					}
+				}
+			}
+		}break;
+		}
+	}
+}
+
+
 static void PathCreatorHandleEvent(World *world, ExecuteData *exe, UnitHandler *unitHandler, AssetHandler *assetHandler, KeyStateMessage message, Input input)
 {
 	Camera cam = world->camera;
@@ -15,20 +50,29 @@ static void PathCreatorHandleEvent(World *world, ExecuteData *exe, UnitHandler *
 			{
 				u32 unitIndex = GetHotUnit(world, unitHandler, assetHandler, input.mouseZeroToOne, cam);
 
-				if (unitIndex < unitHandler->amount)
+				if (unitIndex >= unitHandler->amount)
+				{
+					break;
+				}
+
+				if (message.flag & KeyState_ControlDown)
 				{
 					u32 serial = unitHandler->entitySerials[unitIndex];
-					pathCreator->hotUnit = unitIndex;
+					Entity *e = GetEntity(world, serial);
+					ChangeExecuteState(world, unitHandler, exe, Execute_PlacingUnits);
+					ArrayAdd(&exe->placingUnits.unitsToPlace, e);
 
-					EntityCopyData e = world->loadedLevel.entities[serial];
-					pathCreator->state = PathCreator_CreatingPath;
+					break;
+				}
 
-					StartSimulation(world, unitHandler);
+				pathCreator->hotUnit = unitIndex;
+				pathCreator->state = PathCreator_CreatingPath;
 
-					For(unitHandler->programs[unitIndex])
-					{
-						AdvanceGameState(world, unitHandler, exe, false);
-					}
+				ResetWorld(world);
+				
+				For(unitHandler->programs[unitIndex])
+				{
+					AdvanceGameState(world, unitHandler, exe, false);
 				}
 			}break;
 			case Key_F6:
@@ -62,27 +106,16 @@ static void PathCreatorHandleEvent(World *world, ExecuteData *exe, UnitHandler *
 				if (PointInRectangle(pathCreator->resetUnitButton, input.mouseZeroToOne))
 				{
 					program->amount = 0;
-
-					u32 serial = unitHandler->entitySerials[pathCreator->hotUnit];
-
-					EntityCopyData e = world->loadedLevel.entities[serial];
-
-					StartSimulation(world, unitHandler);
 					break;
 				}
 
 				v3 p = ScreenZeroToOneToZ(cam, input.mouseZeroToOne, entity->physicalPos.z);
-				v3 d = p - V3(PositionAfterMove(world, entity));
+				v3 d = p - V3(GetPhysicalPositionAfterMove(entity));
 
 				i32 xSign = (d.x > 0) ? 1 : -1;
 				i32 ySign = (d.y > 0) ? 1 : -1;
 
-				Entity *suppotingEntity = GetEntityInTile(world, PositionAfterMove(world, entity) + V3i(0, 0, 1));
-				if (!suppotingEntity || !(suppotingEntity->flags & EntityFlag_SupportsUnit))
-				{
-					AddInstruction(program, Unit_Fall);
-				}
-				else if (BoxNorm(d) < 0.5f)
+				if (BoxNorm(d) < 0.5f)
 				{
 					AddInstruction(program, Unit_Wait);
 				}
@@ -109,39 +142,13 @@ static void PathCreatorHandleEvent(World *world, ExecuteData *exe, UnitHandler *
 					}
 				}
 
-				AdvanceGameState(world, unitHandler, exe, false);
-
-				if (CheckForCollision(world))
-				{
-					u32 at = (u32)unitHandler->at;
-					StartSimulation(world, unitHandler);
-					unitHandler->at = 0;
-					for (u32 i = 0; i < at - 1; i++)
-					{
-						AdvanceGameState(world, unitHandler, exe, false);
-					}
-
-					u32 end = --program->amount;
-				}
-
 			}break;
 			case Key_rightMouse:
 			{
 				Assert(pathCreator->hotUnit < unitHandler->amount);
 				auto program = &unitHandler->programs[pathCreator->hotUnit];
-				if (!unitHandler->at) break;
 				if (!program->amount) break;
-
-				u32 at = (u32)unitHandler->at;
-				ResetWorld(world);
-				StartSimulation(world, unitHandler);
-				unitHandler->at = 0;
-				for (u32 i = 0; i < at - 1; i++)
-				{
-					AdvanceGameState(world, unitHandler, exe, false);
-				}
-
-				u32 end = --program->amount;
+				--program->amount;
 			}break;
 			case Key_F6:
 			{
@@ -195,6 +202,10 @@ static void ExecuteHandleEvents(World *world, UnitHandler *unitHandler, AssetHan
 {
 	switch (exe->state)
 	{
+	case Execute_PlacingUnits:
+	{
+		PlacingUnitsHandleEvent(exe, world, unitHandler, assetHandler, message, input);
+	}break;
 	case Execute_Simulation:
 	{
 		SimHandleEvents(world, exe, message);
@@ -501,7 +512,7 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 								{
 									e->type = (EntityType)(Entity_Count - 1);
 								}
-								ApplyStandardtFlags(e);
+								e->flags = GetStandardFlags(e->type);
 								return;
 							}
 							else if (PointInRectangle(pos + V2(0.5f * widthWithoutBoarder, 0.0f), 0.5f * widthWithoutBoarder, height, input.mouseZeroToOne))
@@ -511,7 +522,8 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 								{
 									e->type = Entity_None;
 								}
-								ApplyStandardtFlags(e);
+
+								e->flags = GetStandardFlags(e->type);
 								return;
 							}
 						}break;
@@ -591,7 +603,7 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 					return;
 				}
 
-				Entity *hotEntity = GetHotMesh(world, assetHandler, input.mouseZeroToOne);
+				Entity *hotEntity = GetHotEntity(world, assetHandler, input.mouseZeroToOne);
 
 				if (message.flag & KeyState_ShiftDown)
 				{
@@ -728,6 +740,11 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 				{
 					if (!world->loadedLevel.name.amount) break;
 
+					For(world->entities)
+					{
+						it->initialPos = it->physicalPos;
+					}
+
 					char *fileName = FormatCString("level/%s.level", world->loadedLevel.name);
 					if (WriteLevel(fileName, *world, *unitHandler, assetHandler))
 					{
@@ -737,7 +754,6 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 					{
 						ConsoleOutputError("Could not save file %c*.", fileName);
 					}
-					LoadLevel(world->loadedLevel.name, unitHandler, world, currentStateArena, assetHandler, editor);
 
 					break;
 				}

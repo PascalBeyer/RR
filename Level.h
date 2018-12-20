@@ -1,5 +1,5 @@
 
-static World InitWorld(AssetHandler *assetHandler, u32 screenWidth, u32 screenHeight)
+static World InitWorld(Arena *currentStateArena, AssetHandler *assetHandler, u32 screenWidth, u32 screenHeight)
 {
 	World ret = {};
 
@@ -11,11 +11,10 @@ static World InitWorld(AssetHandler *assetHandler, u32 screenWidth, u32 screenHe
 
 	ret.debugCamera = ret.camera;
 	ret.loadedLevel = EmptyLevel();
-
+	ret.entityTree = InitOctTree(currentStateArena, 100);
 	ret.entities = EntityCreateDynamicArray();
 	ret.entitySerializer = 0;
 	ret.entitySerialMap = u32CreateDynamicArray();
-	ret.activeEvents = ExecuteEventCreateDynamicArray();
 
 	b32 success = true;
 	ret.blockMeshId = RegisterAsset(assetHandler, Asset_Mesh, "block.mesh", &success);
@@ -41,9 +40,9 @@ static bool WriteLevel(char *fileName, World world, UnitHandler unitHandler, Ass
 	*PushStruct(frameArena, f32) = world.loadedLevel.camera.focalLength;
 
 	*PushStruct(frameArena, u32) = world.entities.amount;
+
 	For(world.entities)
 	{
-		//*PushStruct(frameArena, u32) = EntityType_Mesh;
 		*PushStruct(frameArena, Quaternion) = it->orientation;
 		*PushStruct(frameArena, v3i) = it->physicalPos;
 		*PushStruct(frameArena, v3) = it->offset;
@@ -337,7 +336,7 @@ static bool LoadLevel(String fileName, UnitHandler *unitHandler, World *world, A
 	if (!file.fileSize) return false;
 	defer(FreeFile(file));
 
-	ResetLevel(world);
+	UnloadLevel(world);
 	ResetWorld(world);
 	ResetUnitHandler(unitHandler);
 	ResetEditor(editor);

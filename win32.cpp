@@ -917,12 +917,10 @@ static void HandleWindowsMassages(KeyMessageBuffer *buffer) //todo make this buf
 		case WM_KEYDOWN:
 		case WM_SYSKEYDOWN:
 		{
-
-			
 			u64 vkCode = message.wParam;
 			u32 repeaded = message.lParam & 0xFF;
-			b32 wasDown = ((message.lParam &(1 << 30)) != 0);
-			b32 isDown = ((message.lParam &(1 << 31)) == 0);
+			b32 wasDown = ((message.lParam & (1UL << 30)) != 0);
+			b32 isDown  = ((message.lParam & (1UL << 31)) == 0);
 			
 			KeyStateMessage keyMessage;
 			keyMessage.key = (KeyEnum)vkCode;

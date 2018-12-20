@@ -1,8 +1,6 @@
 #ifndef RR_EDITOR
 #define RR_EDITOR
 
-
-
 enum PickerSelectionTag
 {
 	PickerSelecting_Nothing,
@@ -625,7 +623,7 @@ static void EditorGoToNone(Editor *editor)
 #endif
 }
 
-static Entity *GetHotMesh(World *world, AssetHandler *handler, v2 mousePosZeroToOne)
+static Entity *GetHotEntity(World *world, AssetHandler *handler, v2 mousePosZeroToOne)
 {
 	v3 camP = world->camera.pos; // todo camera or debugCamera? Maybe we should again unify them
 	v3 camD = ScreenZeroToOneToDirecion(world->camera, mousePosZeroToOne);
@@ -636,6 +634,7 @@ static Entity *GetHotMesh(World *world, AssetHandler *handler, v2 mousePosZeroTo
 
 	For(world->entities)
 	{
+
 		MeshInfo *info = GetMeshInfo(handler, it->meshId);
 
 		if (!info) continue; // probably not on screen, if never rendered
@@ -1090,12 +1089,15 @@ static void UpdateEditor(Editor *editor, UnitHandler *unitHandler, World *world,
 		For(editor->hotEntityInfos)
 		{
 			Entity *e = GetEntity(world, it->placedSerial);
-			
+
+			RemoveEntityFromTree(world, e);
+
 			v4 relPos = V4(GetRenderPos(*e) - averagePos, 1.0f);
 			e->orientation = q * e->orientation;
 			v3 pos = averagePos + (mat * relPos).xyz;
 			e->physicalPos = RoundToTileMap(pos);
 			e->offset = pos - V3(e->physicalPos);
+			InsertEntity(world, e);
 		}
 	}break;
 	case EditorState_Scaling:
@@ -1123,9 +1125,13 @@ static void UpdateEditor(Editor *editor, UnitHandler *unitHandler, World *world,
 			v3 delta = GetRenderPos(*mesh) - averagePos;
 			v3 newPos = exp * delta + averagePos;
 
+			RemoveEntityFromTree(world, mesh);
+
 			mesh->physicalPos = RoundToTileMap(newPos);
 			mesh->offset = newPos - V3(mesh->physicalPos);
 			mesh->scale *= exp;
+
+			InsertEntity(world, mesh);
 		}
 	}break;
 	case EditorState_Moving:
@@ -1150,8 +1156,12 @@ static void UpdateEditor(Editor *editor, UnitHandler *unitHandler, World *world,
 
 			v3 pos = GetRenderPos(*mesh) + realDelta;
 
+			RemoveEntityFromTree(world, mesh);
+
 			mesh->physicalPos = RoundToTileMap(pos);
 			mesh->offset = pos - V3(mesh->physicalPos);
+
+			InsertEntity(world, mesh);
 		}
 
 	}break;
@@ -1193,7 +1203,7 @@ static void ResetEditor(Editor *editor)
 
 static void NewLevel(UnitHandler *unitHandler, World *world, Editor *editor, Arena *currentStateArena)
 {
-	ResetLevel(world);
+	UnloadLevel(world);
 	ResetEditor(editor);
 }
 
