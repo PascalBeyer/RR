@@ -27,15 +27,18 @@ enum EntityFlags
 	EntityFlag_IsMoving = 0x20,
 	EntityFlag_InTree = 0x40,
 	EntityFlag_MoveResolved = 0x80,
+	EntityFlag_IsSupported = 0x100,
 
-	EntityFlag_IsDynamic = 0x100,
+	EntityFlag_IsDynamic = 0x200,
 
-	BlockFlag_TryingToSpawn = 0x200,
-	BlockFlag_MovingToSpawn = 0x200,
+	BlockFlag_TryingToSpawn = 0x400,
+	EntityFlag_QueuedForReset = 0x800,
+
 };
 
 enum InterpolationType
 {
+	Interpolation_Carried,
 	Interpolation_Push,
 	Interpolation_Move,
 	Interpolation_Fall,
@@ -44,7 +47,9 @@ enum InterpolationType
 
 struct EntityInterpolation
 {
-	u32 type;
+	InterpolationType type;
+	u32 entityBelow;
+	u32 entityAbove;
 	v3i dir;
 };
 
@@ -82,9 +87,9 @@ static v3 GetRenderPos(Entity e, f32 interpolationT)
 	
 	if (e.temporaryFlags & EntityFlag_IsMoving)
 	{
-		v3 delta = V3(e.interpolation.dir);
+		v3 delta = -V3(e.interpolation.dir);
 		f32 ease = -2.0f * t * t * t + 3.0f * t * t;
-		moveOffset = ease * delta;
+		moveOffset = (1.0f - ease) * delta;
 	}
 
 	return V3(e.physicalPos) + e.offset + moveOffset;
@@ -128,21 +133,6 @@ struct Level
 
 	u32 amountOfDudes;
 };
-
-enum ExecuteEventType
-{
-	ExecuteEvent_SpawnedBlock,
-	ExecuteEvent_ReceivedBlock,
-};
-
-struct ExecuteEvent
-{
-	ExecuteEventType type;
-	u32 causingEntitySerial;
-	u32 effectingEntitySerial;
-};
-
-DefineDynamicArray(ExecuteEvent);
 
 struct AABBi
 {
@@ -506,6 +496,7 @@ static void ResetTree(TileOctTree *tree)
 
 static Entity *InsertEntity(World *world, Entity *e, b32 swap = false) // the return feels weird.
 {
+	Assert(!(e->flags & EntityFlag_InTree));
 	TileOctTree *tree = &world->entityTree;
 	TileOctTreeNode *cur = &tree->root;
 	Assert(PointInAABBi(cur->bound, e->physicalPos));

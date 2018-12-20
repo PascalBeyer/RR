@@ -43,7 +43,7 @@ make debug Ui for amount of memory used.
 
 add starting cam pos to level // done?
 add lightPos to the level
-add Blocks needed to level
+add Blocks needed to level //done
 
 EDITOR : 
 save (crtl-s) //done?
@@ -55,7 +55,7 @@ undo, redo, // done?
 double click = 'numpad .'
 box select
 make the orbiting more of a always usable flag, maybe just a bool.
-make the cancel work off of the undo system, once it is in place
+make the cancel work off of the undo system, once it is in place // no, undo relies on this
 (brightness/ negative colors?)
 Euler thing
 paste of rows
@@ -69,7 +69,7 @@ stone ride. get up a stone and a guy, then ride em around
 Bridge with dudes,
 Bridge with blocks, that fall down.
 
-remove entity serials ?
+remove entity serials ? // wwhat no!
 
 Execute:
 rotations
@@ -101,7 +101,7 @@ victory currupts position right now  //does it tho?
 
 upscale bmps
 
-teleporters, moving platforms
+teleporters, moving platforms, ramps?
 blocks on dudes? maybe only on blocks?, but what should be the fail? kill the guy?
 
 make tags _existedInInitialLevel_, _alteredFromOriginalState_, so level load is faster? This seems hard
@@ -109,4 +109,23 @@ make tags _existedInInitialLevel_, _alteredFromOriginalState_, so level load is 
 make _unit_ into active entity and gather infos about the stones and maybe platforms and such, 
 	so we can actually generate the _production cycle_ and proof throughput and latency
 
-clear flags in the begining, but do the sim at the end?
+clear flags in the begining, but do the sim at the end? // done?
+
+
+what should happen?
+guy _waits_ on a thing that moves									-> guy stays on the thing
+guy _waits_ on a thing and gets pushed into a wall that is one up	-> guy maintains his position and maybe falls
+guy _moves_ from a moving thing										-> motion should be relative
+stack of falling things												-> things should fall together
+guy _moves_ from a falling thing									-> guy should move as if the thing was stationary
+guy _moves_ from a falling thing with something on his head			-> the thing on his head should get carried
+
+stacks all moving in the same direction should be fast
+pushing a stone while being moved?									-> motion should be relative
+
+tried relative motion, it feels really weird, and everything is really _special casey_
+
+-> falling flag,  that gets overwritten by movement.
+-> things can only move, if they are supported
+
+

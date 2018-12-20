@@ -777,6 +777,8 @@ static void EditorPerformUndo(Editor *editor, World *world)
 		u32 serial = toReverse.preModifyMesh.placedSerial;
 		Assert(toReverse.preModifyMesh.placedSerial == toReverse.postModifyMesh.placedSerial);
 		Entity *mesh = GetEntity(world, toReverse.preModifyMesh.placedSerial);
+
+		RemoveEntityFromTree(world, mesh);
 		mesh->color			= data.color;
 		mesh->physicalPos	= data.physicalPos;
 		mesh->offset		= data.offset;
@@ -784,6 +786,7 @@ static void EditorPerformUndo(Editor *editor, World *world)
 		mesh->scale			= data.scale;
 		mesh->type			= data.type;
 		mesh->flags			= data.flags;
+		InsertEntity(world, mesh);
 	}break;
 	case EditorAction_DeleteMesh: 
 	{
@@ -826,6 +829,7 @@ static void EditorPerformRedo(Editor *editor, World *world)
 		u32 serial = toReverse.postModifyMesh.placedSerial;
 		Assert(toReverse.postModifyMesh.placedSerial == toReverse.postModifyMesh.placedSerial);
 		Entity *e = GetEntity(world, toReverse.postModifyMesh.placedSerial);
+		RemoveEntityFromTree(world, e);
 		e->color = data.color;
 		e->physicalPos = data.physicalPos;
 		e->offset = data.offset;
@@ -833,6 +837,7 @@ static void EditorPerformRedo(Editor *editor, World *world)
 		e->scale = data.scale;
 		e->type = data.type;
 		e->flags = data.flags;
+		InsertEntity(world, e);
 	}break;
 	case EditorAction_DeleteMesh:
 	{

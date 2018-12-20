@@ -67,14 +67,11 @@ static void RenderPathCreator(RenderGroup *rg, World *world, ExecuteData *exe, P
 
 		For(path)
 		{
-			AdvanceGameState(world, unitHandler, exe, false);
 			DrawNumberOnTile(rg, pathCounter, e->physicalPos);
+			AdvanceGameState(world, unitHandler, exe, false);
 			pathCounter++;
 		}
 
-		// this is advancing into the future, so interpolation is from the first frame.... 
-		//maybe I should just use PhysicalPositionAfterMove()?, but this is more accurate
-		AdvanceGameState(world, unitHandler, exe, false); 
 		DrawNumberOnTile(rg, pathCounter, e->physicalPos);
 
 		v3i pos = e->physicalPos;
@@ -129,22 +126,6 @@ static void RenderPathCreator(RenderGroup *rg, World *world, ExecuteData *exe, P
 
 	}
 
-	For(world->loadedLevel.entities)
-	{
-		switch (it->type)
-		{
-		case Entity_Dude:
-		{
-			PushTriangleMesh(rg, it->meshId, it->orientation, GetRenderPos(*it), it->scale, it->color);
-		}break;
-		case Entity_Block:
-		{
-			PushTriangleMesh(rg, it->meshId, it->orientation, GetRenderPos(*it), it->scale, it->color);
-		}break;
-
-		}
-	}
-
 	For(world->entities)
 	{
 		switch (it->type)
@@ -152,10 +133,12 @@ static void RenderPathCreator(RenderGroup *rg, World *world, ExecuteData *exe, P
 		case Entity_Dude:
 		{
 			PushTriangleMesh(rg, it->meshId, it->orientation, V3((it->physicalPos)), it->scale, V4(0.75f, 0.0f, 0.0f, 0.0f));
+			PushTriangleMesh(rg, it->meshId, it->orientation, V3((it->initialPos)), it->scale, it->color * it->frameColor);
 		}break;
 		case Entity_Block:
 		{
 			PushTriangleMesh(rg, it->meshId, it->orientation, V3((it->physicalPos)), it->scale, V4(0.75f, 0.0f, 0.0f, 0.0f));
+			PushTriangleMesh(rg, it->meshId, it->orientation, V3((it->initialPos)), it->scale, it->color * it->frameColor);
 		}break;
 		default:
 		{

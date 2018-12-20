@@ -13,12 +13,14 @@ static void PlacingUnitsHandleEvent(ExecuteData *exe, World *world, UnitHandler 
 			{
 				Quaternion q = { 1, 1, 0, 0 };
 
-				if (!TileBlocked(world, clickedE->physicalPos + V3i(0, 0, -1)))
+				v3i posToPlace = clickedE->physicalPos + V3i(0, 0, -1);
+				Entity *e = exe->placingUnits.unitsToPlace[0];
+				e->physicalPos = posToPlace;
+				
+				if (!InsertEntity(world, e))
 				{
-					Entity *e = exe->placingUnits.unitsToPlace[0];
-					e->physicalPos = clickedE->physicalPos + V3i(0, 0, -1);
+					e->initialPos = e->physicalPos;
 					UnorderedRemove(&exe->placingUnits.unitsToPlace, 0);
-
 					if (!exe->placingUnits.unitsToPlace)
 					{
 						ChangeExecuteState(world, unitHandler, exe, Execute_PathCreator);
@@ -59,6 +61,7 @@ static void PathCreatorHandleEvent(World *world, ExecuteData *exe, UnitHandler *
 				{
 					u32 serial = unitHandler->entitySerials[unitIndex];
 					Entity *e = GetEntity(world, serial);
+					RemoveEntityFromTree(world, e);
 					ChangeExecuteState(world, unitHandler, exe, Execute_PlacingUnits);
 					ArrayAdd(&exe->placingUnits.unitsToPlace, e);
 
@@ -387,6 +390,19 @@ static v3i AdjustForCamera(Camera cam, UnitInstruction intendedDir)
 	return V3i();
 }
 
+static b32 EditorMoveEntityIfPossible(World *world, Entity *e, v3i to)
+{
+	RemoveEntityFromTree(world, e);
+	v3i posSave = e->physicalPos;
+	e->physicalPos = to;
+	if (InsertEntity(world, e))
+	{
+		e->physicalPos = posSave;
+		InsertEntity(world, e);
+		return false;
+	}
+	return true;
+}
 
 static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *world, AssetHandler *assetHandler, KeyStateMessage message, Input input, Arena *currentStateArena)
 {
@@ -668,7 +684,7 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 				For(editor->hotEntityInfos)
 				{
 					Entity *mesh = GetEntity(world, it->placedSerial);
-					mesh->physicalPos += inc;
+					EditorMoveEntityIfPossible(world, mesh, mesh->physicalPos + inc);
 				}
 			}break;
 			case Key_right:
@@ -677,7 +693,7 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 				For(editor->hotEntityInfos)
 				{
 					Entity *mesh = GetEntity(world, it->placedSerial);
-					mesh->physicalPos += inc;
+					EditorMoveEntityIfPossible(world, mesh, mesh->physicalPos + inc);
 				}
 
 			}break;
@@ -688,7 +704,7 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 					For(editor->hotEntityInfos)
 					{
 						Entity *mesh = GetEntity(world, it->placedSerial);
-						mesh->physicalPos.z--;
+						EditorMoveEntityIfPossible(world, mesh, mesh->physicalPos + V3i(0, 0, -1));
 					}
 					break;
 				}
@@ -697,7 +713,7 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 				For(editor->hotEntityInfos)
 				{
 					Entity *mesh = GetEntity(world, it->placedSerial);
-					mesh->physicalPos += inc;
+					EditorMoveEntityIfPossible(world, mesh, mesh->physicalPos + inc);
 				}
 
 			}break;
@@ -708,7 +724,7 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 					For(editor->hotEntityInfos)
 					{
 						Entity *mesh = GetEntity(world, it->placedSerial);
-						mesh->physicalPos.z++;
+						EditorMoveEntityIfPossible(world, mesh, mesh->physicalPos + V3i(0, 0, 1));
 					}
 					break;
 				}
@@ -717,7 +733,7 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 				For(editor->hotEntityInfos)
 				{
 					Entity *mesh = GetEntity(world, it->placedSerial);
-					mesh->physicalPos += inc;
+					EditorMoveEntityIfPossible(world, mesh, mesh->physicalPos + inc);
 				}
 
 			}break;

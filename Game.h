@@ -180,7 +180,7 @@ static GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHa
 
 	ConvertNewAssets(&ret.assetHandler, ret.currentStateArena, ret.workingArena);
 	
-	LoadLevel(CreateString("weAreNumberOne"), &ret.unitHandler, &ret.world, ret.currentStateArena, &ret.assetHandler, &ret.editor);
+	LoadLevel(CreateString("bridge"), &ret.unitHandler, &ret.world, ret.currentStateArena, &ret.assetHandler, &ret.editor);
 
 	GameGoToMode(&ret, Game_Execute);
 
