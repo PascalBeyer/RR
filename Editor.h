@@ -249,7 +249,7 @@ static EulerAngle QuaternionToEulerAngle(Quaternion q)
 	return ret;
 }
 
-static bool LoadLevel(String fileName, UnitHandler *unitHandler, World *world, Arena *currentStateArena, AssetHandler *assetHandler, Editor *editor);
+static bool LoadLevel(String fileName, World *world, Arena *currentStateArena, AssetHandler *assetHandler, Editor *editor);
 
 static Quaternion EulerAngleToQuaternion(EulerAngle angle)
 {
@@ -614,7 +614,7 @@ static void EditorGoToNone(Editor *editor)
 #if 0
 	For(editor->hotEntityInfos)
 	{
-		Entity *e = GetEntity(level, it->placedSerial);
+		Entity *e = GetEntities(level, it->placedSerial);
 		it->initialPos			= e->pos;
 		it->initialScale		= e->scale;
 		it->initialOrientation	= e->orientation;
@@ -723,7 +723,7 @@ static void EditorSelectNothing(Editor *editor)
 	Clear(&editor->hotEntityInfos);
 }
 
-static bool WriteLevel(char *fileName, World world, UnitHandler unitHandler, AssetHandler *assetHandler);
+static bool WriteLevel(char *fileName, World world, AssetHandler *assetHandler);
 
 static EditorSelect EntityToEditorSelect(Entity *e)
 {
@@ -778,7 +778,6 @@ static void EditorPerformUndo(Editor *editor, World *world)
 		Assert(toReverse.preModifyMesh.placedSerial == toReverse.postModifyMesh.placedSerial);
 		Entity *mesh = GetEntity(world, toReverse.preModifyMesh.placedSerial);
 
-		RemoveEntityFromTree(world, mesh);
 		mesh->color			= data.color;
 		mesh->physicalPos	= data.physicalPos;
 		mesh->offset		= data.offset;
@@ -786,7 +785,6 @@ static void EditorPerformUndo(Editor *editor, World *world)
 		mesh->scale			= data.scale;
 		mesh->type			= data.type;
 		mesh->flags			= data.flags;
-		InsertEntity(world, mesh);
 	}break;
 	case EditorAction_DeleteMesh: 
 	{
@@ -829,7 +827,6 @@ static void EditorPerformRedo(Editor *editor, World *world)
 		u32 serial = toReverse.postModifyMesh.placedSerial;
 		Assert(toReverse.postModifyMesh.placedSerial == toReverse.postModifyMesh.placedSerial);
 		Entity *e = GetEntity(world, toReverse.postModifyMesh.placedSerial);
-		RemoveEntityFromTree(world, e);
 		e->color = data.color;
 		e->physicalPos = data.physicalPos;
 		e->offset = data.offset;
@@ -837,7 +834,6 @@ static void EditorPerformRedo(Editor *editor, World *world)
 		e->scale = data.scale;
 		e->type = data.type;
 		e->flags = data.flags;
-		InsertEntity(world, e);
 	}break;
 	case EditorAction_DeleteMesh:
 	{
@@ -1044,7 +1040,7 @@ static void FrameColorSelection(Editor *editor, World *world, v4 editorMeshSelec
 }
 
 // todo maybe make all this matrix stuff more consitent
-static void UpdateEditor(Editor *editor, UnitHandler *unitHandler, World *world, Input input)
+static void UpdateEditor(Editor *editor, World *world, Input input)
 {
 	Camera *cam = &world->camera;
 	
@@ -1095,14 +1091,11 @@ static void UpdateEditor(Editor *editor, UnitHandler *unitHandler, World *world,
 		{
 			Entity *e = GetEntity(world, it->placedSerial);
 
-			RemoveEntityFromTree(world, e);
-
 			v4 relPos = V4(GetRenderPos(*e) - averagePos, 1.0f);
 			e->orientation = q * e->orientation;
 			v3 pos = averagePos + (mat * relPos).xyz;
 			e->physicalPos = RoundToTileMap(pos);
 			e->offset = pos - V3(e->physicalPos);
-			InsertEntity(world, e);
 		}
 	}break;
 	case EditorState_Scaling:
@@ -1130,13 +1123,9 @@ static void UpdateEditor(Editor *editor, UnitHandler *unitHandler, World *world,
 			v3 delta = GetRenderPos(*mesh) - averagePos;
 			v3 newPos = exp * delta + averagePos;
 
-			RemoveEntityFromTree(world, mesh);
-
 			mesh->physicalPos = RoundToTileMap(newPos);
 			mesh->offset = newPos - V3(mesh->physicalPos);
 			mesh->scale *= exp;
-
-			InsertEntity(world, mesh);
 		}
 	}break;
 	case EditorState_Moving:
@@ -1161,12 +1150,8 @@ static void UpdateEditor(Editor *editor, UnitHandler *unitHandler, World *world,
 
 			v3 pos = GetRenderPos(*mesh) + realDelta;
 
-			RemoveEntityFromTree(world, mesh);
-
 			mesh->physicalPos = RoundToTileMap(pos);
 			mesh->offset = pos - V3(mesh->physicalPos);
-
-			InsertEntity(world, mesh);
 		}
 
 	}break;
@@ -1206,7 +1191,7 @@ static void ResetEditor(Editor *editor)
 
 }
 
-static void NewLevel(UnitHandler *unitHandler, World *world, Editor *editor, Arena *currentStateArena)
+static void NewLevel(World *world, Editor *editor, Arena *currentStateArena)
 {
 	UnloadLevel(world);
 	ResetEditor(editor);

@@ -15,6 +15,7 @@ static World InitWorld(Arena *currentStateArena, AssetHandler *assetHandler, u32
 	ret.entities = EntityCreateDynamicArray();
 	ret.entitySerializer = 0;
 	ret.entitySerialMap = u32CreateDynamicArray();
+	ret.t = 0.0f;
 
 	b32 success = true;
 	ret.blockMeshId = RegisterAsset(assetHandler, Asset_Mesh, "block.mesh", &success);
@@ -24,7 +25,7 @@ static World InitWorld(Arena *currentStateArena, AssetHandler *assetHandler, u32
 	return ret;
 }
 
-static bool WriteLevel(char *fileName, World world, UnitHandler unitHandler, AssetHandler *assetHandler)
+static bool WriteLevel(char *fileName, World world, AssetHandler *assetHandler)
 {
 	u8 *mem = PushData(frameArena, u8, 0);
 
@@ -62,107 +63,6 @@ static bool WriteLevel(char *fileName, World world, UnitHandler unitHandler, Ass
 }
 
 #define PullOff(type) *(type *)at; at += sizeof(type);
-static bool LoadLevelV1(u8 *at, UnitHandler *unitHandler, World *world, AssetHandler *assetHandler, Editor *editor, Arena *currentStateArena)
-{
-	u32 tileMapWidth = PullOff(u32);
-	u32 tileMapHeight = PullOff(u32);
-
-	//Assert(sizeof(Tile) == 8);
-	//TileArray tiles = PushArray(currentStateArena, Tile, tileMapHeight * tileMapWidth);
-	at += 8 * tileMapHeight * tileMapWidth;
-
-	u32 meshAmount = PullOff(u32);
-	Level *level = &world->loadedLevel;
-	level->entities = PushArray(currentStateArena, EntityCopyData, meshAmount);
-
-	for (u32 i = 0; i < meshAmount; i++)
-	{
-		Quaternion orientation = PullOff(Quaternion);
-		v3 pos = PullOff(v3);
-		v4 color = PullOff(v4);
-		f32 scale = PullOff(f32);
-
-		u32 nameLength = PullOff(u32);
-		String name = CreateString((Char *)at, nameLength);
-		u32 meshId = RegisterAsset(assetHandler, Asset_Mesh, name);
-		at += nameLength * sizeof(Char);
-
-		CreateEntity(world, meshId, scale, orientation, SnapToTileMap(pos), pos - V3(SnapToTileMap(pos)), color, Entity_None, 0);
-	}
-
-	u32 amountOfUnits = PullOff(u32);
-	Assert(amountOfUnits < MaxUnitCount);
-
-#if 0
-	for (u32 i = 0; i < amountOfUnits; i++)
-	{
-		v2i pos = PullOff(v2i);
-		Quaternion q = PullOff(Quaternion);
-		CreateDude(unitHandler, pos, q);
-	}
-#endif
-
-	ResetEditor(editor);
-
-	editor->focusPoint = i12(ScreenZeroToOneToInGame(level->camera, V2(0.5f, 0.5f)));
-	level->camera = level->camera;
-	level->blocksNeeded = 10000;
-
-	return true;
-}
-
-static bool LoadLevelV2(u8 *at, UnitHandler *unitHandler, World *world, AssetHandler *assetHandler, Editor *editor, Arena *currentStateArena)
-{
-	Level *level = &world->loadedLevel;
-
-	level->lightSource = PullOff(v3);
-
-	level->camera.pos = PullOff(v3);
-	level->camera.b1 = PullOff(v3);
-	level->camera.b2 = PullOff(v3);
-	level->camera.b3 = PullOff(v3);
-	level->camera.aspectRatio = PullOff(f32);
-	level->camera.focalLength = PullOff(f32);
-
-	u32 meshAmount = PullOff(u32);
-
-	level->entities = PushArray(currentStateArena, EntityCopyData, meshAmount);
-
-	for (u32 i = 0; i < meshAmount; i++)
-	{
-		Quaternion orientation = PullOff(Quaternion);
-		v3 pos = PullOff(v3);
-		v4 color = PullOff(v4);
-		f32 scale = PullOff(f32);
-
-		u32 nameLength = PullOff(u32);
-		String name = CreateString((Char *)at, nameLength);
-		u32 meshId = RegisterAsset(assetHandler, Asset_Mesh, name);
-		at += nameLength * sizeof(Char);
-
-		CreateEntity(world, meshId, scale, orientation, SnapToTileMap(pos), pos - V3(SnapToTileMap(pos)), color, Entity_None, 0);
-	}
-
-	u32 amountOfUnits = PullOff(u32);
-	Assert(amountOfUnits < MaxUnitCount);
-
-#if 0
-	for (u32 i = 0; i < amountOfUnits; i++)
-	{
-		v2i pos = PullOff(v2i);
-		Quaternion q = PullOff(Quaternion);
-		CreateDude(unitHandler, pos, q);
-	}
-#endif
-
-	ResetEditor(editor);
-
-	editor->focusPoint = i12(ScreenZeroToOneToInGame(level->camera, V2(0.5f, 0.5f)));
-	world->debugCamera = world->camera = level->camera;
-
-	level->blocksNeeded = 10000;
-	return true;
-}
 
 static EntityCopyData EntityToData(Entity e)
 {
@@ -180,7 +80,7 @@ static EntityCopyData EntityToData(Entity e)
 
 }
 
-static bool LoadLevelV3(u8 *at, UnitHandler *unitHandler, World *world, AssetHandler *assetHandler, Editor *editor, Arena *currentStateArena)
+static bool LoadLevelV3(u8 *at, World *world, AssetHandler *assetHandler, Editor *editor, Arena *currentStateArena)
 {
 	Level *level = &world->loadedLevel;
 
@@ -213,35 +113,9 @@ static bool LoadLevelV3(u8 *at, UnitHandler *unitHandler, World *world, AssetHan
 
 		v3i physicalPos = SnapToTileMap(pos); 
 		v3 offset = pos - V3(SnapToTileMap(pos));
-		Entity e;
-		switch (entityType)
-		{
-		case Entity_Wall:
-		{
-			e = CreateWall(world, meshId, physicalPos, scale, orientation, offset, color);
-		}break;
-		case Entity_Dude:
-		{
-			e = CreateDude(world, unitHandler, physicalPos, scale, orientation, offset, color);
-		}break;
-		case Entity_Block:
-		{
-			e = CreateBlock(world, physicalPos, scale, orientation, offset, color);
-		}break;
-		case Entity_Goal:
-		{
-			e = CreateGoal(world, meshId, physicalPos, scale, orientation, offset, color);
-		}break;
-		case Entity_Spawner:
-		{
-			e = CreateSpawner(world, meshId, physicalPos, scale, orientation, offset, color);
-		}break;
-		case Entity_None:
-		{
-			e = CreateEntity(world, meshId, scale, orientation, physicalPos, offset, color, Entity_None, 0);
-		}break;
-		InvalidDefaultCase;
-		}
+
+		Entity e = CreateEntity(world, entityType, meshId, physicalPos, scale, orientation, offset, color, 0);
+
 		*it = EntityToData(e);
 
 	}
@@ -255,7 +129,7 @@ static bool LoadLevelV3(u8 *at, UnitHandler *unitHandler, World *world, AssetHan
 	return true;
 }
 
-static bool LoadLevelV4(u8 *at, UnitHandler *unitHandler, World *world, AssetHandler *assetHandler, Editor *editor, Arena *currentStateArena)
+static bool LoadLevelV4(u8 *at, World *world, AssetHandler *assetHandler, Editor *editor, Arena *currentStateArena)
 {
 	Level *level = &world->loadedLevel;
 
@@ -287,35 +161,7 @@ static bool LoadLevelV4(u8 *at, UnitHandler *unitHandler, World *world, AssetHan
 		u32 meshId = RegisterAsset(assetHandler, Asset_Mesh, name);
 		at += nameLength * sizeof(Char);
 
-		Entity e;
-		switch (entityType)
-		{
-		case Entity_Wall:
-		{
-			e = CreateWall(world, meshId, physicalPos, scale, orientation, offset, color);
-		}break;
-		case Entity_Dude:
-		{
-			e = CreateDude(world, unitHandler, physicalPos, scale, orientation, offset, color);
-		}break;
-		case Entity_Block:
-		{
-			e = CreateBlock(world, physicalPos, scale, orientation, offset, color);
-		}break;
-		case Entity_Goal:
-		{
-			e = CreateGoal(world, meshId, physicalPos, scale, orientation, offset, color);
-		}break;
-		case Entity_Spawner:
-		{
-			e = CreateSpawner(world, meshId, physicalPos, scale, orientation, offset, color);
-		}break;
-		case Entity_None:
-		{
-			e = CreateEntity(world, meshId, scale, orientation, physicalPos, offset, color, Entity_None, 0);
-		}break;
-		InvalidDefaultCase;
-		}
+		Entity e = CreateEntity(world, entityType, meshId, physicalPos, scale, orientation, offset, color, 0);
 		*it = EntityToData(e);
 	}
 
@@ -330,7 +176,7 @@ static bool LoadLevelV4(u8 *at, UnitHandler *unitHandler, World *world, AssetHan
 }
 
 
-static bool LoadLevel(String fileName, UnitHandler *unitHandler, World *world, Arena *currentStateArena, AssetHandler *assetHandler, Editor *editor)
+static bool LoadLevel(String fileName, World *world, Arena *currentStateArena, AssetHandler *assetHandler, Editor *editor)
 {
 	File file = LoadFile(FormatCString("level/%s.level", fileName));
 	if (!file.fileSize) return false;
@@ -338,7 +184,6 @@ static bool LoadLevel(String fileName, UnitHandler *unitHandler, World *world, A
 
 	UnloadLevel(world);
 	ResetWorld(world);
-	ResetUnitHandler(unitHandler);
 	ResetEditor(editor);
 
 	u8 *at = (u8 *)file.memory;
@@ -350,19 +195,19 @@ static bool LoadLevel(String fileName, UnitHandler *unitHandler, World *world, A
 	{
 	case 1: 
 	{
-		return LoadLevelV1(at, unitHandler, world, assetHandler, editor, currentStateArena);
+		Die;
 	}break;
 	case 2:
 	{
-		return LoadLevelV2(at, unitHandler, world, assetHandler, editor, currentStateArena);
+		Die;
 	}break;
 	case 3:
 	{
-		return LoadLevelV3(at, unitHandler, world, assetHandler, editor, currentStateArena);
+		return LoadLevelV3(at, world, assetHandler, editor, currentStateArena);
 	}break;
 	case 4:
 	{
-		return LoadLevelV4(at, unitHandler, world, assetHandler, editor, currentStateArena);
+		return LoadLevelV4(at, world, assetHandler, editor, currentStateArena);
 	}break;
 	InvalidDefaultCase;
 	}

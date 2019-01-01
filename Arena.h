@@ -22,6 +22,7 @@ static Arena *frameArena;
 
 static u8 *PopStruct_(Arena *arena, u32 sizeOfType)
 {
+	Assert((u32)(arena->current - arena->base) > sizeOfType);
 	arena->current -= sizeOfType;
 	return arena->current;
 }
@@ -135,6 +136,7 @@ static BuddyAllocator CreateBuddyAllocator(Arena *arena, u32 size, u32 minimumBl
 
 static void *BuddyAlloc(BuddyAllocator *alloc, u32 size)
 {
+	TimedBlock;
 	Assert(size);// maybe we should allow this and return NULL.
 	Assert(alloc);
 	Assert(size < alloc->size); 
@@ -196,6 +198,7 @@ static void *BuddyAlloc(BuddyAllocator *alloc, u32 size)
 
 static void BuddyFree(BuddyAllocator *buddy, void *_mem)
 {
+	TimedBlock;
 	u8 *mem = (u8 *)_mem;
 	Assert(buddy->base + buddy->size > mem);
 	u32 offset = (u32)(mem - buddy->base);

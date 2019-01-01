@@ -18,6 +18,7 @@ detect whether or not a in the path creator suggested move is possible. // done?
 escape to close console. // done?
 we could do it so you can pass in NULL instead of exe, so the path creator does not need to know. // done?
 FIX EDITOR PASTE + MAKE EDITOR ARROW KEYS BE DEPENDEndent on cam direction. // done?
+sting allinement in FormatString. // done?
 
 Asset:
 how to handle textured and untextured entities? Should there be such a thing as untextured entity, probably not.
@@ -97,9 +98,10 @@ redo lighting, kd-tree for AABB's?
 
 get rid of meshes having color? lighting should go into a seperate buffer that stores those colors
 shift click for multi walk / control for unit select
-victory currupts position right now  //does it tho?
+victory currupts position right now, if we are too fast.
 
 upscale bmps
+string.h memcpy
 
 teleporters, moving platforms, ramps?
 blocks on dudes? maybe only on blocks?, but what should be the fail? kill the guy?
@@ -115,17 +117,21 @@ clear flags in the begining, but do the sim at the end? // done?
 what should happen?
 guy _waits_ on a thing that moves									-> guy stays on the thing
 guy _waits_ on a thing and gets pushed into a wall that is one up	-> guy maintains his position and maybe falls
-guy _moves_ from a moving thing										-> motion should be relative
+guy _moves_ from a moving thing										-> motion should be absolute.
 stack of falling things												-> things should fall together
 guy _moves_ from a falling thing									-> guy should move as if the thing was stationary
 guy _moves_ from a falling thing with something on his head			-> the thing on his head should get carried
 
-stacks all moving in the same direction should be fast
-pushing a stone while being moved?									-> motion should be relative
+stacks all moving in the same direction should be fast?
+pushing a stone while being moved?									-> motion should be absolute
 
 tried relative motion, it feels really weird, and everything is really _special casey_
 
--> falling flag,  that gets overwritten by movement.
 -> things can only move, if they are supported
 
+splitt how editor and game works.
 
+check sim loop for DF array could be replaced by a static build.
+
+
+XForm states : GetFromMatrix in jBlow: Animation Playback part 2 37 min.

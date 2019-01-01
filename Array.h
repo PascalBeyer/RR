@@ -15,6 +15,8 @@ DefineArray(u16);
 typedef u16* u16Ptr;
 DefineDynamicArray(u16Ptr);
 
+DefineArray(f32);
+DefineArray(f32Array);
 
 DefineArray(v3);
 DefineArray(v2);
@@ -23,6 +25,9 @@ DefineArray(v4);
 DefineDynamicArray(v2);
 DefineDynamicArray(v3);
 DefineDynamicArray(v4);
+
+DefineArray(m4x4);
+DefineArray(m4x4Array);
 
 
 #endif // !RR_ARRAY

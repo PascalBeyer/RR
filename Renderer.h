@@ -323,10 +323,8 @@ static void PushTriangle(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 color)
 	PushTriangle(rg, p1, p2, p3, V4(1.0f, color));
 }
 
-static void PushTriangleMesh(RenderGroup *rg, u32 meshId, Quaternion orientation, v3 pos, f32 scale, v4 scaleColor)
+static void PushTriangleMesh(RenderGroup *rg, TriangleMesh *mesh, Quaternion orientation, v3 pos, f32 scale, v4 scaleColor)
 {
-	TriangleMesh *mesh = GetMesh(rg->assetHandler, meshId);
-
 	if (!mesh) return; // todo think about this, we want this if we redo our mesh write
 
 	EntryTriangleMesh *meshHeader = PushRenderEntry(EntryTriangleMesh);
@@ -341,6 +339,14 @@ static void PushTriangleMesh(RenderGroup *rg, u32 meshId, Quaternion orientation
 	meshHeader->pos = pos;
 	meshHeader->scale = scale;
 	meshHeader->scaleColor = scaleColor;
+}
+
+
+static void PushTriangleMesh(RenderGroup *rg, u32 meshId, Quaternion orientation, v3 pos, f32 scale, v4 scaleColor)
+{
+	TriangleMesh *mesh = GetMesh(rg->assetHandler, meshId);
+
+	PushTriangleMesh(rg, mesh, orientation, pos, scale, scaleColor);
 }
 
 static void PushLine(RenderGroup *rg, v3 p1, v3 p2, u32 color = 0xFFFFFFFF)

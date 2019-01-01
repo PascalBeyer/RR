@@ -1,5 +1,5 @@
 
-static void PlacingUnitsHandleEvent(ExecuteData *exe, World *world, UnitHandler *unitHandler, AssetHandler *assetHandler, KeyStateMessage message, Input input)
+static void PlacingUnitsHandleEvent(ExecuteData *exe, World *world, AssetHandler *assetHandler, KeyStateMessage message, Input input)
 {
 	if (message.flag & KeyState_ReleasedThisFrame)
 	{
@@ -11,23 +11,20 @@ static void PlacingUnitsHandleEvent(ExecuteData *exe, World *world, UnitHandler 
 			Entity *clickedE = GetHotEntity(world, assetHandler, input.mouseZeroToOne); 
 			if (clickedE)
 			{
-				Quaternion q = { 1, 1, 0, 0 };
-
 				v3i posToPlace = clickedE->physicalPos + V3i(0, 0, -1);
 				Entity *e = exe->placingUnits.unitsToPlace[0];
 				e->physicalPos = posToPlace;
 				
-				if (!InsertEntity(world, e))
+				InsertEntity(world, e);
+				
+				e->initialPos = e->physicalPos;
+				UnorderedRemove(&exe->placingUnits.unitsToPlace, 0);
+				if (!exe->placingUnits.unitsToPlace)
 				{
-					e->initialPos = e->physicalPos;
-					UnorderedRemove(&exe->placingUnits.unitsToPlace, 0);
-					if (!exe->placingUnits.unitsToPlace)
-					{
-						ChangeExecuteState(world, unitHandler, exe, Execute_PathCreator);
-						exe->pathCreator.hotUnit = GetUnitIndex(e);
-						exe->pathCreator.state = PathCreator_CreatingPath;
-						return;
-					}
+					ChangeExecuteState(world, exe, Execute_PathCreator);
+					exe->pathCreator.hotUnit = e->serialNumber;
+					exe->pathCreator.state = PathCreator_CreatingPath;
+					return;
 				}
 			}
 		}break;
@@ -36,7 +33,7 @@ static void PlacingUnitsHandleEvent(ExecuteData *exe, World *world, UnitHandler 
 }
 
 
-static void PathCreatorHandleEvent(World *world, ExecuteData *exe, UnitHandler *unitHandler, AssetHandler *assetHandler, KeyStateMessage message, Input input)
+static void PathCreatorHandleEvent(World *world, ExecuteData *exe, AssetHandler *assetHandler, KeyStateMessage message, Input input)
 {
 	Camera cam = world->camera;
 	PathCreator *pathCreator = &exe->pathCreator;
@@ -50,19 +47,19 @@ static void PathCreatorHandleEvent(World *world, ExecuteData *exe, UnitHandler *
 			{
 			case Key_leftMouse:
 			{
-				u32 unitIndex = GetHotUnit(world, unitHandler, assetHandler, input.mouseZeroToOne, cam);
+				u32 unitIndex = GetHotUnit(world, assetHandler, input.mouseZeroToOne, cam);
 
-				if (unitIndex >= unitHandler->amount)
+				if (unitIndex == 0xFFFFFFFF)
 				{
 					break;
 				}
 
+				Entity *e = GetEntity(world, unitIndex);
+
 				if (message.flag & KeyState_ControlDown)
 				{
-					u32 serial = unitHandler->entitySerials[unitIndex];
-					Entity *e = GetEntity(world, serial);
 					RemoveEntityFromTree(world, e);
-					ChangeExecuteState(world, unitHandler, exe, Execute_PlacingUnits);
+					ChangeExecuteState(world, exe, Execute_PlacingUnits);
 					ArrayAdd(&exe->placingUnits.unitsToPlace, e);
 
 					break;
@@ -73,21 +70,21 @@ static void PathCreatorHandleEvent(World *world, ExecuteData *exe, UnitHandler *
 
 				ResetWorld(world);
 				
-				For(unitHandler->programs[unitIndex])
+				For(e->instructions)
 				{
-					AdvanceGameState(world, unitHandler, exe, false);
+					AdvanceGameState(world, exe, false);
 				}
 			}break;
 			case Key_F6:
 			{
-				ChangeExecuteState(world, unitHandler, exe, Execute_Simulation);
+				ChangeExecuteState(world, exe, Execute_Simulation);
 			}break;
 			}
 		}break;
 
 		case PathCreator_CreatingPath:
 		{
-			Assert(pathCreator->hotUnit < unitHandler->amount);
+			Assert(pathCreator->hotUnit != 0xFFFFFFFF);
 
 			switch (message.key)
 			{
@@ -102,10 +99,8 @@ static void PathCreatorHandleEvent(World *world, ExecuteData *exe, UnitHandler *
 					break;
 				}
 
-				auto program = &unitHandler->programs[pathCreator->hotUnit];
-				u32 serial = unitHandler->entitySerials[pathCreator->hotUnit];
-				Entity *entity = GetEntity(world, serial);
-
+				Entity *entity = GetEntity(world, pathCreator->hotUnit);
+				auto program = &entity->instructions;
 				if (PointInRectangle(pathCreator->resetUnitButton, input.mouseZeroToOne))
 				{
 					program->amount = 0;
@@ -113,49 +108,49 @@ static void PathCreatorHandleEvent(World *world, ExecuteData *exe, UnitHandler *
 				}
 
 				v3 p = ScreenZeroToOneToZ(cam, input.mouseZeroToOne, entity->physicalPos.z);
-				v3 d = p - V3(GetPhysicalPositionAfterMove(entity));
+				v3 d = p - GetRenderPos(*entity);
 
 				i32 xSign = (d.x > 0) ? 1 : -1;
 				i32 ySign = (d.y > 0) ? 1 : -1;
 
 				if (BoxNorm(d) < 0.5f)
 				{
-					AddInstruction(program, Unit_Wait);
+					ArrayAdd(program, Unit_Wait);
 				}
 				else if ((f32)ySign * d.y > (f32)xSign * d.x)
 				{
 					if (ySign > 0)
 					{
-						AddInstruction(program, Unit_MoveUp);
+						ArrayAdd(program, Unit_MoveUp);
 					}
 					else
 					{
-						AddInstruction(program, Unit_MoveDown);
+						ArrayAdd(program, Unit_MoveDown);
 					}
 				}
 				else
 				{
 					if (xSign > 0)
 					{
-						AddInstruction(program, Unit_MoveRight);
+						ArrayAdd(program, Unit_MoveRight);
 					}
 					else
 					{
-						AddInstruction(program, Unit_MoveLeft);
+						ArrayAdd(program, Unit_MoveLeft);
 					}
 				}
 
 			}break;
 			case Key_rightMouse:
 			{
-				Assert(pathCreator->hotUnit < unitHandler->amount);
-				auto program = &unitHandler->programs[pathCreator->hotUnit];
+				Entity *e = GetEntity(world, pathCreator->hotUnit);
+				auto program = &e->instructions;
 				if (!program->amount) break;
 				--program->amount;
 			}break;
 			case Key_F6:
 			{
-				ChangeExecuteState(world, unitHandler, exe, Execute_Simulation);
+				ChangeExecuteState(world, exe, Execute_Simulation);
 			}break;
 
 			}
@@ -184,9 +179,9 @@ static void SimHandleEvents(World *world, ExecuteData *exe, KeyStateMessage mess
 		{
 			sim->timeScale = sim->timeScale / 2.0f;
 		}break;
-		case Key_escape:
+		case Key_F6:
 		{
-			ChangeExecuteState(world, NULL, exe, Execute_PathCreator);
+			ChangeExecuteState(world, exe, Execute_PathCreator);
 		}break;
 		}
 	}
@@ -197,17 +192,17 @@ static void VictoryHandleEvents(ExecuteData *exe, World *world, KeyStateMessage 
 {
 	if (message.flag & KeyState_PressedThisFrame)
 	{
-		ChangeExecuteState(world, NULL, exe, Execute_PathCreator);
+		ChangeExecuteState(world, exe, Execute_PathCreator);
 	}
 }
 
-static void ExecuteHandleEvents(World *world, UnitHandler *unitHandler, AssetHandler *assetHandler, ExecuteData *exe, KeyStateMessage message, Input input)
+static void ExecuteHandleEvents(World *world, AssetHandler *assetHandler, ExecuteData *exe, KeyStateMessage message, Input input)
 {
 	switch (exe->state)
 	{
 	case Execute_PlacingUnits:
 	{
-		PlacingUnitsHandleEvent(exe, world, unitHandler, assetHandler, message, input);
+		PlacingUnitsHandleEvent(exe, world, assetHandler, message, input);
 	}break;
 	case Execute_Simulation:
 	{
@@ -215,7 +210,7 @@ static void ExecuteHandleEvents(World *world, UnitHandler *unitHandler, AssetHan
 	}break;
 	case Execute_PathCreator:
 	{
-		PathCreatorHandleEvent(world, exe, unitHandler, assetHandler, message, input);
+		PathCreatorHandleEvent(world, exe, assetHandler, message, input);
 	}break;
 	case Execute_Victory:
 	{
@@ -390,21 +385,7 @@ static v3i AdjustForCamera(Camera cam, UnitInstruction intendedDir)
 	return V3i();
 }
 
-static b32 EditorMoveEntityIfPossible(World *world, Entity *e, v3i to)
-{
-	RemoveEntityFromTree(world, e);
-	v3i posSave = e->physicalPos;
-	e->physicalPos = to;
-	if (InsertEntity(world, e))
-	{
-		e->physicalPos = posSave;
-		InsertEntity(world, e);
-		return false;
-	}
-	return true;
-}
-
-static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *world, AssetHandler *assetHandler, KeyStateMessage message, Input input, Arena *currentStateArena)
+static void EditorHandleEvents(Editor *editor, World *world, AssetHandler *assetHandler, KeyStateMessage message, Input input, Arena *currentStateArena)
 {
 	Camera *cam = &world->camera;
 	For(editor->elements)
@@ -684,7 +665,7 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 				For(editor->hotEntityInfos)
 				{
 					Entity *mesh = GetEntity(world, it->placedSerial);
-					EditorMoveEntityIfPossible(world, mesh, mesh->physicalPos + inc);
+					mesh->physicalPos += inc;
 				}
 			}break;
 			case Key_right:
@@ -693,7 +674,7 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 				For(editor->hotEntityInfos)
 				{
 					Entity *mesh = GetEntity(world, it->placedSerial);
-					EditorMoveEntityIfPossible(world, mesh, mesh->physicalPos + inc);
+					mesh->physicalPos += inc;
 				}
 
 			}break;
@@ -704,7 +685,7 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 					For(editor->hotEntityInfos)
 					{
 						Entity *mesh = GetEntity(world, it->placedSerial);
-						EditorMoveEntityIfPossible(world, mesh, mesh->physicalPos + V3i(0, 0, -1));
+						mesh->physicalPos += V3i(0, 0, -1);
 					}
 					break;
 				}
@@ -713,7 +694,7 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 				For(editor->hotEntityInfos)
 				{
 					Entity *mesh = GetEntity(world, it->placedSerial);
-					EditorMoveEntityIfPossible(world, mesh, mesh->physicalPos + inc);
+					mesh->physicalPos += inc;
 				}
 
 			}break;
@@ -724,7 +705,7 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 					For(editor->hotEntityInfos)
 					{
 						Entity *mesh = GetEntity(world, it->placedSerial);
-						EditorMoveEntityIfPossible(world, mesh, mesh->physicalPos + V3i(0, 0, 1));
+						mesh->physicalPos += V3i(0, 0, 1);
 					}
 					break;
 				}
@@ -733,7 +714,7 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 				For(editor->hotEntityInfos)
 				{
 					Entity *mesh = GetEntity(world, it->placedSerial);
-					EditorMoveEntityIfPossible(world, mesh, mesh->physicalPos + inc);
+					mesh->physicalPos += inc;
 				}
 
 			}break;
@@ -762,7 +743,7 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 					}
 
 					char *fileName = FormatCString("level/%s.level", world->loadedLevel.name);
-					if (WriteLevel(fileName, *world, *unitHandler, assetHandler))
+					if (WriteLevel(fileName, *world, assetHandler))
 					{
 						ConsoleOutput("Saved!");
 					}
@@ -1190,7 +1171,8 @@ static void EditorHandleEvents(Editor *editor, UnitHandler *unitHandler, World *
 				{
 					v3i pos = it->physicalPos + clickedTile;
 					v3 offset = editor->snapToTileMap ? V3() : (it->offset + clickedOffset);
-					Entity mesh = CreateEntity(world, it->meshId, it->scale, it->orientation, pos, offset, it->color, it->type, it->flags);
+
+					Entity mesh = CreateEntity(world, it->type, it->meshId, pos, it->scale, it->orientation, offset, it->color, it->flags);
 					EditorSelect add;
 					add.initialOrientation = mesh.orientation;
 					add.initialPhysicalPos = mesh.physicalPos;

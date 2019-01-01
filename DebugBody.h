@@ -114,6 +114,7 @@ static void InitDebug()
 
 	s->tweekers = TweekerCreateDynamicArray();
 	s->firstFrame = true;
+	s->lastFrameTime = 1.0f;
 
 	for (u32 i = 0; i < DEBUG_AMOUNT_OF_DEBUG_FRAMES; i++)
 	{
@@ -147,7 +148,7 @@ static bool DebugHandleEvents(KeyStateMessage message, Input input)
 	return false;
 }
 
-static void CollectDebugRecords()
+static void CollectDebugRecords(f32 frameTime)
 {
 	TimedBlock;
 	if (globalDebugState.firstFrame) return;
@@ -159,8 +160,14 @@ static void CollectDebugRecords()
 	u32 amountOfEventsToHandle = globalDebugState.amountOfEventsLastFrame;
 	DebugEvent *firstEvent = globalDebugState.events[thisFrameIndex];
 	u64 startCycles = firstEvent->cycles;
-	
+	s->lastFrameTime = frameTime;
+
 	auto frame = s->debugFrames[thisFrameIndex];
+	For(frame.times)
+	{
+		it->cycles = 0;
+		it->hitCount = 0;
+	}
 
 	DeferRestore(globalDebugState.arena);
 	Arena *arena = globalDebugState.arena;
@@ -212,21 +219,47 @@ static void DrawDebugRecords(RenderGroup *rg, Font font, f32 secondsPerFrame, In
 	
 	auto frameInfo = s->debugFrames[thisFrameIndex];
 
-	For(frameInfo.times)
-	{
-		u32 it_index = (u32)(it - frameInfo.times.data);
-		if (!debugInfoArray[it_index].function) continue;
-		String s = FormatString("%c*: %u32cy", debugInfoArray[it_index].function, it->cycles);
-		PushString(rg, V2(0.5f, 0.5f + it_index * debugDisplayBarSize), s, debugDisplayBarSize, font);
-	}
-
 	DebugEvent *firstEvent = globalDebugState.events[thisFrameIndex];
+	DebugEvent *lastEvent = amountOfEventsToHandle ? firstEvent + (amountOfEventsToHandle - 1) : firstEvent;
 
 	DeferRestore(globalDebugState.arena);
 	Arena *arena = globalDebugState.arena;
 
 	u32 startCycles = firstEvent->cycles;
-	f32 amountOfFramesPerCycle = 1.0f / 60000000.0f;
+	u32 endCycles = lastEvent->cycles;
+	u32 deltaCycles = endCycles - startCycles;
+
+	f32 lastFrameTime = s->lastFrameTime;
+
+	f64 secondsPerCycle = deltaCycles ? (f64)lastFrameTime / (f64)deltaCycles : 0.0;
+
+	f32 amountOfTimeToDisplay = Max(4.0f *secondsPerFrame, 1.1f * lastFrameTime);
+
+	f64 amountOfCyclesToDisplay = amountOfTimeToDisplay / secondsPerCycle;
+	
+	
+#if 0
+	FrameTimeInfoArray frameCopy = PushArray(frameArena, FrameTimeInfo, frameInfo.times.amount); // todo can we just sort frameTimeInfo?
+	memcpy(frameCopy.data, frameInfo.times.data, frameInfo.times.amount * sizeof(FrameTimeInfo));
+#endif // todo sort
+
+	PushRectangle(rg, V2(0.1f, 0.2f), 0.75f, debugDisplayBarSize * (f32)frameInfo.times.amount, V4(0.95f, 0.0f, 0.0f, 0.0f));
+
+	For(frameInfo.times)
+	{
+		u32 it_index = (u32)(it - frameInfo.times.data);
+		if (!debugInfoArray[it_index].function) continue;
+		String s = FormatString("%25lbc* %9rbf32ms, %2rbu32hit", debugInfoArray[it_index].function, (f32)((f64)it->cycles * secondsPerCycle * 1000.0), it->hitCount);
+		PushString(rg, V2(0.1f, 0.2f + it_index * debugDisplayBarSize), s, debugDisplayBarSize, font);
+	}
+
+	f64 cycleMult = 1.0 / amountOfCyclesToDisplay;
+
+	for (u32 i = 0; i < 4; i++)
+	{
+		f32 percent = (f32)i * secondsPerFrame / amountOfTimeToDisplay;
+		PushLine(rg, V2(percent, 0.0f), V2(percent, 0.1f));
+	}
 
 	u32 depth = 0;	
 	for (DebugEvent *it = firstEvent; it < firstEvent + amountOfEventsToHandle; it++)
@@ -244,8 +277,8 @@ static void DrawDebugRecords(RenderGroup *rg, Font font, f32 secondsPerFrame, In
 			Assert(e.debugRecordIndex == it->debugRecordIndex);
 
 			u32 cycleD = it->cycles - e.cycles;
-			v2 pos = V2((f32)(e.cycles - startCycles) * amountOfFramesPerCycle, (f32)depth * debugDisplayBarSize);
-			f32 width = (f32)cycleD * amountOfFramesPerCycle;
+			v2 pos = V2((f32)((e.cycles - startCycles) * cycleMult), (f32)(depth * debugDisplayBarSize));
+			f32 width = (f32)(cycleD * cycleMult);
 
 			u32 color = debugInfoArray[it->debugRecordIndex].color;
 			PushRectangle(rg, pos, width, debugDisplayBarSize, color);

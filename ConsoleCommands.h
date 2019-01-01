@@ -55,6 +55,7 @@ static void HelpHelper(StringArray args)
 static void WriteDebugVariables();
 static void WriteSingleTweeker(Tweeker tweeker);
 
+
 // todo : make this need file names
 static void TweekHelper(StringArray args)
 {
@@ -238,14 +239,14 @@ static void SaveLevelHelper(StringArray args)
 {
 	char *fileName = FormatCString("level/%s.level", args[0]);
 
-	WriteLevel(fileName, gameState.world, gameState.unitHandler, &gameState.assetHandler);
+	WriteLevel(fileName, gameState.world, &gameState.assetHandler);
 	gameState.world.loadedLevel.name = CopyString(args[0], gameState.currentStateArena); // todo leak
 	ConsoleOutputError("Done!");
 }
 
 static void LoadLevelHelper(StringArray args)
 {
-	if (LoadLevel(args[0], &gameState.unitHandler, &gameState.world, gameState.currentStateArena, &gameState.assetHandler, &gameState.editor))
+	if (LoadLevel(args[0], &gameState.world, gameState.currentStateArena, &gameState.assetHandler, &gameState.editor))
 	{
 		GameGoToMode(&gameState, Game_Editor);
 		ConsoleOutput("Loaded level %s!", args[0]);
@@ -260,7 +261,6 @@ static void NewLevelHelper(StringArray args)
 	UnloadLevel(&gameState.world);
 	ResetWorld(&gameState.world);
 	ResetEditor(&gameState.editor);
-	ResetUnitHandler(&gameState.unitHandler);
 	
 
 	ConsoleOutput("New Level! Save with 'saveLevel' command.");

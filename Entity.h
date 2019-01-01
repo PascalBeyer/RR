@@ -1,7 +1,6 @@
 #ifndef RR_ENTITY
 #define RR_ENTITY
 
-#define MaxUnitCount 100
 #define MaxUnitInstructions 100
 
 enum EntityType
@@ -16,42 +15,54 @@ enum EntityType
 
 	Entity_Count,
 };
+
 enum EntityFlags
 {
 	EntityFlag_SupportsUnit = 0x1,
 	EntityFlag_BlocksUnit = 0x2,
 	EntityFlag_Dead = 0x4,
 	EntityFlag_PushAble = 0x8,
+	EntityFlag_CanBeCarried = 0x800,
+
 
 	EntityFlag_IsFalling = 0x10,
 	EntityFlag_IsMoving = 0x20,
 	EntityFlag_InTree = 0x40,
-	EntityFlag_MoveResolved = 0x80,
-	EntityFlag_IsSupported = 0x100,
-
+	
 	EntityFlag_IsDynamic = 0x200,
 
 	BlockFlag_TryingToSpawn = 0x400,
-	EntityFlag_QueuedForReset = 0x800,
-
+	
 };
 
 enum InterpolationType
 {
-	Interpolation_Carried,
+	Interpolation_None,
+	Interpolation_Blocked,
 	Interpolation_Push,
+	Interpolation_Carried,
 	Interpolation_Move,
 	Interpolation_Fall,
-	Interpolation_PhaseMove,
+	Interpolation_Teleport,
 };
 
 struct EntityInterpolation
 {
 	InterpolationType type;
-	u32 entityBelow;
-	u32 entityAbove;
 	v3i dir;
 };
+
+enum UnitInstruction
+{
+	Unit_Wait,
+	Unit_MoveUp,
+	Unit_MoveDown,
+	Unit_MoveLeft,
+	Unit_MoveRight,
+};
+
+DefineDynamicArray(UnitInstruction);
+
 
 struct Entity
 {
@@ -69,10 +80,23 @@ struct Entity
 
 	EntityType type;
 	u64 flags;
-	u64 temporaryFlags;
 
 	EntityInterpolation interpolation;
+
+	union
+	{
+		UnitInstructionDynamicArray instructions;
+	};
+	
 };
+
+typedef Entity* EntityPtr;
+
+DefineDynamicArray(Entity);
+DefineDynamicArray(EntityPtr);
+DefineArray(Entity);
+DefineArray(EntityPtr);
+DefineDFArray(EntityPtr);
 
 static v3 GetRenderPos(Entity e)
 {
@@ -85,21 +109,43 @@ static v3 GetRenderPos(Entity e, f32 interpolationT)
 	f32 t = interpolationT;
 	v3 moveOffset = V3();
 	
-	if (e.temporaryFlags & EntityFlag_IsMoving)
+	if (e.flags & EntityFlag_IsMoving)
 	{
-		v3 delta = -V3(e.interpolation.dir);
-		f32 ease = -2.0f * t * t * t + 3.0f * t * t;
-		moveOffset = (1.0f - ease) * delta;
+		switch (e.interpolation.type)
+		{
+		case Interpolation_Carried:
+		case Interpolation_Move:
+		case Interpolation_Push:
+		{
+			v3 delta = -V3(e.interpolation.dir);
+			f32 ease = -2.0f * t * t * t + 3.0f * t * t;
+			moveOffset = (1.0f - ease) * delta;
+		}break;
+		case Interpolation_Fall:
+		{
+			v3 delta = -V3(e.interpolation.dir);
+			f32 lin = 1.0f - t;
+			moveOffset = lin * delta;
+		}break;
+		case Interpolation_Blocked:
+		{
+			v3 delta = V3(e.interpolation.dir);
+			f32 ease = t * (1.0f - t);
+			moveOffset = ease * delta;
+		}break;
+		case Interpolation_Teleport:
+		{
+			v3 delta = -V3(e.interpolation.dir);
+			f32 ease = (t < 0.5f);
+			moveOffset = ease * delta;
+		}break;
+		InvalidDefaultCase;
+		}
 	}
 
 	return V3(e.physicalPos) + e.offset + moveOffset;
 }
 
-typedef Entity* EntityPtr;
-
-DefineDynamicArray(Entity);
-DefineDynamicArray(EntityPtr);
-DefineArray(Entity);
 
 struct EntityCopyData
 {
@@ -295,7 +341,8 @@ struct World
 	
 	TileOctTree entityTree;
 
-	u32 at;
+	u32 at; // execute data?
+	f32 t;
 
 	u32 wallMeshId;
 	u32 blockMeshId;
@@ -342,13 +389,13 @@ static void RemoveEntityFromTree(World *world, Entity *e)
 	Die;
 }
 
-static Entity *GetEntity(World *world, v3i tile)
+static EntityPtrArray GetEntities(World *world, v3i tile, u64 flags = 0)
 {
 	TileOctTreeNode *cur = &world->entityTree.root;
 	Assert(PointInAABBi(cur->bound, tile));
 	while (!cur->isLeaf)
 	{
-		for (u32 i = 0; i < 8; i++) // lazy
+		for (u32 i = 0; i < ArrayCount(cur->children); i++)
 		{
 			if (PointInAABBi(cur->children[i]->bound, tile))
 			{
@@ -358,29 +405,32 @@ static Entity *GetEntity(World *world, v3i tile)
 		}
 	}
 
-	for (u32 i = 0; i < 16; i++)
+	BeginArray(frameArena, EntityPtr, ret);
+
+	for (u32 i = 0; i < ArrayCount(cur->entitySerials); i++)
 	{
 		if (cur->entitySerials[i] == 0xFFFFFFFF) continue;
 		Entity *e = GetEntity(world, cur->entitySerials[i]);
-		if (e->physicalPos == tile)
+		if (e->physicalPos == tile && ((e->flags & flags) == flags))
 		{
-			return e;
+			*PushStruct(frameArena, EntityPtr) = e;
 		}
 	}
+	EndArray(frameArena, EntityPtr, ret);
 
-	return NULL;
+	return ret;
 }
 
-static Entity *InsertEntity(World *world, TileOctTreeNode *cur, Entity *e, b32 swap)
+static void InsertEntity(World *world, TileOctTreeNode *cur, Entity *e)
 {
 	TimedBlock;
-	if (!e) return NULL;
+	if (!e) return;
 
 	TileOctTree *tree = &world->entityTree;
 
 	while (!cur->isLeaf)
 	{
-		for (u32 i = 0; i < 8; i++) // lazy
+		for (u32 i = 0; i < ArrayCount(cur->children); i++) // lazy
 		{
 			if (PointInAABBi(cur->children[i]->bound, e->physicalPos))
 			{
@@ -394,11 +444,12 @@ static Entity *InsertEntity(World *world, TileOctTreeNode *cur, Entity *e, b32 s
 	Assert(cur->isLeaf);
 
 	//check for place allready taken, this is the only false case
+#if 0
 	for (u32 i = 0; i < 16; i++)
 	{
 		if (cur->entitySerials[i] != 0xFFFFFFFF)
 		{
-			Entity *other = GetEntity(world, cur->entitySerials[i]);
+			Entity *other = GetEntities(world, cur->entitySerials[i]);
 			if (other->physicalPos == e->physicalPos)
 			{
 				if (swap) cur->entitySerials[i] = e->serialNumber;
@@ -406,14 +457,15 @@ static Entity *InsertEntity(World *world, TileOctTreeNode *cur, Entity *e, b32 s
 			}
 		}
 	}
+#endif
 
 	// try to insert
-	for (u32 i = 0; i < 8; i++)
+	for (u32 i = 0; i < ArrayCount(cur->entitySerials); i++)
 	{
 		if (cur->entitySerials[i] == 0xFFFFFFFF)
 		{
 			cur->entitySerials[i] = e->serialNumber;
-			return NULL;
+			return;
 		}
 	}
 
@@ -421,12 +473,30 @@ static Entity *InsertEntity(World *world, TileOctTreeNode *cur, Entity *e, b32 s
 	u32 newSize = oldSize >> 1;
 	Assert(newSize);
 
-	Entity *currentEntities[17];
-	for (u32 i = 0; i < 16; i++)
+	Entity *currentEntities[ArrayCount(cur->entitySerials) + 1];
+	for (u32 i = 0; i < ArrayCount(cur->entitySerials); i++)
 	{
 		currentEntities[i] = (cur->entitySerials[i] != 0xFFFFFFFF) ? GetEntity(world, cur->entitySerials[i]) : NULL;
 	}
-	currentEntities[16] = e;
+	currentEntities[ArrayCount(cur->entitySerials)] = e;
+
+	b32 allTheSame = true;
+	for (u32 i = 0; i < ArrayCount(cur->entitySerials); i++)
+	{
+		if (e->physicalPos != currentEntities[i]->physicalPos)
+		{
+			allTheSame = false;
+			break;
+		}
+	}
+
+	if (allTheSame)
+	{
+		Die;
+		e->physicalPos -= V3i(0, 0, 1);
+		InsertEntity(world, &world->entityTree.root, e);
+		return;
+	}
 
 	//split
 	TileOctTreeNode *TopUpLeft = GetALeaf(tree);
@@ -465,36 +535,41 @@ static Entity *InsertEntity(World *world, TileOctTreeNode *cur, Entity *e, b32 s
 
 	for (u32 i = 0; i < 17; i++)
 	{
-		InsertEntity(world, cur, currentEntities[i], false);
+		InsertEntity(world, cur, currentEntities[i]);
 	}
 
-	return NULL;
+	return;
 }
 
-static void ResetTreeHelper(TileOctTree *tree, TileOctTreeNode *node)
+static void ResetTreeHelper(World *world, TileOctTree *tree, TileOctTreeNode *node)
 {
 	if (node->isLeaf) return;
 
 	for (u32 i = 0; i < 8; i++)
 	{
 		auto c = node->children[i];
-		ResetTreeHelper(tree, c);
+		ResetTreeHelper(world, tree, c);
 		c->next = tree->freeList;
 		tree->freeList = c;
 	}
 }
 
-static void ResetTree(TileOctTree *tree)
+static void ResetTree(World *world, TileOctTree *tree) // todo speed can this be lineraized?
 {
-	ResetTreeHelper(tree, &tree->root);
+	ResetTreeHelper(world, tree, &tree->root);
 	tree->root.isLeaf = true;
-	for (u32 i = 0; i < 16; i++)
+	for (u32 i = 0; i < ArrayCount(tree->root.entitySerials); i++)
 	{
 		tree->root.entitySerials[i] = 0xFFFFFFFF;
 	}
+
+	For(world->entities)
+	{
+		it->flags &= ~EntityFlag_InTree;
+	}
 }
 
-static Entity *InsertEntity(World *world, Entity *e, b32 swap = false) // the return feels weird.
+static void InsertEntity(World *world, Entity *e)
 {
 	Assert(!(e->flags & EntityFlag_InTree));
 	TileOctTree *tree = &world->entityTree;
@@ -502,24 +577,19 @@ static Entity *InsertEntity(World *world, Entity *e, b32 swap = false) // the re
 	Assert(PointInAABBi(cur->bound, e->physicalPos));
 	// change this to isNotLeaf, to not have to do this not?
 
-	Entity *blockingEntity = InsertEntity(world, cur, e, swap);
-	if (blockingEntity)
-	{
-		if (swap)
-		{
-			blockingEntity->flags &= ~EntityFlag_InTree;
-			e->flags |= EntityFlag_InTree;
-		}
-	}
-	else
-	{
-		e->flags |= EntityFlag_InTree;
-	}
+	InsertEntity(world, cur, e);
 
-	return blockingEntity;
+	e->flags |= EntityFlag_InTree;
 }
 
-static Entity CreateEntity(World *world, u32 meshID, f32 scale, Quaternion orientation, v3i pos, v3 offset, v4 color, EntityType type, u64 flags)
+static void MoveEntityInTree(World *world, Entity *e, v3i by)
+{
+	RemoveEntityFromTree(world, e);
+	e->physicalPos += by;
+	InsertEntity(world, e);
+}
+
+static Entity *CreateEntityInternal(World *world, u32 meshID, f32 scale, Quaternion orientation, v3i pos, v3 offset, v4 color, EntityType type, u64 flags)
 {
 	Entity ret;
 	ret.meshId = meshID;
@@ -533,19 +603,18 @@ static Entity CreateEntity(World *world, u32 meshID, f32 scale, Quaternion orien
 	ret.serialNumber = world->entitySerializer++;
 	ret.type = type;
 	ret.flags = flags;
-	ret.temporaryFlags = 0;
 	ret.interpolation = {};
 	
 	u32 arrayIndex = ArrayAdd(&world->entities, ret);
 
 	Assert(ret.serialNumber == world->entitySerialMap.amount);
 	ArrayAdd(&world->entitySerialMap, arrayIndex);
-	if (flags) // entity != none?
+	if (flags) // entity != none? // move this out?
 	{
 		InsertEntity(world, world->entities + arrayIndex);
 	}
 
-	return ret;
+	return world->entities + arrayIndex;
 };
 
 static void RestoreEntity(World *world, u32 serial, u32 meshID, f32 scale, Quaternion orientation, v3i pos, v3 offset, v4 color, EntityType type, u64 flags)
@@ -561,7 +630,6 @@ static void RestoreEntity(World *world, u32 serial, u32 meshID, f32 scale, Quate
 	ret.serialNumber = world->entitySerializer++;
 	ret.type = type;
 	ret.flags = flags;
-	ret.temporaryFlags = 0;
 	ret.interpolation = {};
 
 	u32 arrayIndex = ArrayAdd(&world->entities, ret);
@@ -577,7 +645,7 @@ static void RestoreEntity(World *world, u32 serial, u32 meshID, f32 scale, Quate
 static void RemoveEntity(World *world, u32 serial)
 {
 	u32 index = world->entitySerialMap[serial];
-	Entity *toRemove = GetEntity(world, index);
+	Entity *toRemove = world->entities + index;
 	RemoveEntityFromTree(world, toRemove);
 
 	world->entitySerialMap[serial] = 0xFFFFFFFF;
@@ -612,9 +680,9 @@ static void UnloadLevel(World *world)
 	world->loadedLevel = EmptyLevel();
 	world->at = 0;
 	world->camera = world->loadedLevel.camera;
-	ResetTree(&world->entityTree);
+	world->entities.amount = 0; // this before ResetTree, makes the reset faster
+	ResetTree(world, &world->entityTree);
 	world->entitySerialMap.amount = 0;
-	world->entities.amount = 0;
 	world->entitySerializer = 0;
 	world->debugCamera = world->camera;
 }
@@ -625,13 +693,22 @@ static void ResetWorld(World *world)
 	world->debugCamera = world->camera;
 	world->lightSource = V3(0, 0, -10);
 	world->at = 0;
+	world->t = 0.0f;
 
 	For(world->entities)
 	{
 		if (it->flags & EntityFlag_IsDynamic)
 		{
 			RemoveEntityFromTree(world, it);
+		}
+	}
+
+	For(world->entities)
+	{
+		if (it->flags & EntityFlag_IsDynamic)
+		{
 			it->physicalPos = it->initialPos;
+			it->flags &= ~(EntityFlag_IsFalling | EntityFlag_IsMoving);
 			it->interpolation = {};
 			InsertEntity(world, it);
 		}
@@ -639,38 +716,18 @@ static void ResetWorld(World *world)
 	}
 
 }
-enum UnitInstruction
-{
-	Unit_Wait,
-	Unit_MoveUp,
-	Unit_MoveDown,
-	Unit_MoveLeft,
-	Unit_MoveRight,
-};
 
-DefineArray(UnitInstruction);
-
-#define UnitIndexOffset (64 - 16)
-struct UnitHandler
-{
-	u32 amount;
-
-	u32 *entitySerials;
-	UnitInstructionArray *programs;
-	
-	f32 t; // between 0 and 1
-};
-
-static u32 GetHotUnit(World *world, UnitHandler *unitHandler, AssetHandler *assetHandler, v2 mousePosZeroToOne, Camera camera)
+static u32 GetHotUnit(World *world, AssetHandler *assetHandler, v2 mousePosZeroToOne, Camera camera)
 {
 	v3 camP = camera.pos; // todo camera or debugCamera? Maybe we should again unify them
 	v3 camD = ScreenZeroToOneToDirecion(camera, mousePosZeroToOne);
 
-	for (u32 i = 0; i < unitHandler->amount; i++)
+	For(world->entities)
 	{
-		Entity *e = GetEntity(world, unitHandler->entitySerials[i]);
+		if (it->type != Entity_Dude) continue;
+		Entity *e = it;
 		m4x4 mat = QuaternionToMatrix(Inverse(e->orientation));
-		v3 rayP = mat * (camP - GetRenderPos(*e, unitHandler->t));
+		v3 rayP = mat * (camP - GetRenderPos(*e, world->t));
 		v3 rayD = mat * camD;
 
 		MeshInfo *info = GetMeshInfo(assetHandler, e->meshId);
@@ -731,7 +788,7 @@ static u32 GetHotUnit(World *world, UnitHandler *unitHandler, AssetHandler *asse
 		}
 		v3 curExit = rayD * curIntersectionMin + rayP;
 
-		if (PointInAABB(aabb, curExit)) return i;
+		if (PointInAABB(aabb, curExit)) return e->serialNumber;
 	}
 
 	return 0xFFFFFFFF;
@@ -748,7 +805,7 @@ static u64 GetStandardFlags(EntityType type)
 	}break;
 	case Entity_Dude:
 	{
-		return EntityFlag_BlocksUnit | EntityFlag_PushAble | EntityFlag_SupportsUnit | EntityFlag_IsDynamic;
+		return EntityFlag_BlocksUnit | EntityFlag_PushAble | EntityFlag_SupportsUnit | EntityFlag_IsDynamic | EntityFlag_CanBeCarried;
 	}break;
 	case Entity_Wall:
 	{
@@ -756,85 +813,92 @@ static u64 GetStandardFlags(EntityType type)
 	}break;
 	case Entity_Block:
 	{
-		return EntityFlag_BlocksUnit | EntityFlag_PushAble | EntityFlag_SupportsUnit | EntityFlag_IsDynamic;
+		return EntityFlag_BlocksUnit | EntityFlag_PushAble | EntityFlag_SupportsUnit | EntityFlag_IsDynamic | EntityFlag_CanBeCarried;
 	}break;
 	case Entity_Spawner:
 	{
-		return EntityFlag_BlocksUnit | EntityFlag_SupportsUnit | EntityFlag_IsDynamic;
+		return EntityFlag_BlocksUnit | EntityFlag_SupportsUnit;
 	}break;
 	case Entity_Goal:
 	{
-		return EntityFlag_BlocksUnit | EntityFlag_SupportsUnit | EntityFlag_IsDynamic;
+		return EntityFlag_BlocksUnit | EntityFlag_SupportsUnit;
 	}break;
 	InvalidDefaultCase;
 	};
 	return 0;
 }
 
-static Entity CreateDude(World *world, UnitHandler *handler, v3i pos, f32 scale = 1.0f, Quaternion orientation = {1, 0, 0, 0}, v3 offset = V3(), v4 color = V4(1, 1, 1, 1))
+static Entity CreateDude(World *world, v3i pos, f32 scale = 1.0f, Quaternion orientation = {1, 0, 0, 0}, v3 offset = V3(), v4 color = V4(1, 1, 1, 1), u32 meshId = 0xFFFFFFFF)
 {
-	u32 index = handler->amount++;
-	if (index > MaxUnitCount) return {};
+	u64 flags = GetStandardFlags(Entity_Dude);
+	if (meshId == 0xFFFFFFFF) meshId = world->blockMeshId;
+	Entity *e = CreateEntityInternal(world, meshId, scale, orientation, pos, offset, color, Entity_Dude, flags);
 
-	u64 flags = GetStandardFlags(Entity_Dude) | ((u64)index << UnitIndexOffset);
-	Entity e = CreateEntity(world, world->dudeMeshId, scale, orientation, pos, offset, color, Entity_Dude, flags);
+	e->instructions = UnitInstructionCreateDynamicArray(100);
 
-	handler->entitySerials[index] = e.serialNumber;
-	handler->programs[index].amount = 0;
-	//handler->programs[index].at = 0x0;
-
-	return e;
+	return *e;
 }
 
-static Entity CreateBlock(World *world, v3i pos, f32 scale = 1.0f, Quaternion orientation = { 0.707106769f, -0.707106769f, 0, 0 }, v3 offset = V3(0, 0, 0.27f), v4 color = V4(1, 1, 1, 1))
+static Entity CreateBlock(World *world, v3i pos, f32 scale = 1.0f, Quaternion orientation = { 0.707106769f, -0.707106769f, 0, 0 }, v3 offset = V3(0, 0, 0.27f), v4 color = V4(1, 1, 1, 1), u32 meshId = 0xFFFFFFFF)
 {
+	if (meshId == 0xFFFFFFFF) meshId = world->blockMeshId;
 	u64 flags = GetStandardFlags(Entity_Block);
-	return CreateEntity(world, world->blockMeshId, scale, orientation, pos, offset, color, Entity_Block, flags);
+	return *CreateEntityInternal(world, meshId, scale, orientation, pos, offset, color, Entity_Block, flags);
 }
 
 static Entity CreateWall(World *world, u32 meshId, v3i pos, f32 scale = 1.0f, Quaternion orientation = { 1, 0, 0, 0 }, v3 offset = V3(), v4 color = V4(1, 1, 1, 1))
 {
 	u64 flags = GetStandardFlags(Entity_Wall);
-	return CreateEntity(world, meshId, scale, orientation, pos, offset, color, Entity_Wall, flags);
+	return *CreateEntityInternal(world, meshId, scale, orientation, pos, offset, color, Entity_Wall, flags);
 }
 
 static Entity CreateSpawner(World *world, u32 meshId, v3i pos, f32 scale = 1.0f, Quaternion orientation = { 1, 0, 0, 0 }, v3 offset = V3(), v4 color = V4(1, 1, 1, 1))
 {
 	u64 flags = GetStandardFlags(Entity_Spawner);
-	return CreateEntity(world, meshId, scale, orientation, pos, offset, color, Entity_Spawner, flags);
+	return *CreateEntityInternal(world, meshId, scale, orientation, pos, offset, color, Entity_Spawner, flags);
 }
 
 static Entity CreateGoal(World *world, u32 meshId, v3i pos, f32 scale = 1.0f, Quaternion orientation = { 1, 0, 0, 0 }, v3 offset = V3(), v4 color = V4(1, 1, 1, 1))
 {
 	u64 flags = GetStandardFlags(Entity_Goal);
-	return CreateEntity(world, meshId, scale, orientation, pos, offset, color, Entity_Goal, flags);
+	return *CreateEntityInternal(world, meshId, scale, orientation, pos, offset, color, Entity_Goal, flags);
 }
 
-
-static u32 GetUnitIndex(Entity *e)
+static Entity CreateEntity(World *world, EntityType type, u32 meshId, v3i pos, f32 scale, Quaternion orientation, v3 offset, v4 color, u64 flags)
 {
-	return (e->flags >> UnitIndexOffset);
-}
-
-static void ResetUnitHandler(UnitHandler *unitHandler)
-{
-	unitHandler->amount = 0;
-	unitHandler->t = 0;
-	// I guess this is everything?
-}
-static UnitHandler CreateUnitHandler(Arena *arena, AssetHandler *assetHandler)
-{
-	UnitHandler ret;
-
-	ret.amount = 0;
-	ret.entitySerials = PushData(arena, u32, MaxUnitCount);
-	ret.programs = PushData(arena, UnitInstructionArray, MaxUnitCount);
-	for (u32 i = 0; i < MaxUnitCount; i++)
+	switch (type)
 	{
-		ret.programs[i] = PushArray(arena, UnitInstruction, MaxUnitInstructions);
+	case Entity_None:
+	{
+		return *CreateEntityInternal(world, meshId, scale, orientation, pos, offset, color, type, flags);
+	}break;
+	case Entity_Dude:
+	{
+		return CreateDude(world, pos, scale, orientation, offset, color, meshId);
+	}break;
+	case Entity_Wall:
+	{
+		return CreateWall(world, meshId, pos, scale, orientation, offset, color);
+	}break;
+	case Entity_Spawner:
+	{
+		return CreateSpawner(world, meshId, pos, scale, orientation, offset, color);
+	}break;
+
+	case Entity_Goal:
+	{
+		return CreateGoal(world, meshId, pos, scale, orientation, offset, color);
+	}break;
+
+	case Entity_Block:
+	{
+		return CreateBlock(world, pos, scale, orientation, offset, color, meshId);
+	}break;
+
+	InvalidDefaultCase;
 	}
 
-	return ret;
+	return {};
 }
 
 static v3i GetAdvanceForOneStep(UnitInstruction step)

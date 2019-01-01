@@ -26,6 +26,10 @@ static type* operator+(type##Array arr, u32 index)								\
 	Assert(index < arr.amount);													\
 	return arr.data + index;													\
 }																				\
+static bool operator!(type##Array arr)											\
+{																				\
+	return (!arr.amount);														\
+}																				\
 
 
 
@@ -55,7 +59,6 @@ static type* operator+(type##DynamicArray arr, u32 index)						\
 																				\
 static u32 ArrayAdd(type##DynamicArray *arr, type t)							\
 {																				\
-	Assert(arr->data);															\
 	if (arr->amount + 1 < arr->capacity)										\
 	{																			\
 		(arr->data)[arr->amount++] = t;											\
@@ -112,7 +115,7 @@ static bool operator!(type##DynamicArray arr)									\
 }																				\
 
 
-#define DefineDynamicFrameArray(type)												\
+#define DefineDFArray(type)												\
 struct type##DFArray														\
 {																				\
 	type *data;																	\
@@ -133,7 +136,6 @@ static type* operator+(type##DFArray arr, u32 index)						\
 																				\
 static u32 ArrayAdd(type##DFArray *arr, type t)									\
 {																				\
-	Assert(arr->data);															\
 	if (arr->amount + 1 < arr->capacity)										\
 	{																			\
 		(arr->data)[arr->amount++] = t;											\
@@ -181,11 +183,19 @@ static bool operator!(type##DFArray arr)										\
 
 #define BuildStaticArray(arena, arr, item) PushData(arena, u8, sizeof(item)); arr.data[arr.amount++] = item;
 
-#define ForArr(arr) for(auto it = arr.data; it < arr.data + arr.amount; it++)
-#define ForVarArr(it, arr) for(auto it = arr.data; it < arr.data + arr.amount; it++)
+#define ForArr(arr) for(auto it = (arr).data; it < (arr).data + (arr).amount; it++)
+#define ForVarArr(it, arr) for(auto it = (arr).data; it < (arr).data + (arr).amount; it++)
 
 
 #define For(...) Expand(GET_MACRO3(__VA_ARGS__, Ignored, ForVarArr, ForArr)(__VA_ARGS__))
+
+#if 0
+#define ForArrValue(arr) for (auto &it = *arr.data; &it < arr.data + arr.amount; it = (&it) + 1)
+#define ForArrVarValue(it, arr) for (auto &it = *arr.data; &it < arr.data + arr.amount; &it = (&it) + 1)
+
+#define ForRef(...) Expand(GET_MACRO3(__VA_ARGS__, Ignored, ForArrVarValue, ForArrValue)(__VA_ARGS__))
+#endif
+
 
 #include <stdint.h>
 
@@ -212,10 +222,18 @@ struct v2i
 	i32 y;
 };
 
-struct v2
+union v2
 {
-	f32 x;
-	f32 y;
+	struct
+	{
+		f32 x;
+		f32 y;
+	};
+	struct
+	{
+		f32 u;
+		f32 v;
+	};
 };
 
 union v3

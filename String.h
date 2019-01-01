@@ -2,7 +2,6 @@
 #define RR_STRING
 
 
-
 typedef unsigned char Char;
 //todo : remove this
 #include <string.h>
@@ -37,7 +36,7 @@ struct String
 };
 
 DefineArray(String);
-
+DefineDFArray(String);
 
 static String BeginConcatenate(Arena *arena)
 {
@@ -509,6 +508,7 @@ static String FtoS(float rational, u32 numberOfDigits, Arena *arena = frameArena
 		u32 upart = (u32)ratPart;
 		*PushStruct(arena, Char) = '0' + upart;
 		ratPart -= (f32)upart;
+		//if (!ratPart) break;
 	}
 
 	ret.length = (u32)((Char *)arena->current - ret.data);
@@ -550,6 +550,11 @@ static bool operator==(String s, const char *nullTerminated)
 	}
 	
 	return !(*a);
+}
+
+static bool operator!=(String s, const char *nullTerminated)
+{
+	return !(s == nullTerminated);
 }
 
 static String CreateString(Arena *arena, bool val)
@@ -596,6 +601,13 @@ static Char Eat1(String *s)
 	return ret;
 }
 
+static void Eat(u32 amount, String *toEat)
+{
+	Assert(toEat->length >= amount);
+	toEat->data += amount;
+	toEat->length -= amount;
+}
+
 static void EatSpaces(String *string)
 {
 	while (string->length)
@@ -621,7 +633,7 @@ static void EatSpacesFromEnd(String *string)
 	}
 }
 
-
+// not including ' '
 static String EatToNextSpaceReturnHead(String *string)
 {
 	String ret = *string;
@@ -638,6 +650,37 @@ static String EatToNextSpaceReturnHead(String *string)
 	}
 	return ret;
 }
+
+static bool BeginsWith(String toCheck, char *cStr) // todo audit speed
+{
+	for (u32 i = 0; i < toCheck.amount, *cStr; cStr++, i++)
+	{
+		if (*cStr != toCheck[i]) return false;
+	}
+
+	return !(*cStr);
+}
+
+static bool BeginsWithEat(String *_toCheck, char *cStr) // todo audit speed
+{
+	// copy and paste from above
+	String toCheck = *_toCheck;
+	u32 i = 0;
+	for (; i < toCheck.amount, *cStr; cStr++, i++)
+	{
+		if (*cStr != toCheck[i]) return false;
+	}
+
+	bool ret = !(*cStr);
+
+	if (ret)
+	{
+		Eat(i, _toCheck);
+	}
+
+	return ret;
+}
+
 
 //not including char
 static String EatToCharReturnHead(String *string, Char c)
@@ -767,9 +810,20 @@ static b32 StoB(String string, b32 *success)
 	return -1;
 }
 
+static f64 PowerOfTen(i32 exp) // todo speed this is stupid
+{
+	if (exp < 0) return 1.0 / PowerOfTen(-exp);
+
+	f64 ret = 1.0f;
+	for (u32 i = 0; i < (u32)exp; i++)
+	{
+		ret *= 10.0;
+	}
+	return ret;
+}
 
 //float : 1 sign 8 exponent 23 mantisse (+ 1 hidden bit)
-static f32 StoF(String string, b32 *success)
+static f32 StoF(String string, b32 *success) // todo, gawd this is slow and trashy
 {
 	if (!string.length)
 	{
@@ -785,14 +839,14 @@ static f32 StoF(String string, b32 *success)
 	}
 
 	u64 sum = 0u;
-	u64 exp = 1u;
+	f64 exp = 1.0;
 
 	while (string.length && string[0] == '0') 
 	{
 		Eat1(&string);
 	}
 
-	while(string.length && string[0] != '.')
+	while(string.length && string[0] != '.' && string[0] != 'e')
 	{
 		u32 charToUInt = Eat1(&string) - '0';
 		if (charToUInt < 10)
@@ -806,12 +860,12 @@ static f32 StoF(String string, b32 *success)
 		}
 	}
 
-	if (string.length)
+	if (string.length && string[0] != 'e')
 	{
 		Eat1(&string);
 	}
 
-	while(string.length)
+	while(string.length && string[0] != 'e')
 	{
 		u32 charToUInt = Eat1(&string) - '0';
 		if (charToUInt < 10)
@@ -826,36 +880,72 @@ static f32 StoF(String string, b32 *success)
 		}
 	}
 
-#if 0
-	posExp /= 10;
-	i8 exponent = posExp ? (i8)IntegerLogarithm(posExp) : -(i8)IntegerLogarithm(negExp); 
-	u32 firstNonZero = BitwiseScanReverse(sum);
-	i32 diff = 23 - firstNonZero;
-	if (diff < 0)
+	if (string[0] == 'e')
 	{
-		*success = false;
-		return 0.0f;
+		Eat1(&string);
+		i32 exponent = StoI(string, success);
+		exp /= PowerOfTen(exponent);
 	}
 
-	//exponent += diff;
-	//exponent *= -1;
-	
-	exponent += 127;
-	sum <<= diff;
-
-	hexFloat |= ((u8)exponent << 23) | (sum & 0x7FFFFF);
-#endif
-
 	f64 mantissa = (f64)sum;
-	f32 ret = (f32)(mantissa / (f64)exp); // this is exact for any exponents we care about.
+	f32 ret = (f32)(mantissa / exp); // this is exact for any exponents we care about.
 
 	if (negative) ret *= -1.0f;
 
 	return ret;
 }
 
+static f32 Eatf32(String *s, b32 *success)
+{
+	String a = *s;
 
-String ConsumeNextLine(String *inp) // returns head inclusive of the endline
+	For(a)
+	{
+		if (!(*it == '-') && !(*it == '.') && ! ('0' <= *it && *it <= '9') && (*it != 'e'))
+		{
+			a.length = (u32)(it - a.data);
+			break;
+		}
+	}
+
+	if (!a.length)
+	{
+		*success = false;
+		return 0.0f;
+	}
+
+	Eat(a.length, s);
+
+	return StoF(a, success);
+}
+
+
+static u32 Eatu32(String *s, b32 *success)
+{
+	String a = *s;
+
+	For(a)
+	{
+		if (!(*it == '-') && !('0' <= *it && *it <= '9'))
+		{
+			a.length = (u32)(it - a.data);
+			break;
+		}
+	}
+
+	if (!a.length)
+	{
+		*success = false;
+		return 0u;
+	}
+
+	Eat(a.length, s);
+
+	return StoU(a, success);
+}
+
+
+static String ConsumeNextLine(String *inp) // returns head inclusive of the endline
 {
 	for (u32 i = 0; i < inp->length; i++)
 	{
@@ -906,11 +996,27 @@ static void Sanitize(String *s) //todo: this maybe should be "RemoveChars" and g
 	}
 }
 
-// Warning screws with the string
+// Warning screws with the string, slow af
 String ConsumeNextLineSanitize(String *inp)
 {
 	String head = ConsumeNextLine(inp);
 	Sanitize(&head);
+	return head;
+}
+
+void RemoveNewLinesFromBack(String *s)
+{
+	while (s->amount && (s->data[s->amount - 1] == '\n' || s->data[s->amount - 1] == '\r'))
+	{
+		s->amount--;
+	}
+}
+
+String ConsumeNextLineSanitizeEatSpaces(String *inp)
+{
+	String head = ConsumeNextLine(inp);
+	RemoveNewLinesFromBack(&head);
+	EatSpaces(&head);
 	return head;
 }
 
@@ -1121,6 +1227,12 @@ static String V4toS(v4 vec, Arena *arena = frameArena)
 }
 
 
+static String SpaceString(u32 deltaLength, Arena *arena)
+{
+	String ret = PushArray(arena, Char, deltaLength);
+	memset(ret.data, ' ', deltaLength);
+	return ret;
+}
 
 //typedef char* va_list; maybe look into all of this stuff, gets pretty system dependend i assume
 #define va_start __crt_va_start
@@ -1128,17 +1240,10 @@ static String V4toS(v4 vec, Arena *arena = frameArena)
 #define va_end   __crt_va_end
 //#define va_copy(destination, source) ((destination) = (source))
 
-static void Eat(u32 amount, String *toEat)
-{
-	Assert(toEat->length >= amount);
-	toEat->data   += amount;
-	toEat->length -= amount;
-}
-
 static String StringFormatHelper(Arena *arena, char *format, va_list args)
 {
 	String ret = BeginConcatenate(arena);
-	String inp = S(format);
+	String inp = S(format); // todo speed slow, unnecessary
 	String head = EatToCharReturnHead(&inp, '%');
 
 	CopyString(head, arena);
@@ -1147,6 +1252,24 @@ static String StringFormatHelper(Arena *arena, char *format, va_list args)
 	{
 		Assert(inp[0] == '%');
 		Eat1(&inp);
+
+		b32 hasLength = true;
+		u32 desiredLength = Eatu32(&inp, &hasLength);
+		b32 rightBound = false;
+		if (hasLength)
+		{
+			if (inp[0] == 'r' && inp[1] == 'b')
+			{
+				Eat(2, &inp);
+				rightBound = true;
+			}
+			if (inp[0] == 'l' && inp[1] == 'b')
+			{
+				Eat(2, &inp);
+				rightBound = false;
+			}
+
+		}
 
 		switch (inp[0])
 		{
@@ -1158,63 +1281,153 @@ static String StringFormatHelper(Arena *arena, char *format, va_list args)
 		}break;
 		case 'i':
 		{
-			if (inp[1] == '3')
+			i64 val = 0;
+			if (inp[1] == '3' && inp[2] == '2')
 			{
-				Assert(inp[2] == '2');
-				i32 val = va_arg(args, i32);
-				ItoS(val, arena);
-				
+				val = (i64)va_arg(args, i32);
+
 			}
-			else if(inp[1] == '6')
+			else if(inp[1] == '6' && inp[2] == '4')
 			{
-				Assert(inp[2] == '4');
 				i64 val = va_arg(args, i64);
-				ItoS(val, arena);
 			}
 			else
 			{
 				Assert(!"Unhandled integer type!");
 			}
+
+			if (hasLength)
+			{
+				u32 length = val ? (u32)log10((f64)val) + 1 : 1;
+				if (desiredLength > length)
+				{
+					u32 delta = desiredLength - length;
+
+					if (rightBound)
+					{
+						SpaceString(delta, arena);
+						ItoS(val, arena);
+					}
+					else
+					{
+						ItoS(val, arena);
+						SpaceString(delta, arena);
+					}
+
+				}
+				else
+				{
+					ItoS(val, arena);
+				}
+			}
+			else
+			{
+				ItoS(val, arena);
+			}
+
 			Eat(3, &inp);
 		}break;
 		case 'u':
 		{
-			if (inp[1] == '3')
+			u64 val = 0;
+			if (inp[1] == '3' && inp[2] == '2')
 			{
-				Assert(inp[2] == '2');
-				u32 val = va_arg(args, u32);
-				UtoS(val, arena);
+				val = (u64)va_arg(args, u32);
 			}
-			else if (inp[1] == '6')
+			else if (inp[1] == '6' && inp[2] == '4')
 			{
-				Assert(inp[2] == '4');
 				u64 val = va_arg(args, u64);
-				UtoS(val, arena);
 			}
 			else
 			{
 				Assert(!"Unhandled unsigned type!");
 			}
+
+			if (hasLength)
+			{
+				u32 length = val ? (u32)log10((f64)val) + 1 : 1;
+				if (desiredLength > length)
+				{
+					u32 delta = desiredLength - length;
+
+					if (rightBound)
+					{
+						SpaceString(delta, arena);
+						UtoS(val, arena);
+					}
+					else
+					{
+						UtoS(val, arena);
+						SpaceString(delta, arena);
+					}
+
+				}
+				else
+				{
+					UtoS(val, arena);
+				}
+			}
+			else
+			{
+				UtoS(val, arena);
+			}
+
 			Eat(3, &inp);
 		}break;
 		case 'f':
 		{
-			if (inp[1] == '3')
+			f64 val = 0.0f;
+			if (inp[1] == '3' && inp[2] == '2')
 			{
-				Assert(inp[2] == '2');
-				f64 val = va_arg(args, f64);
-				FtoS((f32)val, arena); //todo grisu.
+				val = va_arg(args, f64);
+				
 			}
-			else if (inp[1] == '6')
+			else if (inp[1] == '6' && inp[2] == '4')
 			{
-				Assert(inp[2] == '4');
-				f64 val = va_arg(args, f64);
-				FtoS((f32)val, arena);
+				val = va_arg(args, f64);
 			}
 			else
 			{
-				Assert(!"Unhandled integer type!");
+				Assert(!"Unhandled floating Point type!");
 			}
+
+			u32 tailSize = 5;
+
+			if (hasLength)
+			{
+				u32 log = 0;
+				if (val)
+				{
+					f64 l = log10(Abs(val));
+					log = (l > 0) ? (u32)l : 0;
+				}
+				u32 length =  (log + 1 + 1 + tailSize);
+				if (desiredLength > length)
+				{
+					u32 delta = desiredLength - length;
+
+					if (rightBound)
+					{
+						SpaceString(delta, arena);
+						FtoS((f32)val, tailSize, arena);
+					}
+					else
+					{
+						FtoS((f32)val, tailSize, arena);
+						SpaceString(delta, arena);
+					}
+
+				}
+				else
+				{
+					FtoS((f32)val, tailSize, arena);
+				}
+			}
+			else
+			{
+				FtoS((f32)val, tailSize, arena);
+			}
+
 			Eat(3, &inp);
 		}break;
 		case 'v':
@@ -1250,7 +1463,35 @@ static String StringFormatHelper(Arena *arena, char *format, va_list args)
 		case 's':
 		{
 			String val = va_arg(args, String);
-			CopyString(val, arena);
+
+			u32 stringLength = val.length;
+
+			if (hasLength)
+			{
+				i32 deltaLength = (i32)desiredLength - (i32)stringLength;
+				if (deltaLength < 0)
+				{
+					CopyString(val, arena);
+				}
+				else
+				{
+					if (rightBound)
+					{
+						SpaceString(deltaLength, arena);
+						CopyString(val, arena);
+					}
+					else
+					{
+						CopyString(val, arena);
+						SpaceString(deltaLength, arena);
+					}
+				}
+			}
+			else
+			{
+				CopyString(val, arena);
+			}
+
 			Eat1(&inp);
 		}break;
 		case 'c':
@@ -1260,12 +1501,43 @@ static String StringFormatHelper(Arena *arena, char *format, va_list args)
 			case '1':
 			{
 				char val = va_arg(args, char);
+
 				S(val, arena);
+
 			}break;
 			case '*':
 			{
-				char *val = va_arg(args, char *);
-				S(val, arena);
+				char *cval = va_arg(args, char *);
+				String val = S(cval);
+
+				u32 stringLength = val.length;
+
+				if (hasLength)
+				{
+					i32 deltaLength = (i32)desiredLength - (i32)stringLength;
+					if (deltaLength < 0)
+					{
+						CopyString(val, arena);
+					}
+					else
+					{
+						if (rightBound)
+						{
+							SpaceString(deltaLength, arena);
+							CopyString(val, arena);
+						}
+						else
+						{
+							CopyString(val, arena);
+							SpaceString(deltaLength, arena);
+						}
+					}
+				}
+				else
+				{
+					CopyString(val, arena);
+				}
+
 			}break;
 			default:
 			{
@@ -1287,6 +1559,9 @@ static String StringFormatHelper(Arena *arena, char *format, va_list args)
 	EndConcatenate(&ret, arena);
 	return ret;
 }
+
+// % number rb type : makes a string that is number long and right bound / left bound. leftbound on default
+
 
 //ArgList:
 // %% = %

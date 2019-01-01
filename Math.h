@@ -33,9 +33,14 @@ static int Round(float f)
 	return (int)(f - 0.5f);
 }
 
-static float Max(float a, float b)
+static f32 Max(f32 a, f32 b)
 {
 	return _mm_cvtss_f32(_mm_max_ss(_mm_set_ss(b), _mm_set_ss(a)));
+}
+
+static f64 Max(f64 a, f64 b)
+{
+	return _mm_cvtsd_f64(_mm_max_sd(_mm_set_sd(b), _mm_set_sd(a)));
 }
 
 static float Min(float a, float b)
@@ -87,9 +92,13 @@ static u32 Square(u32 f)
 	return (f*f);
 }
 
-static float Abs(float a)
+static float Abs(f32 a)
 {
 	return (a > 0) * a - (a < 0) * a;
+}
+static f64 Abs(f64 a)
+{
+	return Max(a, -a);
 }
 static u32 Abs(i32 a)
 {

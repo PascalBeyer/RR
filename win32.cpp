@@ -12,7 +12,6 @@
 
 
 #include "Game.h"
-#include "AnimationCreator.h"
 
 #include <Windows.h>
 #include <gl/gl.h>
@@ -47,7 +46,7 @@ static i64 globalPerformanceCountFrequency;
 static HANDLE semaphoreHandle;
 static HWND window;
 
-static void FreeFile(File file)
+static void FreeFile(File file) // todo make this take a pointer and clear it, just in case.
 {
 	void *memory = file.memory;
 	if (memory)
@@ -1120,7 +1119,7 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
 				f32 deltaTime = win32GetSecondsElapsed(timeCounter, endCounter);
 				timeCounter = endCounter;
 
-				CollectDebugRecords(); // collect for last frame
+				CollectDebugRecords(deltaTime); // collect for last frame
 				
 				HandleWindowsMassages(&keyMessageBuffer);
 				

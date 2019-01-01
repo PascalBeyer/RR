@@ -41,7 +41,7 @@ static ExecuteData InitExecute()
 	return ret;
 }
 
-static void ChangeExecuteState(World *world, UnitHandler *unitHandler, ExecuteData *exe, ExecuteState state)
+static void ChangeExecuteState(World *world, ExecuteData *exe, ExecuteState state)
 {
 	exe->state = state;
 	switch (state)
@@ -75,21 +75,24 @@ static void ChangeExecuteState(World *world, UnitHandler *unitHandler, ExecuteDa
 	}
 }
 
-static Entity *TileBlocked(World *world, v3i tile)
+static void MaybeMoveEntity(Entity *e, v3i dir, World *world, InterpolationType type);
+static void MaybeCarryEntity(Entity *e, v3i dir, World *world)
 {
-	Entity *e = GetEntity(world, tile);
-	if (e && e->flags & EntityFlag_BlocksUnit)
-	{
-		return e;
-	}
+	EntityPtrArray entitiesToCarry = GetEntities(world, e->physicalPos + V3i(0, 0, -1));
 
-	return NULL;
+	For(_it, entitiesToCarry)
+	{
+		auto it = *_it;
+		if (it->flags & EntityFlag_CanBeCarried)
+		{
+			MaybeMoveEntity(it, dir, world, Interpolation_Carried);
+		}
+	}
 }
 
-// make dir an enum? so we cant push in something weird?
 static void MaybeMoveEntity(Entity *e, v3i dir, World *world, InterpolationType type)
 {
-	if (e->temporaryFlags & EntityFlag_IsMoving)
+	if (e->flags & EntityFlag_IsMoving)
 	{
 		if (type < e->interpolation.type) // '=' ?
 		{
@@ -100,31 +103,25 @@ static void MaybeMoveEntity(Entity *e, v3i dir, World *world, InterpolationType 
 
 	v3i intendedPos = e->physicalPos + dir;
 
-	Entity *blockingEntity = TileBlocked(world, intendedPos);
-	if (blockingEntity && (blockingEntity->flags & EntityFlag_PushAble))
+	// todo for now we just push if it is pushable, maybe we should only push if all are pushable...
+	EntityPtrArray blockingEntities = GetEntities(world, intendedPos, EntityFlag_PushAble);
+
+	For(blockingEntities)
 	{
-		MaybeMoveEntity(blockingEntity, dir, world, Interpolation_Push);
+		auto b = *it;
+		MaybeMoveEntity(b, dir, world, Interpolation_Push);
 	}
+
+	MaybeCarryEntity(e, dir, world);
 
 	e->interpolation.dir = dir;
 	e->interpolation.type = type;
 
-	Entity *below = GetEntity(world, e->physicalPos + V3i(0, 0, 1));
-	e->interpolation.entityBelow = below ? below->serialNumber : 0xFFFFFFFF;
-	Entity *above = GetEntity(world, e->physicalPos + V3i(0, 0, -1));
-	e->interpolation.entityAbove = above ? above->serialNumber : 0xFFFFFFFF;
+	Assert(type);
 
-	if (below)
-	{
-		e->temporaryFlags |= EntityFlag_IsSupported;
-	}
-
-	e->temporaryFlags |= EntityFlag_IsMoving;
+	e->flags |= EntityFlag_IsMoving;
 }
 
-typedef Entity* EntityPtr;
-
-DefineDynamicFrameArray(EntityPtr);
 
 struct EntityCollision
 {
@@ -133,39 +130,33 @@ struct EntityCollision
 	EntityCollision *next;
 };
 
-DefineDynamicFrameArray(EntityCollision);
+DefineDFArray(EntityCollision);
 
 static void MaybeStartFalling(World *world, Entity *e)
 {
-	Entity *below = GetEntity(world, e->physicalPos + V3i(0, 0, 1));
+	EntityPtrArray below = GetEntities(world, e->physicalPos + V3i(0, 0, 1), EntityFlag_SupportsUnit);
 
 	if (!below)
 	{
-		e->temporaryFlags |= EntityFlag_IsFalling;
-		e->temporaryFlags |= EntityFlag_IsMoving;
+		e->flags |= EntityFlag_IsFalling;
+		e->flags |= EntityFlag_IsMoving;
 		e->interpolation.dir = V3i(0, 0, 1);
-		Entity *above = GetEntity(world, e->physicalPos + V3i(0, 0, -1));
-		e->interpolation.entityAbove = above ? above->serialNumber : 0xFFFFFFFF;
-		e->interpolation.entityBelow = 0xFFFFFFFF;
 		e->interpolation.type = Interpolation_Fall;
+		MaybeCarryEntity(e, V3i(0, 0, 1), world);
 	}
-	else
-	{
-		e->temporaryFlags |= EntityFlag_IsSupported; // this is kinda ironius with is falling...
-	}
-
+	
 }
 
-static void AdvanceGameState(World *world, UnitHandler *unitHandler, ExecuteData *exe, b32 checkForVictory = true)
+static void AdvanceGameState(World *world, ExecuteData *exe, b32 checkForVictory = true)
 {
 	TimedBlock;
 	SimData *sim = exe ? &exe->simData : NULL;
 
 	EntityPtrDFArray movingEntities = EntityPtrCreateDFArray();
 
-	For(world->entities)
+	For(world->entities) // this should only be dynamic entities
 	{
-		it->temporaryFlags = 0;
+		it->flags &= ~(EntityFlag_IsFalling | EntityFlag_IsMoving);
 		it->interpolation = {};
 	}
 
@@ -195,38 +186,43 @@ static void AdvanceGameState(World *world, UnitHandler *unitHandler, ExecuteData
 				
 				if (checkForVictory && ++sim->blocksCollected >= sim->blocksNeeded)
 				{
-					ChangeExecuteState(world, unitHandler, exe, Execute_Victory);
+					ChangeExecuteState(world, exe, Execute_Victory);
 					return;
 				}
 
 				v3i dir = it->initialPos - it->physicalPos;
-				MaybeMoveEntity(it, dir, world, Interpolation_PhaseMove);
+				MaybeMoveEntity(it, dir, world, Interpolation_Teleport);
 			}
 
 			MaybeStartFalling(world, it);
-			Entity *supportingEntity = GetEntity(world, it->physicalPos + V3i(0, 0, 1));
+			EntityPtrArray supportingEntities = GetEntities(world, it->physicalPos + V3i(0, 0, 1), EntityFlag_SupportsUnit);
 
-			if (supportingEntity && supportingEntity->type == Entity_Goal)
+			EntityArray arr = {};
+
+			For(_s, supportingEntities)
 			{
-				it->flags |= BlockFlag_TryingToSpawn;
-				//it->flags &= ~EntityFlag_PushAble;
-				break;
+				auto s = *_s;
+				if (s->type == Entity_Goal)
+				{
+					it->flags |= BlockFlag_TryingToSpawn;
+					//it->flags &= ~EntityFlag_PushAble;
+					break;
+				}
 			}
 
 		}break;
 		case Entity_Dude:
 		{
-			u32 unitIndex = GetUnitIndex(it);
-			Assert(unitIndex < unitHandler->amount);
-			UnitInstructionArray *p = unitHandler->programs + unitIndex;
+			UnitInstructionDynamicArray *p = &it->instructions;
 			MaybeStartFalling(world, it);
 			if (!p->amount) continue;
 
 			u32 unitAt = (at % p->amount);
 
 			auto command = (*p)[unitAt];
+
 			MaybeMoveEntity(it, GetAdvanceForOneStep(command), world, Interpolation_Move); 
-			
+
 		}break;
 		case Entity_Spawner:
 		{
@@ -240,10 +236,10 @@ static void AdvanceGameState(World *world, UnitHandler *unitHandler, ExecuteData
 		}
 	}
 
-	// can't be welded in above, because they might get pushed or smth, after they update
+	// can't be welded in above, because they might get pushed or smth, after they update, could weld it into the maybe move sort of thing
 	For(world->entities)
 	{
-		if (it->temporaryFlags & EntityFlag_IsMoving)
+		if (it->flags & EntityFlag_IsMoving)
 		{
 			ArrayAdd(&movingEntities, it);
 		}
@@ -256,93 +252,37 @@ static void AdvanceGameState(World *world, UnitHandler *unitHandler, ExecuteData
 	For(movingEntities)
 	{
 		Entity *e = *it;
-		if (e->temporaryFlags & EntityFlag_IsSupported)
-		{
-			Entity *below = GetEntity(world, e->interpolation.entityBelow);
-			if ((below->temporaryFlags & EntityFlag_IsMoving) && !(below->temporaryFlags & EntityFlag_MoveResolved))
-			{
-				ArrayAdd(&movingEntities, e);
-				continue;
-			}
-		}
-		else
-		{
-			u32 above = e->interpolation.entityAbove;
-			if (above != 0xFFFFFFFF)
-			{
-				Entity *entityAbove = GetEntity(world, above);
-				if (!(entityAbove->temporaryFlags & EntityFlag_IsMoving))
-				{
-					entityAbove->interpolation.dir = V3i(0, 0, 1);
-					entityAbove->interpolation.type = Interpolation_Fall;
-					entityAbove->interpolation.entityBelow = e->serialNumber;
-					Entity *aboveAbove = GetEntity(world, entityAbove->physicalPos + V3i(0, 0, -1));
-					entityAbove->interpolation.entityAbove = aboveAbove ? aboveAbove->serialNumber : 0xFFFFFFFF;
-					ArrayAdd(&movingEntities, entityAbove);
-				}
-			}
-		}
-
 		RemoveEntityFromTree(world, e);
-		e->temporaryFlags |= EntityFlag_MoveResolved;
-
+		
 		v3i dir = e->interpolation.dir;
 
-		while(e)
+		v3i nextPos = e->physicalPos + dir;
+
+		b32 found = false;
+		For(c, collisions)// maybe this can be made faster?
 		{
-			v3i nextPos = e->physicalPos + dir;
-
-			b32 found = false;
-			For(c, collisions)// maybe this can be made faster?
+			if (nextPos == c->tile)
 			{
-				if (nextPos == c->tile)
-				{
-					found = true;
-					EntityCollision *collision = PushStruct(frameArena, EntityCollision);
-					collision->e = e;
-					collision->next = c->next;
-					collision->tile = c->tile;
+				found = true;
+				EntityCollision *collision = PushStruct(frameArena, EntityCollision);
+				collision->e = e;
+				collision->next = c->next;
+				collision->tile = c->tile;
 
-					c->next = collision;
-					break;
-				}
-			}
-
-			if (!found)
-			{
-				EntityCollision collision;
-				collision.e = e;
-				collision.next = NULL;
-				collision.tile = nextPos;
-
-				ArrayAdd(&collisions, collision);
-			}
-
-			if (e != *it) 
-			{
-				e->interpolation.dir += dir;
-			}
-
-			if (e->interpolation.entityAbove == 0xFFFFFFFF)
-			{
+				c->next = collision;
 				break;
 			}
-
-			Entity *above = GetEntity(world, e->interpolation.entityAbove);
-			if (!(above->temporaryFlags & EntityFlag_IsMoving))
-			{
-				RemoveEntityFromTree(world, above);
-				above->interpolation.dir = V3i();
-				above->interpolation.type = Interpolation_Carried;
-				above->interpolation.entityBelow = e->serialNumber;
-				Entity *aboveAbove = GetEntity(world, above->physicalPos + V3i(0, 0, -1));
-				above->interpolation.entityAbove = aboveAbove ? aboveAbove->serialNumber : 0xFFFFFFFF;
-				
-			}
-
-			e = above;
 		}
-		
+
+		if (!found)
+		{
+			EntityCollision collision;
+			collision.e = e;
+			collision.next = NULL;
+			collision.tile = nextPos;
+
+			ArrayAdd(&collisions, collision);
+		}
 	}
 
 	For(collisions)
@@ -350,95 +290,72 @@ static void AdvanceGameState(World *world, UnitHandler *unitHandler, ExecuteData
 		
 		if (!it->next)
 		{
-			if (it->e->temporaryFlags & EntityFlag_QueuedForReset) continue;
 			//move for non-colliding Entities
-			v3i oldP = it->e->physicalPos;
-			Entity *blockingEntity;
-			if (it->tile == it->e->physicalPos + it->e->interpolation.dir)
+			Assert(it->tile == it->e->physicalPos + it->e->interpolation.dir);
+
+			// todo, speed, we are walking the tree two times, for no particular reason.
+			EntityPtrArray blockingEntities = GetEntities(world, it->tile, EntityFlag_BlocksUnit);
+
+			if (blockingEntities.amount)
 			{
-				it->e->physicalPos = it->tile;
-				it->e->temporaryFlags |= EntityFlag_IsMoving;
-				blockingEntity = InsertEntity(world, it->e);
+				ArrayAdd(&resetEntities, it->e);
+				it->e->interpolation.type = Interpolation_Blocked;
 			}
 			else
 			{
-				blockingEntity = TileBlocked(world, it->tile);
-			}
-
-			if (blockingEntity)
-			{
-				it->e->physicalPos = oldP;
-				it->e->temporaryFlags |= EntityFlag_QueuedForReset;
-				ArrayAdd(&resetEntities, it->e);
+				it->e->physicalPos = it->tile;
+				InsertEntity(world, it->e);
 			}
 			continue;
 		}
 
 		for (EntityCollision *c = it; c; c = c->next)
 		{
-			if (c->e->temporaryFlags & EntityFlag_QueuedForReset) continue;
-			c->e->temporaryFlags |= EntityFlag_QueuedForReset;
+			c->e->interpolation.type = Interpolation_Blocked;
 			ArrayAdd(&resetEntities, c->e);
 		}
 	}
 
-	For(resetEntities)
+	For(e, resetEntities)
 	{
-		Entity *e = *it;
-		Assert(e->temporaryFlags & EntityFlag_QueuedForReset);
-
-		Entity *blockingEntity = InsertEntity(world, *it, true);
-		if (blockingEntity)
+		EntityPtrArray blockingEntities = GetEntities(world, (*e)->physicalPos, EntityFlag_BlocksUnit);
+		
+		For(_it, blockingEntities)
 		{
-			blockingEntity->physicalPos -= blockingEntity->interpolation.dir;
-			*it = blockingEntity;
-			blockingEntity->temporaryFlags |= EntityFlag_QueuedForReset;
+			auto it = *_it;
+			Assert(it->flags & EntityFlag_IsMoving);
+			Assert(it->interpolation.type != Interpolation_Blocked);
+			it->interpolation.type = Interpolation_Blocked;
+			RemoveEntityFromTree(world, it);
+			it->physicalPos -= it->interpolation.dir;
+			ArrayAdd(&resetEntities, it);
+		}
+
+		if (blockingEntities.amount)
+		{
+			ArrayAdd(&resetEntities, *e);
 		}
 		else
 		{
-			UnorderedRemove(&resetEntities, (u32)(it - resetEntities.data));
+			InsertEntity(world, *e);
 		}
-
-		it--;
 	}
-
 }
 
-static u32 GetLeastCommonMultipleForUnits(UnitHandler *unitHandler)
+static void UpdateSimulation(World *world, ExecuteData *execute, f32 dt)
 {
-	if (unitHandler->amount == 0) return 0;
+	world->t += dt * execute->simData.timeScale;
 
-	u32 ret = unitHandler->programs->amount;
-	for (u32 i = 1; i < unitHandler->amount; i++)
+	while (world->t > 1.0f)
 	{
-		ret = LCM(ret, unitHandler->programs[i].amount);
-	}
-	return ret;
-}
+		world->t -= 1.0f;
 
-static void UpdateSimulation(World *world, UnitHandler *unitHandler, ExecuteData *execute, f32 dt)
-{
-	//dt = 0.333333f;
-	unitHandler->t += dt * execute->simData.timeScale;
-	//unitHandler->t = 1.1f;
-#if 0
-	u32 amountOfIterationPerCycles = GetLeastCommonMultipleForUnits(unitHandler);
-	u32 utime = (u32)unitHandler->t;
-	u32 relativeTime = utime % amountOfIterationPerCycles; // we would have to do this with _all_ entities
-
-	u32 currentAt = unitHandler->at % amountOfIterationPerCycles;
-#endif
-
-	while (unitHandler->t > 1.0f)
-	{
-		unitHandler->t -= 1.0f;
-
-		AdvanceGameState(world, unitHandler, execute);
+		AdvanceGameState(world, execute);
 		if (execute->state == Execute_Victory) break;
 	}
 }
 
-static void GameExecuteUpdate(World *world, UnitHandler *unitHandler, ExecuteData *exe, f32 dt)
+static void GameExecuteUpdate(World *world, ExecuteData *exe, f32 dt)
 {
 	SimData *sim = &exe->simData;
 
@@ -462,7 +379,7 @@ static void GameExecuteUpdate(World *world, UnitHandler *unitHandler, ExecuteDat
 	}break;
 	case Execute_Simulation:
 	{
-		UpdateSimulation(world, unitHandler, exe, dt);
+		UpdateSimulation(world, exe, dt);
 	}break;
 	case Execute_Victory:
 	{

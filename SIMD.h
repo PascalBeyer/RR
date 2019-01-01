@@ -111,6 +111,7 @@ static f32Wide Max(f32 f1, f32Wide f2)
 {
 	return _mm_max_ps(Load(f1), f2);
 }
+
 static f32Wide Clamp(f32Wide val, f32Wide min, f32Wide max)
 {
 	return Min(Max(val, min), max);

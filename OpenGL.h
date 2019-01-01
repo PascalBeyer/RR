@@ -227,7 +227,7 @@ static GLuint renderDepth;
 static GLuint shadowFrameBuffer;
 static GLuint shadowTexture;
 
-bool CStringEquals(char *first, u64 firstSize, char* second)
+bool GLCStringEquals(char *first, u64 firstSize, char* second)
 {
 	char* at = second;
 	for (u64 i = 0; i < firstSize; i++, at++)
@@ -267,7 +267,7 @@ static OpenGLInfo OpenGLGetInfo(bool modernContext)
 
 		u64 count = end - at;
 
-		if (CStringEquals(at, count, "GL_EXT_texture_sRGB")) { info.GL_EXT_texture_sRGB = true; }
+		if (GLCStringEquals(at, count, "GL_EXT_texture_sRGB")) { info.GL_EXT_texture_sRGB = true; }
 		at = end;
 	}
 
@@ -1109,7 +1109,7 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg)
 	TimedBlock;
 
 	// todo maybe put this in the init.
-	glEnable(GL_PRIMITIVE_RESTART_FIXED_INDEX);
+	//glEnable(GL_PRIMITIVE_RESTART_FIXED_INDEX);
 
 	glDepthMask(GL_TRUE);
 	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);

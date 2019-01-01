@@ -20,28 +20,16 @@ static PathCreator InitPathCreator()
 	PathCreator ret;
 	ret.hotUnit = 0xFFFFFFFF;
 	ret.state = PathCreator_None;
-	ret.finishButton = CreateRectangle2D(V2(0.8f, 0.7f), 0.1f, 0.1f);
-	ret.resetUnitButton = CreateRectangle2D(V2(0.8f, 0.8f), 0.1f, 0.1f);
+	ret.finishButton = CreateRectangle2D(V2(0.8f, 0.7f), 0.2f, 0.1f);
+	ret.resetUnitButton = CreateRectangle2D(V2(0.8f, 0.8f), 0.2f, 0.1f);
 
 	return ret;
 }
 
-static void AddInstruction(UnitInstructionArray *p, UnitInstruction i)
-{
-	if (p->amount + 1 < MaxUnitInstructions)
-	{
-		(*p)[p->amount++] = i;
-	}
-	else
-	{
-		Die;
-	}
-
-}
 
 static v3i GetPhysicalPositionAfterMove(Entity *e)
 {
-	if ((e->temporaryFlags & EntityFlag_IsMoving))
+	if ((e->flags & EntityFlag_IsMoving))
 	{
 		return e->interpolation.dir + e->physicalPos;
 	}

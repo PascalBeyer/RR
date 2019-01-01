@@ -53,22 +53,20 @@ static void DrawNumberOnTile(RenderGroup *rg, u32 number, v3i pos, v4 color = V4
 	}
 }
 
-static void RenderPathCreator(RenderGroup *rg, World *world, ExecuteData *exe, PathCreator *pathCreator, UnitHandler *unitHandler, Input input)
+static void RenderPathCreator(RenderGroup *rg, World *world, ExecuteData *exe, PathCreator *pathCreator, Input input)
 {
-	if (pathCreator->hotUnit < unitHandler->amount)
+	if (pathCreator->hotUnit != 0xFFFFFFFF)
 	{
-		auto path = unitHandler->programs[pathCreator->hotUnit];
-		
-		u32 serial = unitHandler->entitySerials[pathCreator->hotUnit];
-		Entity *e = GetEntity(world, serial);
-		u32 pathCounter = 0;
+		Entity *e = GetEntity(world, pathCreator->hotUnit);
+		auto path = e->instructions;
 
+		u32 pathCounter = 0;
 		ResetWorld(world);
 
 		For(path)
 		{
 			DrawNumberOnTile(rg, pathCounter, e->physicalPos);
-			AdvanceGameState(world, unitHandler, exe, false);
+			AdvanceGameState(world,  exe, false);
 			pathCounter++;
 		}
 
@@ -81,15 +79,6 @@ static void RenderPathCreator(RenderGroup *rg, World *world, ExecuteData *exe, P
 		pathCounter++;
 
 		v4 newTileColor = V4(1, 0.4f, 0.1f, 0.3f);
-
-#if 0
-		Entity *suppotingEntity = GetEntityInTile(world, GetPhysicalPositionAfterMove(e) + V3i(0, 0, 1));
-		if (!suppotingEntity || !(suppotingEntity->flags & EntityFlag_SupportsUnit))
-		{
-			DrawNumberOnTile(rg, pathCounter, pos + V3i(0, 0, 1), newTileColor);
-		}
-		else
-#endif // !0
 
 		if (BoxNorm(mouseToPath) > 0.5f)
 		{
@@ -132,13 +121,13 @@ static void RenderPathCreator(RenderGroup *rg, World *world, ExecuteData *exe, P
 		{
 		case Entity_Dude:
 		{
-			PushTriangleMesh(rg, it->meshId, it->orientation, V3((it->physicalPos)), it->scale, V4(0.75f, 0.0f, 0.0f, 0.0f));
-			PushTriangleMesh(rg, it->meshId, it->orientation, V3((it->initialPos)), it->scale, it->color * it->frameColor);
+			PushTriangleMesh(rg, it->meshId, it->orientation, V3((it->physicalPos)) + it->offset, it->scale, V4(0.75f, 0.0f, 0.0f, 0.0f));
+			PushTriangleMesh(rg, it->meshId, it->orientation, V3((it->initialPos)) + it->offset, it->scale, it->color * it->frameColor);
 		}break;
 		case Entity_Block:
 		{
-			PushTriangleMesh(rg, it->meshId, it->orientation, V3((it->physicalPos)), it->scale, V4(0.75f, 0.0f, 0.0f, 0.0f));
-			PushTriangleMesh(rg, it->meshId, it->orientation, V3((it->initialPos)), it->scale, it->color * it->frameColor);
+			PushTriangleMesh(rg, it->meshId, it->orientation, V3(it->physicalPos) + it->offset, it->scale, V4(0.75f, 0.0f, 0.0f, 0.0f));
+			PushTriangleMesh(rg, it->meshId, it->orientation, V3(it->initialPos) + it->offset, it->scale, it->color * it->frameColor);
 		}break;
 		default:
 		{
@@ -177,12 +166,12 @@ static void RenderSimulateUI(RenderGroup *rg, SimData *sim)
 
 }
 
-static void RenderSimulate(RenderGroup *rg, World *world, UnitHandler *unitHandler)
+static void RenderSimulate(RenderGroup *rg, World *world)
 {
 #if 1
 	For(world->entities)
 	{
-		PushTriangleMesh(rg, it->meshId, it->orientation, GetRenderPos(*it, unitHandler->t), it->scale, it->color * it->frameColor);
+		PushTriangleMesh(rg, it->meshId, it->orientation, GetRenderPos(*it, world->t), it->scale, it->color * it->frameColor);
 	}
 #else
 	For(world->entities)
@@ -200,7 +189,7 @@ static void RenderPlacingUnits(RenderGroup *rg, ExecuteData *exe, World *world, 
 		v3i pos = clickedE->physicalPos + V3i(0, 0, -1);
 
 		Entity *e = exe->placingUnits.unitsToPlace[0];
-		if (!TileBlocked(world, pos))
+		if (!GetEntities(world, pos))
 		{
 			PushTriangleMesh(rg, world->dudeMeshId, e->orientation, V3(pos), e->scale, V4(1.0f, 0.2f, 1.0f, 0.3f));
 		}
@@ -221,7 +210,7 @@ static void RenderPlacingUnits(RenderGroup *rg, ExecuteData *exe, World *world, 
 	}
 }
 
-static void RenderExecute(RenderGroup *rg, World *world, ExecuteData *exe, UnitHandler *unitHandler, AssetHandler *assetHandler, Input input)
+static void RenderExecute(RenderGroup *rg, World *world, ExecuteData *exe, AssetHandler *assetHandler, Input input)
 {
 	switch (exe->state)
 	{
@@ -231,15 +220,15 @@ static void RenderExecute(RenderGroup *rg, World *world, ExecuteData *exe, UnitH
 	}break;
 	case Execute_PathCreator:
 	{
-		RenderPathCreator(rg, world, exe, &exe->pathCreator, unitHandler, input);
+		RenderPathCreator(rg, world, exe, &exe->pathCreator, input);
 	}break;
 	case Execute_Simulation:
 	{
-		RenderSimulate(rg, world, unitHandler);
+		RenderSimulate(rg, world);
 	}break;
 	case Execute_Victory:
 	{
-		RenderSimulate(rg, world, unitHandler);
+		RenderSimulate(rg, world);
 	}break;
 	InvalidDefaultCase;
 
@@ -667,7 +656,7 @@ static void RenderEditor(RenderGroup *rg, AssetHandler *assetHandler, Editor edi
 		{
 			Entity *e = GetEntity(world, it->placedSerial);
 
-			PushTriangleMesh(rg, e->meshId, e->orientation, V3(SnapToTileMap(GetRenderPos(*e))), e->scale, e->color * V4(0.5f, 1.0f, 1.0f, 1.0f));
+			PushTriangleMesh(rg, e->meshId, e->orientation, V3(e->physicalPos), e->scale, e->color * V4(0.5f, 1.0f, 1.0f, 1.0f));
 		}
 
 	}break;

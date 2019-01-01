@@ -82,6 +82,8 @@ struct GameState
 	Arena *workingArena;
 	Arena *currentStateArena;
 
+	TriangleMesh testMesh;
+
 	// Engine
 	WorkHandler *workHandler;
 	AssetHandler assetHandler;
@@ -89,7 +91,6 @@ struct GameState
 	Font font; // todo make this into an asset
 
 	// level specific stuff
-	UnitHandler unitHandler;
 	ExecuteData executeData;
 	World world;
 	Editor editor;
@@ -111,7 +112,13 @@ static void GameGoToMode(GameState *state, GameMode mode)
 	{
 	case Game_Execute:
 	{
-		ResetWorld(&state->world);
+		auto world = &state->world;
+		ResetTree(world, &world->entityTree);
+		For(world->entities)
+		{
+			InsertEntity(world, it);
+		}
+		ChangeExecuteState(world, &state->executeData, Execute_PathCreator);
 		state->mode = Game_Execute;
 	}break;
 	case Game_Editor:
@@ -146,7 +153,6 @@ static GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHa
 	InitConsole(constantArena);
 	ret.assetHandler = CreateAssetHandler(constantArena);
 	ret.soundMixer = {};
-	ret.unitHandler = CreateUnitHandler(constantArena, &ret.assetHandler);
 	ret.editor = InitEditor(constantArena);
 	ret.workingArena = InitArena(PushData(constantArena, u8, MegaBytes(50)), MegaBytes(50));
 	
@@ -157,7 +163,7 @@ static GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHa
 	ret.world = InitWorld(ret.currentStateArena, &ret.assetHandler, (u32)screenWidth, (u32)screenHeight);
 	ret.executeData = InitExecute();
 
-	ChangeExecuteState(&ret.world, &ret.unitHandler, &ret.executeData, Execute_PathCreator);
+	ChangeExecuteState(&ret.world, &ret.executeData, Execute_PathCreator);
 
 
 	f32 pifac = 6.0f * 0.25f * pi32;
@@ -180,18 +186,17 @@ static GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHa
 
 	ConvertNewAssets(&ret.assetHandler, ret.currentStateArena, ret.workingArena);
 	
-	LoadLevel(CreateString("bridge"), &ret.unitHandler, &ret.world, ret.currentStateArena, &ret.assetHandler, &ret.editor);
+	LoadLevel(CreateString("bridge"), &ret.world, ret.currentStateArena, &ret.assetHandler, &ret.editor);
 
-	GameGoToMode(&ret, Game_Execute);
+	ret.testMesh = ReadDAE(ret.currentStateArena, "obj/dude.dae");
 
+	
 	return ret;
 }
 
 static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderCommands, Input input, SoundBuffer *soundBuffer)
-{
+{	
 	TimedBlock;
-
-	UnitHandler *unitHandler = &gameState->unitHandler;
 	AssetHandler *assetHandler = &gameState->assetHandler;
 	Editor *editor = &gameState->editor;
 	World *world = &gameState->world;
@@ -237,12 +242,12 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 			{
 				ColorPickersHandleEvents(&gameState->editor, message, input);
 
-				ExecuteHandleEvents(world, unitHandler, assetHandler, exe, message, input);
+				ExecuteHandleEvents(world, assetHandler, exe, message, input);
 
 			}break;
 			case Game_Editor:
 			{
-				EditorHandleEvents(editor, unitHandler, world, assetHandler, message, input, currentStateArena);
+				EditorHandleEvents(editor, world, assetHandler, message, input, currentStateArena);
 			}break;
 			InvalidDefaultCase;
 			
@@ -281,12 +286,12 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 	{
 		UpdateColorPickers(editor, input);
 		
-		GameExecuteUpdate(world, unitHandler, exe, dt);
+		GameExecuteUpdate(world, exe, dt);
 
 	}break;
 	case Game_Editor:
 	{
-		UpdateEditor(editor, unitHandler, world, input);
+		UpdateEditor(editor, world, input);
 
 	}break;
 	}
@@ -311,7 +316,7 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 			transformedAABB.minDim *= it->scale;
 			transformedAABB.maxDim *= it->scale;
 
-			m4x4 mat = Translate(QuaternionToMatrix(it->orientation), GetRenderPos(*it, unitHandler->t));
+			m4x4 mat = Translate(QuaternionToMatrix(it->orientation), GetRenderPos(*it, world->t));
 
 
 			v3 d1 = V3(transformedAABB.maxDim.x - transformedAABB.minDim.x, 0, 0);
@@ -428,11 +433,13 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 	}break;
 	case Game_Execute:
 	{
-		RenderExecute(rg, world, exe, unitHandler, assetHandler, input);
+		RenderExecute(rg, world, exe, assetHandler, input);
 	}break;
 
 	}
 	
+	PushTriangleMesh(rg, &gameState->testMesh, { 1, 0, 0, 0 }, V3(), 100.0f, V4(1, 1, 1, 1));
+
 	PushRenderSetup(rg, *cam, world->lightSource, Setup_ZeroToOne); //todo  make PushRenderSetup have optional lightsource.
 
 	switch (gameState->mode)
