@@ -477,13 +477,15 @@ struct Quaternion
 	{
 		struct
 		{
-			f32 w, x, y, z;
+			f32 x, y, z, w;
 		};
 		struct
 		{
-			f32 r;
+			
 			v3 v;
+			f32 r;
 		};
+		f32 component[4];
 	};
 };
 
@@ -586,6 +588,84 @@ static Quaternion Inverse(Quaternion a)
 	ret = ret / (norm * norm);
 	return ret;
 }
+
+// we are using double here, cuz I guess this can be slow, I guess also copy paste from some random blog
+static Quaternion Slerp(Quaternion a, f32 t, Quaternion b)
+{
+	Quaternion ret;
+	// Calculate angle between them.
+	f32 cosHalfTheta = a.w * b.w + a.x * b.x + a.y * b.y + a.z * b.z;
+
+	// if a=b or a=-b then theta = 0 and we can return a
+	if (Abs(cosHalfTheta) >= 1.0) {
+		ret.w = a.w; ret.x = a.x; ret.y = a.y; ret.z = a.z;
+		return ret;
+	}
+
+	// Calculate temporary values.
+	double halfTheta = acos(cosHalfTheta);
+	double sinHalfTheta = sqrt(1.0 - cosHalfTheta*cosHalfTheta);
+	// if theta = 180 degrees then result is not fully defined
+	// we could rotate around any axis normal to a or b
+	if (fabs(sinHalfTheta) < 0.001f) { // fabs is floating point absolute
+		ret.w = (a.w * 0.5f + b.w * 0.5f);
+		ret.x = (a.x * 0.5f + b.x * 0.5f);
+		ret.y = (a.y * 0.5f + b.y * 0.5f);
+		ret.z = (a.z * 0.5f + b.z * 0.5f);
+		return ret;
+	}
+
+	double ratioA = sin((1 - t) * halfTheta) / sinHalfTheta;
+	double ratioB = sin(t * halfTheta) / sinHalfTheta;
+	//calculate Quaternion.
+	ret.w = (f32)(a.w * ratioA + b.w * ratioB);
+	ret.x = (f32)(a.x * ratioA + b.x * ratioB);
+	ret.y = (f32)(a.y * ratioA + b.y * ratioB);
+	ret.z = (f32)(a.z * ratioA + b.z * ratioB);
+	return ret;
+
+}
+
+static Quaternion NOID(Quaternion q)
+{
+	f32 norm = Norm(q);
+	if (!norm)
+	{
+		return { 1, 0, 0, 0 };
+	}
+	else
+	{
+		return q / norm;
+	}
+}
+
+#if ß
+static Quaternion operator*(f32 a, Quaternion b)
+{
+	Quaternion ret;
+	ret.x = a * b.x;
+	ret.y = a * b.y;
+	ret.z = a * b.z;
+	ret.w = a * b.w;
+	return ret;
+}
+#endif
+
+static Quaternion Lerp(Quaternion a, f32 t, Quaternion b)
+{
+	return ((1.0f - t) * a + t * b);
+}
+
+static Quaternion NLerp(Quaternion a, f32 t, Quaternion b)
+{
+	Quaternion lerp = Lerp(a, t, b);
+	f32 norm = Norm(lerp);
+
+	Assert(norm); // this might be zero, but then we kinda really fucked up.
+
+	return lerp / norm;
+}
+
 
 struct m3x3
 {

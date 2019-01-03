@@ -985,6 +985,36 @@ static void HandleWindowsMassages(KeyMessageBuffer *buffer) //todo make this buf
 
 int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showCode)
 {
+	u32 constantMemorySize = GigaBytes(1);
+	u32 frameMemorySize = MegaBytes(100);
+	u32 workingMemorySize = MegaBytes(5);
+
+	void *constantMemory = VirtualAlloc(0, constantMemorySize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+	Arena *constantArena = InitArena(constantMemory, constantMemorySize);
+	void *frameMem = VirtualAlloc(0, frameMemorySize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+	frameArena = InitArena(frameMem, frameMemorySize);
+	Assert(frameMem);
+	Assert(constantMemory);
+
+	alloc = PushStruct(constantArena, BuddyAllocator);
+	*alloc = CreateBuddyAllocator(constantArena, MegaBytes(128), KiloBytes(64));
+
+	//TestAllocator(&buddyAlloc);
+
+	void *debugMemory = VirtualAlloc(0, MegaBytes(300), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+	globalDebugState.arena = InitArena(debugMemory, MegaBytes(300));
+	Assert(debugMemory);
+
+	InitDebug();
+	ResetDebugState();
+
+	// setting up windows timing stuff
+	UINT desiredSchedulerMS = 1;
+	bool sleepIsGranular = (timeBeginPeriod(desiredSchedulerMS) == TIMERR_NOERROR);
+	LARGE_INTEGER perfCountFrequencyResult;
+	QueryPerformanceFrequency(&perfCountFrequencyResult);
+	globalPerformanceCountFrequency = perfCountFrequencyResult.QuadPart;
+
 
 #if 0
 	const u32 threadCount = 3 - 1;
@@ -1004,38 +1034,7 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
 #endif
 	workHandler.Initiate(&InterlockedCompareExchange, &WakeThreads, &InterlockedIncrement, threadCount);
 
-	WNDCLASSA windowClass = {};
-	windowClass.style = CS_HREDRAW | CS_VREDRAW;
-	windowClass.lpfnWndProc = win32MainWindowCallback;
-	windowClass.hInstance = instance;
-	windowClass.lpszClassName = "WindowClass";
-
-	UINT desiredSchedulerMS = 1;
-	bool sleepIsGranular = (timeBeginPeriod(desiredSchedulerMS) == TIMERR_NOERROR);
-	LARGE_INTEGER perfCountFrequencyResult;
-	QueryPerformanceFrequency(&perfCountFrequencyResult);
-	globalPerformanceCountFrequency = perfCountFrequencyResult.QuadPart;
-
-
-	int windowWidth = 1280, windowHeight = 720;
-
-	u32 constantMemorySize = GigaBytes(1);
-	u32 frameMemorySize = MegaBytes(100);
-	u32 workingMemorySize = MegaBytes(5);
-
-	void *constantMemory = VirtualAlloc(0, constantMemorySize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-	Arena *constantArena = InitArena(constantMemory, constantMemorySize);
-	void *frameMem = VirtualAlloc(0, frameMemorySize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-	frameArena = InitArena(frameMem, frameMemorySize);
-
-	alloc = PushStruct(constantArena, BuddyAllocator);
-	*alloc = CreateBuddyAllocator(constantArena, MegaBytes(512), KiloBytes(64));
-
-	//TestAllocator(&buddyAlloc);
-
-	void *debugMemory = VirtualAlloc(0, MegaBytes(300), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-	globalDebugState.arena = InitArena(debugMemory, MegaBytes(300));
-	
+	// todo make this work off of frame arena.
 	const u32 inputBufferSize = 100;
 	KeyStateMessage inputBuffer[inputBufferSize];
 	KeyMessageBuffer keyMessageBuffer;
@@ -1043,6 +1042,13 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
 	keyMessageBuffer.maxAmountOfMessages = inputBufferSize;
 	keyMessageBuffer.messages = inputBuffer;
 
+	WNDCLASSA windowClass = {};
+	windowClass.style = CS_HREDRAW | CS_VREDRAW;
+	windowClass.lpfnWndProc = win32MainWindowCallback;
+	windowClass.hInstance = instance;
+	windowClass.lpszClassName = "WindowClass";
+
+	i32 windowWidth = 1280, windowHeight = 720;
 	initializeImageBuffer(&globalInfo, &globalImageBuffer, windowWidth, windowHeight);
 	if (RegisterClass(&windowClass))
 	{
@@ -1067,7 +1073,7 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
 			renderCommands.width = globalImageBuffer.width;
 			renderCommands.aspectRatio = (f32) globalImageBuffer.width / (f32) globalImageBuffer.height;
 
-			RECT windowRect;
+			RECT windowRect; // todo redo this, but make it so that the mouse position gets adjusted at the beginning of the frame, so if the window is not active, this does not do anything
 			/*
 			if (GetWindowRect(window, &windowRect))
 				ClipCursor(&windowRect);
@@ -1077,7 +1083,7 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
 			i16 *samples = (i16 *)VirtualAlloc(0, soundOutput.secondaryBufferSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 			soundOutput.soundSamples = samples;
 			int sampleAmount = soundOutput.secondaryBufferSize / sizeof(i16);
-			for (unsigned int i = 0; i < (soundOutput.secondaryBufferSize/sizeof(i16)); i++)
+			for (u32 i = 0; i < (soundOutput.secondaryBufferSize/sizeof(i16)); i++)
 			{
 				samples[i] = 0;
 			}
@@ -1094,13 +1100,12 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
 			f32 gameUpdateHz = (float)(monitorRefreshHz);
 			f32 targetSecondsPerFrame = 1.0f / (f32)gameUpdateHz;
 			
-			LARGE_INTEGER timeCounter;
-			QueryPerformanceCounter(&timeCounter);
-
-			InitDebug();
-
 			gameState = InitGame(windowWidth, windowHeight, &workHandler, constantArena);
 
+			Clear(frameArena);
+
+			LARGE_INTEGER timeCounter;
+			QueryPerformanceCounter(&timeCounter);			
 			while (running)
 			{	
 				if (globalGamePaused)
@@ -1192,8 +1197,6 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
 				windowDimension dim;
 				dim = win32GetWindowDimension(window);
 				displayImageBuffer(deviceContext);
-
-				globalDebugState.firstFrame = false;
 
 				Clear(frameArena);
 			}

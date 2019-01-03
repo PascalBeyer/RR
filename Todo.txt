@@ -134,4 +134,18 @@ splitt how editor and game works.
 check sim loop for DF array could be replaced by a static build.
 
 
-XForm states : GetFromMatrix in jBlow: Animation Playback part 2 37 min.
+XForm states : GetFromMatrix in jBlow: Animation Playback part 2 37 min. // done?
+
+
+reset frame arena after preload?
+
+lets try to make a game where you go through tripyness = 4th dimension
+
+make World -> EntityManager?
+
+Animation:
+make stuff save InterpolationData
+Loading and saving skeletons
+Loading and saving animations
+Animation player (save in skeleton?, save in world)
+OpenGL stuff

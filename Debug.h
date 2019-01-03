@@ -161,7 +161,6 @@ DefineArray(DebugUIElement);
 struct DebugState
 {
 	b32 paused;
-	b32 firstFrame;
 	b32 drawDebug;
 
 	u32 eventIndex;

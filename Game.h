@@ -82,7 +82,8 @@ struct GameState
 	Arena *workingArena;
 	Arena *currentStateArena;
 
-	TriangleMesh testMesh;
+	// tempoary
+	DAEReturn testMesh;
 
 	// Engine
 	WorkHandler *workHandler;
@@ -99,7 +100,7 @@ struct GameState
 static GameState gameState;
 
 
-static void GameGoToMode(GameState *state, GameMode mode)
+static void SwitchGameMode(GameState *state, GameMode mode)
 {
 #if 0
 	switch (state->mode)
@@ -190,6 +191,7 @@ static GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHa
 
 	ret.testMesh = ReadDAE(ret.currentStateArena, "obj/dude.dae");
 
+	SwitchGameMode(&ret, Game_Editor);
 	
 	return ret;
 }
@@ -257,11 +259,11 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 			{
 				if (gameState->mode == Game_Editor)
 				{
-					GameGoToMode(gameState, Game_Execute);
+					SwitchGameMode(gameState, Game_Execute);
 				}
 				else
 				{
-					GameGoToMode(gameState, Game_Editor);
+					SwitchGameMode(gameState, Game_Editor);
 				}
 			}
 
@@ -438,8 +440,8 @@ static void GameUpdateAndRender(GameState *gameState, RenderCommands *renderComm
 
 	}
 	
-	PushTriangleMesh(rg, &gameState->testMesh, { 1, 0, 0, 0 }, V3(), 100.0f, V4(1, 1, 1, 1));
-
+	AnimateDude(rg, &gameState->testMesh, dt);
+	
 	PushRenderSetup(rg, *cam, world->lightSource, Setup_ZeroToOne); //todo  make PushRenderSetup have optional lightsource.
 
 	switch (gameState->mode)

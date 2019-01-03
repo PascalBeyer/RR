@@ -994,7 +994,7 @@ void OpenGLInit(HGLRC modernContext)
 	Assert(glGetError() == GL_NO_ERROR);
 }
 
-u32 HeaderSize(RenderGroupEntryHeader *header)
+static u32 HeaderSize(RenderGroupEntryHeader *header)
 {
 	switch (header->type)
 	{

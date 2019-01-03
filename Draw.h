@@ -816,3 +816,53 @@ static void RenderEntityQuadTree(RenderGroup *rg, TileOctTreeNode *node)
 	}
 }
 
+static void AnimateDude(RenderGroup *rg, DAEReturn *stuff, f32 dt)
+{
+
+	TriangleMesh *mesh = &stuff->mesh;
+	Skeleton *skeleton = &stuff->skeleton;
+	KeyFramedAnimation *animation = &stuff->animation;
+
+	v3Array out = PushArray(frameArena, v3, mesh->vertices.amount);
+
+	static f32 t = 0;
+	t += dt;
+
+	m4x4Array boneTransformes = CalculateBoneTransforms(skeleton, animation, t);
+
+	// this is shader stuff, not sure how we handle the map?, Do we have to linearize?
+	for (u32 i = 0; i < mesh->vertices.amount; i++)
+	{
+		u32 unflattend = skeleton->vertexMap[i];
+		WeightDataArray weights = skeleton->vertexToWeightsMap[unflattend];
+
+		out[i] = V3();
+
+		v3 v = mesh->vertices[i].p;
+
+		For(weights)
+		{
+			// first inverse then transform it, makes sense!
+			out[i] += it->weight * (boneTransformes[it->boneIndex] * skeleton->bones[it->boneIndex].inverseBindShapeMatrix * v);
+		}
+	}
+
+	for (u32 i = 0; i < mesh->indices.amount; i += 3)
+	{
+		u16 i1 = mesh->indices[i + 0];
+		u16 i2 = mesh->indices[i + 1];
+		u16 i3 = mesh->indices[i + 2];
+
+#if 0
+		v3 p1 = mesh->vertices[i1].p;
+		v3 p2 = mesh->vertices[i2].p;
+		v3 p3 = mesh->vertices[i3].p;
+#endif 
+
+		v3 p1 = out[i1];
+		v3 p2 = out[i2];
+		v3 p3 = out[i3];
+
+		PushTriangle(rg, p1, p2, p3, V3(0.8f, 0.8f, 0.8f));
+	}
+}

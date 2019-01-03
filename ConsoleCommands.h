@@ -248,7 +248,7 @@ static void LoadLevelHelper(StringArray args)
 {
 	if (LoadLevel(args[0], &gameState.world, gameState.currentStateArena, &gameState.assetHandler, &gameState.editor))
 	{
-		GameGoToMode(&gameState, Game_Editor);
+		SwitchGameMode(&gameState, Game_Editor);
 		ConsoleOutput("Loaded level %s!", args[0]);
 		return;
 	}

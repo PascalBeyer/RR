@@ -1,8 +1,128 @@
 
+struct InterpolationData // naming?
+{
+	v3 translation;
+	Quaternion orientation;
+	v3 scale;
+};
+DefineArray(InterpolationData);
+
+static m4x4 InterpolationDataToMatrix(InterpolationData a)
+{
+	m4x4 ret;
+
+	ret = QuaternionToMatrix(a.orientation);
+	ret = Translate(ret, a.translation);
+	ret.a[0][0] *= a.scale.x;
+	ret.a[0][1] *= a.scale.x;
+	ret.a[0][2] *= a.scale.x;
+
+	ret.a[1][0] *= a.scale.y;
+	ret.a[1][1] *= a.scale.y;
+	ret.a[1][2] *= a.scale.y;
+
+	ret.a[2][0] *= a.scale.z;
+	ret.a[2][1] *= a.scale.z;
+	ret.a[2][2] *= a.scale.z;
+	
+	return ret;
+}
+
+static InterpolationData MatrixToInterpolationData(m4x4 mat)
+{
+	// copied from (XForm states : GetFromMatrix in jBlow: Animation Playback part 2 37 min.), slightly altered
+	InterpolationData ret;
+
+	v3 mx = GetRow(mat, 0);
+	v3 my = GetRow(mat, 1);
+	v3 mz = GetRow(mat, 2);
+
+	f32 normx = Norm(mx);
+	f32 normy = Norm(my);
+	f32 normz = Norm(mz);
+
+	ret.scale = V3(normx, normy, normz);
+	ret.translation = GetColumn(mat, 3);
+
+	mx /= normx;
+	my /= normy;
+	mz /= normz;
+
+	f32 coef[3][3];
+	coef[0][0] = mx.x;
+	coef[0][1] = mx.y;
+	coef[0][2] = mx.z;
+
+	coef[1][0] = my.x;
+	coef[1][1] = my.y;
+	coef[1][2] = my.z;
+
+	coef[2][0] = mz.x;
+	coef[2][1] = mz.y;
+	coef[2][2] = mz.z;
+
+	f32 trace = coef[0][0] + coef[1][1] + coef[2][2];
+
+	Quaternion q;
+
+	if (trace > 0.0f)
+	{
+		// |w| > 1/2
+		f32 s = Sqrt(trace + 1.0f); // 2w
+
+		q.w = s * 0.5f;
+
+		s = 0.5f / s; // 1/(4f)
+
+		q.x = (coef[2][1] - coef[1][2]) * s;
+		q.y = (coef[0][2] - coef[2][0]) * s;
+		q.z = (coef[1][0] - coef[0][1]) * s;
+
+	}
+	else
+	{
+		// |w| <= 1/2
+		i32 i = 0;
+		if (coef[1][1] > coef[0][0]) i = 1;
+		if (coef[2][2] > coef[i][i]) i = 2;
+
+		i32 j = (1 << i) & 3; // i+1 mod 3.
+		i32 k = (1 << j) & 3; // j+1 mod 3.
+
+		f32 s = Sqrt(coef[i][i] - coef[j][j] - coef[k][k] + 1.0f);
+
+		q.component[i] = s * 0.5f;
+		
+		s = 0.5f / s;
+		q.component[j] = (coef[i][j] + coef[j][i]) * s;
+		q.component[k] = (coef[k][i] + coef[i][k]) * s;
+		q.w = (coef[k][j] - coef[j][k]) * s;
+	}
+
+	ret.orientation = q;
+
+	f32 norm = Norm(q);
+	Assert(0.99f < norm && norm < 1.01f);
+
+	return ret;
+}
+
+// assumed to be from zero to one
+static InterpolationData Interpolate(InterpolationData prev, InterpolationData next, f32 t) 
+{
+	
+	InterpolationData ret; 
+	ret.translation = Lerp(prev.translation, t, next.translation);
+	ret.scale		= Lerp(prev.scale, t, next.scale);
+	ret.orientation = NLerp(prev.orientation, t, next.orientation);
+
+	return ret;
+}
+
 struct WeightData
 {
 	f32 weight;
-	u32 jointIndex;
+	u32 boneIndex;
 };
 DefineArray(WeightData);
 DefineArray(WeightDataArray);
@@ -20,13 +140,25 @@ struct KeyFramedAnimation
 	f32 length;
 };
 
+struct Bone
+{
+	String name;
+	u32 parentIndex;
+	m4x4 inverseBindShapeMatrix;
+	m4x4 transform;
+};
+
+DefineArray(Bone);
 struct Skeleton
 {
+	// m4x4 bindShapeMatrix; // this should be premultiplied into the bindshape matricies above? and is now.
+
 	u16Array vertexMap; // from flattend to not flattend
 
 	v3Array vertices; // not flattend
 	WeightDataArrayArray vertexToWeightsMap; // from not flattend
-	StringArray boneNames;
+
+	BoneArray bones;
 };
 
 
@@ -206,7 +338,7 @@ struct DAEVertexWeights
 struct DAESkin
 {
 	String skinSource;
-	String bind_shape_matrix; // optional
+	String bind_shape_matrix;
 	DAESourceDFArray sources;
 	DAEJoints joints;
 	DAEVertexWeights vertex_weights;
@@ -308,28 +440,28 @@ static DAENode *DAEParseNode(String *line, String *remaining)
 		{
 			trans.type = DAE_Translate;
 			trans.sid = DAEEatAttAndReturnIt(line, "sid");
-			Eat(2, line);
+			EatToCharReturnHead(line, '>'); Eat1(line);
 			trans.val = EatToCharReturnHead(line, '<');
 		}
 		else if (BeginsWithEat(line, "<rotate"))
 		{
 			trans.type = DAE_Rotate;
 			trans.sid = DAEEatAttAndReturnIt(line, "sid");
-			Eat(2, line);
+			EatToCharReturnHead(line, '>'); Eat1(line);
 			trans.val = EatToCharReturnHead(line, '<');
 		}
 		else if(BeginsWithEat(line, "<scale"))
 		{
 			trans.type = DAE_Scale;
 			trans.sid = DAEEatAttAndReturnIt(line, "sid");
-			Eat(2, line);
+			EatToCharReturnHead(line, '>'); Eat1(line);
 			trans.val = EatToCharReturnHead(line, '<');
 		}
 		else if(BeginsWithEat(line, "<matrix"))
 		{
 			trans.type = DAE_Matrix;
 			trans.sid = DAEEatAttAndReturnIt(line, "sid");
-			Eat(2, line);
+			EatToCharReturnHead(line, '>'); Eat1(line);
 			trans.val = EatToCharReturnHead(line, '<');
 		}
 		else
@@ -542,6 +674,57 @@ static m4x4 Eatm4x4(String *s, b32 *success)
 	}
 
 	return ret;
+}
+
+static void BuildBoneArray(BoneArray bones, DAENode *node, StringArray boneNames, m4x4Array inverseBindShapeMatrices, u32 parentIndex, Arena *constantArena, m4x4 bindShapeMatrix)
+{
+	u32 index = 0xFFFFFFFF;
+
+	if(node->type == "JOINT")
+	{
+
+		For(boneNames)
+		{
+			if (node->sid == *it)
+			{
+				index = (u32)(it - boneNames.data);
+				break;
+			}
+		}
+
+		Assert(index != 0xFFFFFFFF);
+
+		// note : we do use "index" here, we assume it is _topological_ ordered by parenting, so we can generate the matrices faster later
+
+		Bone *bone = bones + index;
+		bone->name = CopyString(node->name, constantArena);
+		bone->parentIndex = parentIndex;
+		bone->inverseBindShapeMatrix = inverseBindShapeMatrices[index] * bindShapeMatrix;
+
+		b32 success = true;
+		String transformation = {};
+
+		For(node->transformations)
+		{
+			if (it->type == DAE_Matrix)
+			{
+				transformation = it->val;
+				break;
+			}
+		}
+
+		bone->transform = Eatm4x4(&transformation, &success); // these are the transforms in local space, i.e relative to its parent. still do not reall know what they do
+		Assert(success);
+	}
+	else
+	{
+		Assert(node->type == "NODE");
+	}
+
+	For(node->children)
+	{
+		BuildBoneArray(bones, *it, boneNames, inverseBindShapeMatrices, index, constantArena, bindShapeMatrix);
+	}	
 }
 
 static DAEReturn ReadDAE(Arena *constantArena, char *fileName)
@@ -1082,7 +1265,7 @@ static DAEReturn ReadDAE(Arena *constantArena, char *fileName)
 	DAESkin *daeSkin = &gatheredData.controllers[0].skin;
 
 	StringArray boneNames;
-	m4x4Array boneTransformes;
+	m4x4Array inverseBindShapeMatrixArray;
 
 	For(i, daeSkin->joints.inputs)
 	{
@@ -1123,9 +1306,9 @@ static DAEReturn ReadDAE(Arena *constantArena, char *fileName)
 			String nameIt = source->arr;
 			//u32 amount = source->elementCount / source->technique.stride;
 
-			boneTransformes = PushArray(frameArena, m4x4, source->technique.count); // arena?
+			inverseBindShapeMatrixArray = PushArray(frameArena, m4x4, source->technique.count); // arena?
 
-			For(boneTransformes)
+			For(inverseBindShapeMatrixArray)
 			{
 				*it = Eatm4x4(&nameIt, &success);
 			}
@@ -1134,7 +1317,7 @@ static DAEReturn ReadDAE(Arena *constantArena, char *fileName)
 		}
 	}
 
-	Assert(boneTransformes.amount == boneNames.amount);
+	Assert(inverseBindShapeMatrixArray.amount == boneNames.amount);
 	u32 amountOfBones = boneNames.amount;
 
 	
@@ -1205,7 +1388,7 @@ static DAEReturn ReadDAE(Arena *constantArena, char *fileName)
 		EatSpaces(&vCountIt);
 		For(*weightArray)
 		{
-			it->jointIndex = Eatu32(&vIt, &success);
+			it->boneIndex = Eatu32(&vIt, &success);
 			EatSpaces(&vIt);
 			u32 weightIndex = Eatu32(&vIt, &success);
 			it->weight = weights[weightIndex];
@@ -1302,8 +1485,21 @@ static DAEReturn ReadDAE(Arena *constantArena, char *fileName)
 			it->boneStates[i] = matrixArrayPerBone[i][it_index];
 		}
 
-		it->t = timeArrayPerBone[0][it_index];
+		it->t = timeArrayPerBone[0][it_index]; // as they are all the same
 	}
+
+#if 0
+	skeleton.boneNames = jointNames; // right now these break // todo todo todo
+	skeleton.boneTransformes = boneTransformes;
+#endif
+
+	BoneArray bones = PushArray(constantArena, Bone, amountOfBones);
+	Assert(gatheredData.scenes.amount == 1);
+
+	m4x4 bindShapeMatrix = Eatm4x4(&gatheredData.controllers[0].skin.bind_shape_matrix, &success);
+	Assert(success);
+
+	BuildBoneArray(bones, gatheredData.scenes[0].nodes[0], boneNames, inverseBindShapeMatrixArray, 0xFFFFFFFF, constantArena, bindShapeMatrix);
 
 	TriangleMesh triangleMesh;
 	triangleMesh.type = TriangleMeshType_List;
@@ -1320,12 +1516,13 @@ static DAEReturn ReadDAE(Arena *constantArena, char *fileName)
 	animation.keyFrames = keyFrames;
 	animation.length = keyFrames[amountOfKeyFrames - 1].t;
 
+	
 	Skeleton skeleton;
-	skeleton.boneNames = jointNames; // right now these break // todo todo todo
 	skeleton.vertices = positions;
 	skeleton.vertexMap = skeletonVertexMap;
 	skeleton.vertexToWeightsMap = vertexToWeightsMap;
-
+	skeleton.bones = bones;
+	
 	DAEReturn ret;
 	ret.animation = animation;
 	ret.skeleton = skeleton;
@@ -1334,7 +1531,84 @@ static DAEReturn ReadDAE(Arena *constantArena, char *fileName)
 	return ret;
 }
 
+static m4x4Array InterpolateKeyFrames(m4x4Array prevBoneStates, m4x4Array nextBoneStates, f32 t)
+{
+	Assert(prevBoneStates.amount == nextBoneStates.amount);
+	u32 amountOfBones = prevBoneStates.amount;
+	
 
+	m4x4Array ret = PushArray(frameArena, m4x4, amountOfBones);
 
+	for (u32 i = 0; i < amountOfBones; i++)
+	{
+		InterpolationData prev = MatrixToInterpolationData(prevBoneStates[i]);
+		InterpolationData next = MatrixToInterpolationData(nextBoneStates[i]);
 
+		ret[i] = InterpolationDataToMatrix(Interpolate(prev, next, t));
+	}
 
+	return ret;
+}
+
+static m4x4Array CalculateBoneTransforms(Skeleton *skeleton, KeyFramedAnimation *animation, f32 t)
+{
+	m4x4Array ret = PushArray(frameArena, m4x4, skeleton->bones.amount);
+
+	
+	if (!animation)
+	{
+		ret[0] = skeleton->bones[0].transform;
+
+		for (u32 i = 1; i < skeleton->bones.amount; i++)
+		{
+			Bone *bone = skeleton->bones + i;
+			Assert(bone->parentIndex < i);
+			ret[i] =  ret[bone->parentIndex] * bone->transform;
+		}
+
+		return ret;
+	}
+	
+	f32 at = (f32)fmod(t, animation->length);
+
+	KeyFrame *nextKeyFrame = NULL;
+	KeyFrame *prevKeyFrame = NULL;
+	For(animation->keyFrames)
+	{
+		if (it->t > at)
+		{
+			nextKeyFrame = it;
+			prevKeyFrame = it - 1;
+			break;
+		}
+	}
+
+	f32 endT = nextKeyFrame->t;
+	f32 begT;
+	if (prevKeyFrame < animation->keyFrames.data)
+	{
+		prevKeyFrame = &animation->keyFrames[animation->keyFrames.amount - 1];
+		begT = prevKeyFrame->t - animation->length;
+	}
+	else
+	{
+		begT = prevKeyFrame->t;
+	}
+
+	Assert(endT != begT);
+
+	f32 interpolationT = (at - begT) / (endT - begT);
+
+	m4x4Array transformedMatrices = InterpolateKeyFrames(prevKeyFrame->boneStates, nextKeyFrame->boneStates, interpolationT);
+
+	ret[0] = transformedMatrices[0];
+	for (u32 i = 1; i < skeleton->bones.amount; i++)
+	{
+		Bone *bone = skeleton->bones + i;
+		Assert(bone->parentIndex < i);
+		// this way around: first transform the hand -> transform the hand according to the arm transform.
+		ret[i] = ret[bone->parentIndex] * transformedMatrices[i];
+	}
+
+	return ret;
+}

@@ -113,7 +113,6 @@ static void InitDebug()
 	}
 
 	s->tweekers = TweekerCreateDynamicArray();
-	s->firstFrame = true;
 	s->lastFrameTime = 1.0f;
 
 	for (u32 i = 0; i < DEBUG_AMOUNT_OF_DEBUG_FRAMES; i++)
@@ -151,7 +150,6 @@ static bool DebugHandleEvents(KeyStateMessage message, Input input)
 static void CollectDebugRecords(f32 frameTime)
 {
 	TimedBlock;
-	if (globalDebugState.firstFrame) return;
 	if (globalDebugState.paused) return;
 
 	DebugState *s = &globalDebugState;
@@ -211,7 +209,6 @@ static void DrawDebugRecords(RenderGroup *rg, Font font, f32 secondsPerFrame, In
 	Tweekable(f32, debugDisplayBarSize, 0.03f);
 	
 	DebugState *s = &globalDebugState;
-	if (s->firstFrame) return;
 	if (!s->drawDebug) return;
 	// last frames stuff
 	u32 thisFrameIndex = s->rollingFrameIndex ? (s->rollingFrameIndex - 1) : (DEBUG_AMOUNT_OF_DEBUG_FRAMES - 1);
