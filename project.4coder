@@ -1,0 +1,44 @@
+version(1);
+
+project_name = "RR";
+
+patterns = {
+"*.cpp",
+"*.h",
+};
+
+blacklist_patterns = 
+{
+	"4coder/*",
+};
+
+load_paths = 
+{
+	{
+		{
+			{"."}
+		}, .os = "win",
+
+	},
+};
+
+command_list = {
+	{ 
+		.name = "build",
+		.out = "*compilation*", .footer_panel = false, .save_dirty_files = true, .cursor_at_end = false,
+		.cmd = { { "build.bat", .os = "win"}, },
+	},
+	{
+		.name = "run",
+		.cmd = {{ "start /D w: build/win32", .os = "win" },},
+	},
+	{
+		.name = "msDev",
+		.cmd = {{ "devenv", .os = "win" },},
+	},
+};
+
+
+fkey_command[3] = "msDev";
+fkey_command[4] = "run";
+fkey_command[5] = "build";
