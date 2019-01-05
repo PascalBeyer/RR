@@ -29,7 +29,7 @@ enum TweekerType
 	Tweeker_v2,
 	Tweeker_v3,
 	Tweeker_v4,
-
+    
 	Tweeker_v3i,
 	Tweeker_EulerAngle,
 	Tweeker_String,
@@ -93,7 +93,7 @@ struct Tweeker //todo stupid way for now, if this is to slow hash table. @scope 
 	TweekerType type;
 	String name; // not sure, we could make these char* as they do not change after compile time... and its more speedy
 	String function;
-
+    
 	union // could make this not a union, but its okay like this we can have an array and maybe hash easier later
 	{
 		TweekerValue value;
@@ -113,7 +113,7 @@ static Tweeker CreateTweeker(TweekerType type, char *name, TweekerValue value)
 	ret.name = CreateString(name);
 	ret.type = type;
 	ret.value = value;
-
+    
 	return ret;
 }
 
@@ -162,18 +162,18 @@ struct DebugState
 {
 	b32 paused;
 	b32 drawDebug;
-
+    
 	u32 eventIndex;
 	u32 amountOfEventsLastFrame;
 	f32 lastFrameTime;
 	DebugEvent events[DEBUG_AMOUNT_OF_DEBUG_FRAMES][MAX_DEBUG_EVENT_COUNT]; // reseting double buffer
 	Arena *arena;
-
+    
 	File *tweekerFile;
 	TweekerDynamicArray tweekers;
 	
 	DebugUIElementArray uiElements;
-
+    
 	DebugFrame debugFrames[DEBUG_AMOUNT_OF_DEBUG_FRAMES];
 	u32 rollingFrameIndex;
 };
@@ -209,38 +209,38 @@ static String TweekerToString(Tweeker t, Arena *arena = frameArena)
 {
 	switch (t.type)
 	{
-	case Tweeker_b32:
-	{
-		if (t.b)
-		{
-			return S("true", arena);
-		}
-		return S("false", arena);
-
-	}break;
-	case Tweeker_u32:
-	{
-		return UtoS(t.u, arena);
-	}break;
-	case Tweeker_f32:
-	{
-		return FtoS(t.f, arena);
-	}break;
-
-	case Tweeker_v2:
-	{
-		return V2toS(t.vec2, arena);
-	}break;
-
-	case Tweeker_v3:
-	{
-		return V3toS(t.vec3, arena);
-	}break;
-	case Tweeker_v4:
-	{
-		return V4toS(t.vec4, arena);
-	}break;
-	default:
+        case Tweeker_b32:
+        {
+            if (t.b)
+            {
+                return S("true", arena);
+            }
+            return S("false", arena);
+            
+        }break;
+        case Tweeker_u32:
+        {
+            return UtoS(t.u, arena);
+        }break;
+        case Tweeker_f32:
+        {
+            return FtoS(t.f, arena);
+        }break;
+        
+        case Tweeker_v2:
+        {
+            return V2toS(t.vec2, arena);
+        }break;
+        
+        case Tweeker_v3:
+        {
+            return V3toS(t.vec3, arena);
+        }break;
+        case Tweeker_v4:
+        {
+            return V4toS(t.vec4, arena);
+        }break;
+        default:
 		break;
 	}
 	return S("");
@@ -257,7 +257,7 @@ inline void ResetDebugState()
 	globalDebugState.amountOfEventsLastFrame = globalDebugState.eventIndex;
 	globalDebugState.eventIndex = 0;
 	globalDebugState.rollingFrameIndex = (globalDebugState.rollingFrameIndex + 1) % DEBUG_AMOUNT_OF_DEBUG_FRAMES;
-
+    
 }
 
 
@@ -267,8 +267,8 @@ inline void RecordDebugEvent(u32 index, DebugEvenType type, u32 hitCounter)
 	++globalDebugState.eventIndex;
 	Assert(globalDebugState.eventIndex < MAX_DEBUG_EVENT_COUNT);
 	event->cycles = (u32)__rdtsc();
-	event->debugRecordIndex = index;
-	event->type = type;
+	event->debugRecordIndex = (u16)index;
+	event->type = (u16)type;
 	event->hitMultiplicity = hitCounter;
 }
 

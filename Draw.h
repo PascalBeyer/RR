@@ -583,9 +583,10 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor, Font font)
 
 			Quaternion q = *it->q;
 			EulerAngle angle = QuaternionToEulerAngle(q);
-			angle.XRotation = angle.XRotation / PI * 360.0f;
-			angle.YRotation = angle.YRotation / PI * 360.0f;
-			angle.ZRotation = angle.ZRotation / PI * 360.0f;
+			v3i val;
+			val.x = Round(angle.XRotation / (2.0f * PI) * 360.0f) + 180;
+			val.y = Round(angle.YRotation / (2.0f * PI) * 360.0f) + 180;
+			val.z = Round(angle.ZRotation / (2.0f * PI) * 360.0f) + 180;
 			if (xyz == 'x' && (p->values.data + p->hotValue == it))
 			{
 				String str = FormatString("xRot: %s", p->textInput.string);
@@ -593,7 +594,7 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor, Font font)
 			}
 			else
 			{
-				String strx = FormatString("xRot: %s", FtoS(angle.XRotation));
+				String strx = FormatString("xRot: %s", ItoS(val.x));
 				PushString(rg, writePos, strx, editorPanelFontSize, font);
 			}
 			writePos.y += editorPanelFontSize;
@@ -604,7 +605,7 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor, Font font)
 			}
 			else
 			{
-				String stry = FormatString("yRot: %s", FtoS(angle.YRotation));
+				String stry = FormatString("yRot: %s", ItoS(val.y));
 				PushString(rg, writePos, stry, editorPanelFontSize, font);
 			}
 			writePos.y += editorPanelFontSize;
@@ -616,7 +617,7 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor, Font font)
 			}
 			else
 			{
-				String strz = FormatString("zRot: %s", FtoS(angle.ZRotation));
+				String strz = FormatString("zRot: %s", ItoS(val.z));
 				PushString(rg, writePos, strz, editorPanelFontSize, font);
 			}
 		}break;
@@ -816,11 +817,11 @@ static void RenderEntityQuadTree(RenderGroup *rg, TileOctTreeNode *node)
 	}
 }
 
-static void AnimateDude(RenderGroup *rg, DAEReturn *stuff, f32 dt)
+static void AnimationTestStuff(RenderGroup *rg, DAEReturn *stuff, f32 dt)
 {
 
 	TriangleMesh *mesh = &stuff->mesh;
-	Skeleton *skeleton = &stuff->skeleton;
+	Skeleton *skeleton = &stuff->mesh.skeleton;
 	KeyFramedAnimation *animation = &stuff->animation;
 
 	v3Array out = PushArray(frameArena, v3, mesh->vertices.amount);

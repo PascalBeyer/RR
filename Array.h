@@ -2,7 +2,6 @@
 #define RR_ARRAY
 
 
-
 typedef u32* u32Ptr;
 DefineDynamicArray(u32Ptr);
 DefineDynamicArray(u32);
@@ -10,6 +9,8 @@ DefineDynamicArray(u32);
 
 typedef v3* v3Ptr;
 DefineDynamicArray(v3Ptr);
+
+DefineArray(u8);
 
 DefineArray(u16);
 typedef u16* u16Ptr;

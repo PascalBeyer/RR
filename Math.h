@@ -28,9 +28,9 @@ static Interval InvertedInfinityInterval()
 }
 
 
-static int Round(float f)
+static i32 Round(float f)
 {
-	return (int)(f - 0.5f);
+	return (i32)(f + 0.5f); // todo round intrinsic.
 }
 
 static f32 Max(f32 a, f32 b)

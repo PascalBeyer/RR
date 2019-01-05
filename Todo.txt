@@ -19,13 +19,20 @@ escape to close console. // done?
 we could do it so you can pass in NULL instead of exe, so the path creator does not need to know. // done?
 FIX EDITOR PASTE + MAKE EDITOR ARROW KEYS BE DEPENDEndent on cam direction. // done?
 sting allinement in FormatString. // done?
+add Blocks needed to level //done
+add starting cam pos to level // done?
+We need to handle dt of more then one cycle at some point // done?
+We could go from a "tileMap" system to a "traversables" system? // kinda done, we check support
+remove entity serials ? // wwhat no!
+we could just make that be the switch. // done, in the setup.
+let the user specify the granuality at which he wants to switch the setup. // done?
 
 Asset:
-how to handle textured and untextured entities? Should there be such a thing as untextured entity, probably not.
+Newly added assets should go into the asset system, not sure how. // done?
 Asset system has to handle materials. // no, well maybe
 Get PNG loader
 make font into asset, would also make the draw String call way better, also solves the problem where I do not currently know where it is supposed to be stored
-Newly added assets should go into the asset system, not sure how.
+
 
 Tweekers:
 make tweek search the file, if no loaded tweeker variable is found. maybe write out the tweekerfile instead of writing out all tweeker values.
@@ -33,18 +40,13 @@ make tweeker work based on filenames as well I.e. tweek editor meshSelectColor i
 maybe load all tweekers on startup?
 
 MISC:
-Do the "start" of a level and make it so we can save levels. Should we do like a place units sequence?
-maybe we place the goals
-reduce api calls in opengl
+reduce api calls in opengl // done?
 associating data to triangles, to open gl... like normals.
-We need to handle dt of more then one cycle at some point
-We could go from a "tileMap" system to a "traversables" system?
 render strings leftbound
+add lightPos to the level
+
 make debug Ui for amount of memory used.
 
-add starting cam pos to level // done?
-add lightPos to the level
-add Blocks needed to level //done
 
 EDITOR : 
 save (crtl-s) //done?
@@ -53,27 +55,19 @@ make us able to shift click to remove, if already in selection // done?
 multi select // done?
 copy paste // done?
 undo, redo, // done?
+paste of rows // done ?
+make the cancel work off of the undo system, once it is in place // no, undo relies on this
 double click = 'numpad .'
 box select
 make the orbiting more of a always usable flag, maybe just a bool.
-make the cancel work off of the undo system, once it is in place // no, undo relies on this
-(brightness/ negative colors?)
+how do you bright up colors? (brightness/ negative colors?)
 Euler thing
-paste of rows
+
 UndoRedo has error with scale pushing one even if nothing selected
 
-Level idears
-2 guys, stone.
-halving the path (path that one guy has to do half of no space to manouver)
-pushable maze (one stone in a maze, can push from the outside)
-stone ride. get up a stone and a guy, then ride em around
-Bridge with dudes,
-Bridge with blocks, that fall down.
-
-remove entity serials ? // wwhat no!
 
 Execute:
-rotations
+rotations // will do if animations
 interpolation // done?
 undoing path // done?
 win // done?
@@ -89,15 +83,16 @@ stones jump to interpolation offset, and somehow look really ugly.. // done?
 units should stop in pathcreator mode, maybe I should not check for collision, and just let eveything go to shit in the execute. that sounds fun // done?
 do we have initiative? does stuff bump into each other and then back? I like that, that should look really "errory / errorish / ???" // done?
 probably make the tree update based on create / restore / delete calls // done?
-
+XForm states : GetFromMatrix in jBlow: Animation Playback part 2 37 min. // done?
+reset frame arena after preload? // done?
+clear flags in the begining, but do the sim at the end? // done?
+make stuff save InterpolationData // done?
+shift click for multi walk / control for unit select // done? does not feel that good
 Undo data for game, so we can play in both directions, maybe the events are enought? // no, done.
 undo does not really have to be a thing, if I do a Least commom multiple system.
 speed meter
-redo lighting, kd-tree for AABB's?
-// make it just 4 u16 per triangle and work with the old system?
-
+redo lighting, kd-tree for AABB's? make it just 4 u16 per triangle and work with the old system?
 get rid of meshes having color? lighting should go into a seperate buffer that stores those colors
-shift click for multi walk / control for unit select
 victory currupts position right now, if we are too fast.
 
 upscale bmps
@@ -106,13 +101,16 @@ string.h memcpy
 teleporters, moving platforms, ramps?
 blocks on dudes? maybe only on blocks?, but what should be the fail? kill the guy?
 
-make tags _existedInInitialLevel_, _alteredFromOriginalState_, so level load is faster? This seems hard
-
 make _unit_ into active entity and gather infos about the stones and maybe platforms and such, 
-	so we can actually generate the _production cycle_ and proof throughput and latency
+so we can actually generate the _production cycle_ and proof throughput and latency
 
-clear flags in the begining, but do the sim at the end? // done?
-
+Level idears
+2 guys, stone.
+halving the path (path that one guy has to do half of no space to manouver)
+pushable maze (one stone in a maze, can push from the outside)
+stone ride. get up a stone and a guy, then ride em around
+Bridge with dudes,
+Bridge with blocks, that fall down.
 
 what should happen?
 guy _waits_ on a thing that moves									-> guy stays on the thing
@@ -133,19 +131,22 @@ splitt how editor and game works.
 
 check sim loop for DF array could be replaced by a static build.
 
-
-XForm states : GetFromMatrix in jBlow: Animation Playback part 2 37 min. // done?
-
-
-reset frame arena after preload?
-
 lets try to make a game where you go through tripyness = 4th dimension
 
 make World -> EntityManager?
 
 Animation:
-make stuff save InterpolationData
-Loading and saving skeletons
-Loading and saving animations
-Animation player (save in skeleton?, save in world)
-OpenGL stuff
+Loading and saving skeletons // done ? 
+Loading and saving animations // done?
+make animations assets. // done?
+Animation player (save in skeleton?, save in world?)
+OpenGL stuff, i.e rendering it on the hardware
+
+
+animationInfo in assethandler
+how to handle setup.projection, it seems it will _always_ be the same, but either orthogonal or projective... 
+figure out how to let buffers of differant multisample counts interact.
+
+figure out a way to detect changes to the render setup, so we can reduce API calls.
+
+ctime

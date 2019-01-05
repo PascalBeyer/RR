@@ -9,119 +9,61 @@ struct Work
 	void(*callback)(void *data);
 };
 
-class WorkHandler
+struct WorkHandler
 {
-public:
-	WorkHandler();
-	static void Initiate(
-		u32(*InterlockedCompareExchange)(u32 volatile *oldValue, u32 newValue, u32 expectedOldValue),
-		void(*WakeThreads)(),
-		u32(*InterlockedIncrement)(u32 volatile *oldValue),
-		u32 treadAmount);
-
-	void PushBack(Work work);
-	bool WorkDone();
-	void DoAllWork();
-	void DoWork();
-
-private:	
-	Work *queue;
-	u32 volatile workIndex;
-	u32 volatile storeIndex;
-	u32 volatile completionCount;
-	u32 volatile completionGoal;
-
-	static u32(*InterlockedCompareExchange)(u32 volatile *oldValue, u32 newValue, u32 expectedOldValue);
-	static u32(*InterlockedIncrement)(u32 volatile *oldValue);
-	static void(*WakeThreads)();
-	static u32 treadAmount;
-	static bool initiated;
+    Work *queue;
+	i64 volatile workIndex;
+	i64 volatile storeIndex;
+	i64 volatile completionCount;
+	i64 volatile completionGoal;
 };
 
+static i64 AtomicCompareExchange(i64 volatile *oldValue, i64 newValue, i64 expectedOldValue);
+static i64 AtomicIncrement(i64 volatile *oldValue);
+static void WakeThreads();
 
-u32 ICEStub(u32 volatile *oldValue, u32 newValue, u32 expectedOldValue)
+
+static void PushBack(WorkHandler *handler, Work work)
 {
-	return 0;
-}
-u32 IIStub(u32 volatile *oldValue)
-{
-	return 0;
-}
-void WTStub()
-{
-
-}
-
-bool WorkHandler::initiated = false;
-u32(*WorkHandler::InterlockedCompareExchange)(u32 volatile *oldValue, u32 newValue, u32 expectedOldValue) = &ICEStub;
-u32(*WorkHandler::InterlockedIncrement)(u32 volatile *oldValue) = &IIStub;
-void(*WorkHandler::WakeThreads)() = &WTStub;
-u32 WorkHandler::treadAmount = 0;
-
-WorkHandler::WorkHandler()
-{
-	if (initiated)
-	{
-		workIndex = 0;
-		storeIndex = 0;
-		completionCount = 0;
-		completionGoal = 0;
-	}
-	queue = new Work[WorkQueueSize];
-}
-
-void WorkHandler::PushBack(Work work)
-{
-	queue[storeIndex] = work;
-	completionGoal++;
-	u32 newStoreIndex = (storeIndex + 1) % WorkQueueSize;
-	storeIndex = newStoreIndex;
-
+	handler->queue[handler->storeIndex] = work;
+	handler->completionGoal++;
+	u32 newStoreIndex = (handler->storeIndex + 1) % WorkQueueSize;
+	handler->storeIndex = newStoreIndex;
+    
 	WakeThreads();
 }
 
-void WorkHandler::DoWork()
+static void DoWork(WorkHandler *handler)
 {
-	u32 workIndexSave = workIndex;
-	if (workIndexSave != storeIndex)
+	i64 workIndexSave = handler->workIndex;
+	if (workIndexSave != handler->storeIndex)
 	{
-		u32 newWorkIndex = (workIndexSave + 1) % WorkQueueSize;
-		u32 index = InterlockedCompareExchange(&workIndex, newWorkIndex, workIndexSave);
-
+        i64 newWorkIndex = (workIndexSave + 1) % WorkQueueSize;
+        i64 index = AtomicCompareExchange(&handler->workIndex, newWorkIndex, workIndexSave);
+        
 		if (index == workIndexSave)
 		{
-			Work *work = queue + index;
+			Work *work = handler->queue + index;
 			work->callback(work->data);
-			InterlockedIncrement(&completionCount);
+			AtomicIncrement(&handler->completionCount);
 		}
 	}
 }
 
-bool WorkHandler::WorkDone()
+bool WorkDone(WorkHandler *handler)
 {
-	return completionCount == completionGoal;
+	return (handler->completionCount == handler->completionGoal);
 }
 
-void WorkHandler::DoAllWork()
+void DoAllWork(WorkHandler *handler)
 {
-	while (!WorkDone())
+	while (!WorkDone(handler))
 	{
-		DoWork();
+		DoWork(handler);
 	}
-	completionCount = 0;
-	completionGoal = 0;
+	handler->completionCount = 0;
+	handler->completionGoal = 0;
 }
 
-void WorkHandler::Initiate(u32(*InterlockedCompareExchange)(u32 volatile *oldValue, u32 newValue, u32 expectedOldValue), void(*WakeThreads)(), u32(*InterlockedIncrement)(u32 volatile *oldValue), u32 treadAmount)
-{
-	if (!initiated)
-	{
-		WorkHandler::InterlockedCompareExchange = InterlockedCompareExchange;
-		WorkHandler::WakeThreads = WakeThreads;
-		WorkHandler::treadAmount = treadAmount;
-		WorkHandler::InterlockedIncrement = InterlockedIncrement;
-		initiated = true;
-	}
-}
 #endif // !RR_WORKHANDLER
 

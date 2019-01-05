@@ -39,13 +39,13 @@ static u8 *PushZeroStruct_(Arena *arena, u32 sizeOfType)
 	Assert(arena->current - arena->base + sizeOfType < arena->capacity);
 	u8* ret = arena->current;
 	//memset(arena->current, 0, sizeOfType); todo once we are rid of the libraries slot this in
-
+    
 	u8* it = ret;
 	for (u32 i = 0; i < sizeOfType; i++)
 	{
 		*it++ = 0;
 	}
-
+    
 	arena->current += sizeOfType;
 	return ret;
 }
@@ -62,7 +62,7 @@ static Arena *InitArena(void *memory, u32 capacity)
 	ret->base = it + sizeof(Arena);
 	ret->capacity = capacity;
 	ret->current = ret->base;
-
+    
 	return ret;
 }
 
@@ -75,9 +75,9 @@ static Arena *PushArena(Arena *arena, u32 capacity)
 
 static bool IsPowerOfTwo(u32 value)
 {
-	u8 highestBit = BitwiseScanReverse(value);
-
-	return (value == (1 << highestBit));
+	u8 highestBit = (u8)BitwiseScanReverse(value);
+    
+	return (value == (1u << highestBit));
 };
 
 
@@ -103,7 +103,7 @@ struct BuddyAllocator
 	BuddyBlockNodeStateArray implicitBinaryTree;
 	// true  - there is something filling this block for the size size / 2^depth
 	// false - you have to go in further to decide.
-
+    
 	// Todo : make this actually use only 1 bit, per element 
 	// WARNING: Bits "below" the first true, default to false, so we do not need to recurse everytime we insert or free.
 };
@@ -119,12 +119,12 @@ static BuddyAllocator CreateBuddyAllocator(Arena *arena, u32 size, u32 minimumBl
 	Assert(arena);
 	Assert(size > minimumBlockSize);
 	BuddyAllocator ret;
-	u8 highestBit = BitwiseScanReverse(size);
-	Assert(size == (1 << highestBit)); // is power of two
-	u8 logMinimumBlockSize = BitwiseScanReverse(minimumBlockSize);
-	Assert(minimumBlockSize == (1 << logMinimumBlockSize));
+	u8 highestBit = (u8)BitwiseScanReverse(size);
+	Assert(size == (1u << highestBit)); // is power of two
+	u8 logMinimumBlockSize = (u8)BitwiseScanReverse(minimumBlockSize);
+	Assert(minimumBlockSize == (1u << logMinimumBlockSize));
 	u32 amountOfBlocks = size >> logMinimumBlockSize;
-
+    
 	ret.logMinimumBlockSize = logMinimumBlockSize;
 	ret.treeDepth = IntegerLogarithm(amountOfBlocks);
 	// a tree with 2^n leafs needs 2^(n+ 1) - 1 vertecies by geometric sum
@@ -143,9 +143,9 @@ static void *BuddyAlloc(BuddyAllocator *alloc, u32 size)
 	u32 logDesiredSize = Max(IntegerLogarithm(size - 1) + 1, alloc->logMinimumBlockSize);
 	u32 desiredSize = (1 << logDesiredSize);
 	//Note : we have to move down the Tree, even tho we know that the "right" sized blocks are at alloc->implicitBoolArray[intoIndexSpace], because we don't want to recurse all the way down the tree, everytime we allocate something.
-
+    
 	u32 intoIndexSpace = (desiredSize >> alloc->logMinimumBlockSize); 
-
+    
 	void *ret = NULL;
 	// todo maybe make this stackless.
 	DeferRestore(frameArena);
@@ -158,7 +158,7 @@ static void *BuddyAlloc(BuddyAllocator *alloc, u32 size)
 		u32 nodeSize = (alloc->size >> depth);
 		if (node == Buddy_Used) continue;
 		if (desiredSize > nodeSize) continue;
-
+        
 		if (node == Buddy_SplitNode)
 		{
 			//push left and right neighboor
@@ -170,7 +170,7 @@ static void *BuddyAlloc(BuddyAllocator *alloc, u32 size)
 		}
 		
 		Assert(node == Buddy_Unused);
-
+        
 		if (desiredSize == nodeSize)
 		{
 			// we are done
@@ -181,18 +181,18 @@ static void *BuddyAlloc(BuddyAllocator *alloc, u32 size)
 			alloc->implicitBinaryTree[currentIndex] = Buddy_Used;
 			return (alloc->base + offset);
 		}
-
+        
 		Assert(desiredSize < nodeSize)
-		// push left and right neighboor
-		u32 relativeIndex = currentIndex - (1 << depth) + 1; // this is the index in the "row" in the binary tree.
+            // push left and right neighboor
+            u32 relativeIndex = currentIndex - (1 << depth) + 1; // this is the index in the "row" in the binary tree.
 		u32 childrenIndex = ((1 << (depth + 1)) - 1) + relativeIndex * 2;
-
+        
 		alloc->implicitBinaryTree[currentIndex] = Buddy_SplitNode;
 		BuildStaticArray(frameArena, stack, childrenIndex);
 		BuildStaticArray(frameArena, stack, childrenIndex + 1);
 	};
 	Assert(ret);
-
+    
 	return ret;
 }
 
@@ -205,7 +205,7 @@ static void BuddyFree(BuddyAllocator *buddy, void *_mem)
 	u32 blockSize = (1 << buddy->logMinimumBlockSize);
 	Assert(!(offset & (blockSize - 1))); // offset is aligned to blockSize
 	u32 amountOfBlocks = buddy->size >> buddy->logMinimumBlockSize;
-
+    
 	u32 blockIndex = offset >> buddy->logMinimumBlockSize;
 	u32 depth = buddy->treeDepth;
 	u32 relIndex = blockIndex;
@@ -218,21 +218,21 @@ static void BuddyFree(BuddyAllocator *buddy, void *_mem)
 		currentIndex = (1 << --depth) - 1 + relIndex;
 		node = buddy->implicitBinaryTree[currentIndex];
 	}
-
+    
 	u32 otherChildIndex = ((currentIndex - 1) ^ 1) + 1; // flippes the last bit,  -1 / 1 because we have an even number of leafes, but an uneven Number of nodes
 	auto otherChild = buddy->implicitBinaryTree[otherChildIndex];
 	do {
 		buddy->implicitBinaryTree[currentIndex] = Buddy_Unused;
-
+        
 		otherChildIndex = ((currentIndex - 1) ^ 1) + 1;
-
+        
 		otherChild = buddy->implicitBinaryTree[otherChildIndex];
 		relIndex >>= 1;
 		currentIndex = (1 << --depth) - 1 + relIndex;
 		node = buddy->implicitBinaryTree[currentIndex];
 		Assert(node == Buddy_SplitNode); // todo : right now we do not treverse up to set Buddy_Used, maybe we should.
 	} while (depth && otherChild == Buddy_Unused);
-
+    
 }
 
 struct MemoryPage
@@ -263,71 +263,71 @@ static BuddyAllocator *alloc;
 
 
 // gives Pages between 2^DynamicAllocatorMinimum to 2^(DynamicAllocatorMinimum) * DynamicAllocatorRange
-static void *PooledFixedSizeAlloc_(PooledFixedSizeAllocator *alloc, u32 size) 
+static void *PooledFixedSizeAlloc_(PooledFixedSizeAllocator *fsa, u32 size) 
 {
-	Assert(alloc);
+	Assert(fsa);
 	u32 shrinked = (size >> DynamicAllocatorMinimum);
 	Assert(shrinked < DynamicAllocatorRange);
-
+    
 	if (shrinked == 0) // bundle small stuff
 	{
-		auto arena = alloc->smallStuffArena;
-
+		auto arena = fsa->smallStuffArena;
+        
 		//				 size + shrinked   + distance to arena->base
 		u32 actualSize = size + sizeof(u8) + sizeof(u16);
-
+        
 		if (arena && ((arena->current - arena->base + actualSize) <= arena->capacity)) 
 		{
 			u8 *ret = arena->current; 
-
+            
 			
 			*(u16 *)ret++ = (u16)(arena->base - arena->current); // this happens before so the check is unified with the other pools
 			*ret++ = 0;
-
+            
 			arena->current += actualSize;
 			arena->allocatedItems++;
 			return ret;
 		}
-
+        
 		// todo: here might be a thing, where we have a problem with actual size vs size, so that something with very specific sizes could not be allocated
-
+        
 		u8 *mem;
 		u32 pageSize = (1 << DynamicAllocatorMinimum); // an n-page is ((n+1) << DynamicAllocatorMinimum) bytes long
-		if (alloc->pools[0])
+		if (fsa->pools[0])
 		{
-			mem = (u8 *)alloc->pools[0];
-			alloc->pools[0] = alloc->pools[0]->next;
+			mem = (u8 *)fsa->pools[0];
+			fsa->pools[0] = fsa->pools[0]->next;
 		}
 		else
 		{
 			Assert(pageSize >= actualSize);
-			mem = PushData(alloc->arena, u8, pageSize);
+			mem = PushData(fsa->arena, u8, pageSize);
 		}
-
-		alloc->smallStuffArena = (ReferanceCountedArena *)mem;
-		arena = alloc->smallStuffArena;
+        
+		fsa->smallStuffArena = (ReferanceCountedArena *)mem;
+		arena = fsa->smallStuffArena;
 		
 		arena->allocatedItems = 1;
 		arena->base = mem;
 		arena->capacity = pageSize;
 		arena->current = arena->base + sizeof(ReferanceCountedArena);
-
+        
 		u8 *ret = arena->current;
 		arena->current += actualSize;
-
+        
 		*(u16 *)ret++ = (u16)(arena->base - arena->current);
 		*ret++ = 0;
-
+        
 		return ret;
 	}
-
+    
 	Assert(shrinked);
-
-	if (alloc->pools[shrinked])
+    
+	if (fsa->pools[shrinked])
 	{
-		u8 *mem = (u8 *)alloc->pools[shrinked];
+		u8 *mem = (u8 *)fsa->pools[shrinked];
 		*mem++ = (u8)shrinked;
-		alloc->pools[shrinked] = alloc->pools[shrinked]->next;
+		fsa->pools[shrinked] = fsa->pools[shrinked]->next;
 		return  (void *)mem;
 	}
 	
@@ -335,20 +335,20 @@ static void *PooledFixedSizeAlloc_(PooledFixedSizeAllocator *alloc, u32 size)
 	{
 		u32 pageSize = ((shrinked + 1) << DynamicAllocatorMinimum);
 		Assert(pageSize > size); // we need one extra
-		u8 *mem = PushData(alloc->arena, u8, pageSize);
+		u8 *mem = PushData(fsa->arena, u8, pageSize);
 		*mem++ = (u8)shrinked;
 		return (void *)mem;
 	}
 }
 
-static void PooledFixedSizeFree(PooledFixedSizeAllocator *alloc, void *mem)
+static void PooledFixedSizeFree(PooledFixedSizeAllocator *fsa, void *mem)
 {
 	Assert(mem);
 	u8 *data = (u8 *)mem;
 	data--;
 	Assert(*data < DynamicAllocatorRange);
 	u8 index = *data;
-
+    
 	if (index == 0)
 	{
 		data -= 2;
@@ -357,17 +357,17 @@ static void PooledFixedSizeFree(PooledFixedSizeAllocator *alloc, void *mem)
 		if ((--arr->allocatedItems) == 0)
 		{
 			MemoryPage *toInsert = (MemoryPage *)data;
-			toInsert->next = alloc->pools[0];
-			alloc->pools[0] = toInsert;
+			toInsert->next = fsa->pools[0];
+			fsa->pools[0] = toInsert;
 			return;
 		}
-
+        
 		return;
 	}
-
+    
 	MemoryPage *toInsert = (MemoryPage *)data;
-	toInsert->next = alloc->pools[index];
-	alloc->pools[index] = toInsert;
+	toInsert->next = fsa->pools[index];
+	fsa->pools[index] = toInsert;
 }
 
 #undef DynamicAllocatorRange
@@ -379,7 +379,7 @@ static void memcpy(void *source, void *dest, u32 numberOfBytes)
 {
 	u8 *destu8 = (u8 *)dest;
 	u8 *sourceu8 = (u8 *)source;
-
+    
 	for (u32 i = 0; i < numberOfBytes; i++)
 	{
 		*destu8++ = *sourceu8++;

@@ -20,13 +20,13 @@ static void AddHelper(StringArray args)
 	b32 success = true;
 	u32 inp1 = StoU(args[0], &success);
 	u32 inp2 = StoU(args[1], &success);
-
+    
 	if (!success)
 	{
 		ConsoleOutput("Arguments did not match!");
 		return;
 	}
-
+    
 	u32 sum = inp1 + inp2;
 	ConsoleOutput("%i32 + %i32 = %i32", inp1, inp2, sum);
 }
@@ -43,7 +43,7 @@ static void ClearHelper(StringArray args)
 static void HelpHelper(StringArray args)
 {
 	ConsoleOutput("Console Commands are:");
-
+    
 	For(console.commands)
 	{
 		ConsoleOutput("    %s", it->name);
@@ -65,10 +65,10 @@ static void TweekHelper(StringArray args)
 		{
 			ConsoleOutput("%s %s", it->name, TweekerToString(*it));
 		}
-
+        
 		return;
 	}
-
+    
 	Tweeker *toTweek = GetTweeker(args[0]);
 	
 	if(!toTweek) 
@@ -76,7 +76,7 @@ static void TweekHelper(StringArray args)
 		ConsoleOutputError("Error: Tweeker not found!", HistoryEntry_Error); // todo : nearest match?
 		return;
 	}
-
+    
 	if (args.amount == 1)
 	{
 		if (toTweek->type == Tweeker_v4)
@@ -87,61 +87,61 @@ static void TweekHelper(StringArray args)
 			EditorUIElement elem = { EditorUI_ColorPicker, picker };
 			ArrayAdd(&gameState.editor.elements, elem);
 		}
-
+        
 		ConsoleOutput("Current Tweeker Value is: %s", TweekerToString(*toTweek)); 
 		return;
 	}
-
+    
 	Tweeker save = *toTweek;
 	b32 success = true;
 	switch (toTweek->type)
 	{
-	case Tweeker_b32:
-	{	
-		b32 val = StoB(args[1], &success);
-		if (success) toTweek->b = val;
-	}break;
-	case Tweeker_u32:
-	{
-		u32 val = StoU(args[1], &success);
-		if (success) toTweek->u = val;
-	}break;
-	case Tweeker_f32:
-	{
-		f32 val = StoF(args[1], &success);
-		if (success) toTweek->f = val;
-	}break;
-
-	case Tweeker_v2:
-	{
-		v2 val = StoV2(args[1], &success);
-		if (success) toTweek->vec2 = val;
-	}break;
-
-	case Tweeker_v3:
-	{
-		v3 val = StoV3(args[1], &success);
-		if (success) toTweek->vec3 = val;
-	}break;
-	case Tweeker_v4:
-	{
-		v4 val = StoV4(args[1], &success);
-		if (success) toTweek->vec4 = val;
-	}break;
-	default:
+        case Tweeker_b32:
+        {	
+            b32 val = StoB(args[1], &success);
+            if (success) toTweek->b = val;
+        }break;
+        case Tweeker_u32:
+        {
+            u32 val = StoU(args[1], &success);
+            if (success) toTweek->u = val;
+        }break;
+        case Tweeker_f32:
+        {
+            f32 val = StoF(args[1], &success);
+            if (success) toTweek->f = val;
+        }break;
+        
+        case Tweeker_v2:
+        {
+            v2 val = StoV2(args[1], &success);
+            if (success) toTweek->vec2 = val;
+        }break;
+        
+        case Tweeker_v3:
+        {
+            v3 val = StoV3(args[1], &success);
+            if (success) toTweek->vec3 = val;
+        }break;
+        case Tweeker_v4:
+        {
+            v4 val = StoV4(args[1], &success);
+            if (success) toTweek->vec4 = val;
+        }break;
+        default:
 		ConsoleOutputError("Unhandled Tweeker Type in Tweek Helper!");
 		return;
 	}
-
+    
 	if (!success)
 	{
 		ConsoleOutputError("Could not parse the value for tweeker %s", toTweek->name);
 		ConsoleOutputError("Value remains: %s", TweekerToString(*toTweek));
 		return;
 	}
-
+    
 	ConsoleOutput("Tweeked %s: %s -> %s!", toTweek->name, TweekerToString(save), TweekerToString(*toTweek));
-
+    
 	WriteSingleTweeker(*toTweek);
 }
 
@@ -154,7 +154,7 @@ static void SaveTweekersHelper(StringArray args)
 		return;
 	}
 	
-
+    
 	ConsoleOutput("Don't know what to save! (Could not read input).");
 }
 
@@ -185,7 +185,7 @@ static void GrisuHelper(StringArray args)
 static void ConvertHelper(StringArray args)
 {
 	DeferRestore(frameArena);
-
+    
 	String head = args[0];
 	String type = EatToCharFromBackReturnTail(&head, '.');
 	if (!head.length)
@@ -193,7 +193,7 @@ static void ConvertHelper(StringArray args)
 		ConsoleOutputError("No filetype found!");
 		return;
 	}
-
+    
 	char* nameToLoad = ToNullTerminated(frameArena, args[0]);		
 	String name = EatToCharFromBackReturnTail(&head, '/');
 	if (type == "bmp")
@@ -201,19 +201,19 @@ static void ConvertHelper(StringArray args)
 		String nameToSave = FormatString("textures/%stexture\n", name);
 		nameToSave[nameToSave.length - 1] = '\0'; // todo  hack... maybe make this a version of format string
 		Bitmap bitmap = CreateBitmap(nameToLoad);
-
+        
 		if (!bitmap.pixels)
 		{
 			ConsoleOutputError("Could not find bitmap %c*.", nameToLoad);
 			return;
 		}
-
+        
 		if (bitmap.height != Asset_Bitmap_Size || bitmap.width != Asset_Bitmap_Size)
 		{
 			ConsoleOutputError("Bitmap does not have standart bitmap size.", nameToLoad);
 			return;
 		}
-
+        
 		WriteTexture((char *)nameToSave.data, bitmap);
 		ConsoleOutput("Converted bitmap %c* to texture %s", nameToLoad, nameToSave);
 		return;
@@ -221,7 +221,7 @@ static void ConvertHelper(StringArray args)
 	else if(type == "obj")
 	{
 		char *nameToSave = FormatCString("mesh/%smesh", name);
-		TriangleMesh mesh = ReadObj(NULL, nameToLoad, gameState.currentStateArena, gameState.workingArena);
+		TriangleMesh mesh = ReadObj(nameToLoad, gameState.currentStateArena, gameState.workingArena);
 		if (!mesh.vertices.amount)
 		{
 			ConsoleOutputError("Probably file name wrong. Might have loaded a mesh w/0 vertices.");
@@ -231,14 +231,14 @@ static void ConvertHelper(StringArray args)
 		ConsoleOutput("Converted .obj %c* to .mesh %c*", nameToLoad, nameToSave);
 		return;
 	}
-
+    
 	ConsoleOutputError("Unrecognized Format!");
 }
 
 static void SaveLevelHelper(StringArray args)
 {
 	char *fileName = FormatCString("level/%s.level", args[0]);
-
+    
 	WriteLevel(fileName, gameState.world, &gameState.assetHandler);
 	gameState.world.loadedLevel.name = CopyString(args[0], gameState.currentStateArena); // todo leak
 	ConsoleOutputError("Done!");
@@ -252,7 +252,7 @@ static void LoadLevelHelper(StringArray args)
 		ConsoleOutput("Loaded level %s!", args[0]);
 		return;
 	}
-
+    
 	ConsoleOutputError("Tried to load \"level/%s.level\", no such file or directory!", args[0]);
 }
 
@@ -262,7 +262,7 @@ static void NewLevelHelper(StringArray args)
 	ResetWorld(&gameState.world);
 	ResetEditor(&gameState.editor);
 	
-
+    
 	ConsoleOutput("New Level! Save with 'saveLevel' command.");
 }
 
@@ -273,11 +273,11 @@ static void AddMeshHelper(StringArray args)
 		ConsoleOutputError("Editor is in a mode other then 'Default'. This is not 'yet' allowed.");
 		return;
 	}
-
+    
 	b32 succsess = true;
 	String name = FormatString("%s.mesh", args[0]);
 	u32 id = RegisterAsset(&gameState.assetHandler, Asset_Mesh, name, &succsess);
-
+    
 	if (succsess)
 	{
 		TriangleMesh *mesh = GetMesh(&gameState.assetHandler, id);
@@ -293,7 +293,7 @@ static void AddMeshHelper(StringArray args)
 		
 		gameState.editor.clipBoard.amount = 1;
 		gameState.editor.clipBoard[0] = data;
-
+        
 		gameState.editor.state = EditorState_PlacingNewMesh;
 		EditorSelectNothing(&gameState.editor);
 	}

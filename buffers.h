@@ -55,34 +55,21 @@ saucy_defer<F> defer_func(F f) {
 
 #define RR_Internal 1
 
-struct ColoredVertex
-{
-	v3 pos;
-	u32 color;
-};
-
-DefineArray(ColoredVertex);
+// todo these have to be here, because I use em before Array.h, this is not great
 DefineArray(bool);
 DefineArray(u32);
 
-
-struct TexturedVertex
-{
-	v3 pos;
-	v2 uv;
-	u32 color;
-};
 
 struct RenderCommands
 {
 	u32 maxBufferSize;
 	u32 pushBufferSize;
 	u8 *pushBufferBase;
-
+   
 	u32 width;
 	u32 height;
 	f32 aspectRatio;
-
+   
 };
 
 struct ImageBuffer
@@ -149,23 +136,23 @@ struct TimedBlock_
 	u64 startCycleCount;
 	u32 hitCounter;
 	u16 id;
-
-	TimedBlock_(char * fileName, int lineNumber, char *function, u32 count, u32 hitCounter = 1)
+   
+	TimedBlock_(char * fileName, int lineNumber, char *function, u16 count, u32 hitCounter = 1)
 	{
 		DebugBlockInfo *record = debugInfoArray + count;
 		record->function = function;
 		record->file = fileName;
 		record->line = lineNumber;
 		id = count;
-		this->hitCounter = hitCounter;
+      this->hitCounter = hitCounter;
 		RecordDebugEvent(id, DebugEvent_BeginTimedBlock, hitCounter);
 	}
-
+   
 	~TimedBlock_()
 	{
 		RecordDebugEvent(id, DebugEvent_EndTimedBlock, hitCounter);
 	}
-
+   
 };
 
 
