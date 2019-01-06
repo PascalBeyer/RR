@@ -37,26 +37,36 @@ static b32 PointInAABB(AABB target, v3 point)
 
 struct VertexFormatPC
 {
-	v3 p;
+	v3  p;
 	u32 c;
 };
 
 struct VertexFormatPCU
 {
-	v3 p;
+	v3  p;
 	u32 c;
-   v2 uv;
+   v2  uv;
 };
 DefineArray(VertexFormatPC);
 
 struct VertexFormatPCUN
 {
-	v3 p;
+	v3  p;
    u32 c;
-	v2 uv;
-	v3 n;
+	v2  uv;
+	v3  n;
 };
 DefineArray(VertexFormatPCUN);
+
+struct VertexFormatPCUNBD
+{
+   v3  p;
+   u32 c;
+   v2  uv;
+   v3  n;
+   v4i bi;
+   v4  bw;
+};
 
 enum TriangleMeshType
 {
@@ -254,7 +264,7 @@ DefineArray(Bone);
 struct Skeleton
 {
 	u16Array vertexMap; // from flattend to not flattend
-	v3Array vertices; // not flattend
+	v3Array  vertices;  // not flattend
 	WeightDataArrayArray vertexToWeightsMap; // from not flattend
    
 	BoneArray bones;
@@ -265,7 +275,13 @@ struct TriangleMesh
 {
 	String name;
 	u32 type;
-	VertexFormatPCUNArray vertices;
+   
+   // these are allready linearized, but we pack em in RegisterTriangleMesh
+   v3Array positions;
+   u32Array colors;
+   v2Array uvs;
+   v3Array normals;
+   
 	u16Array indices;
 	IndexSetArray indexSets;
    
@@ -280,7 +296,7 @@ struct TriangleMesh
 DefineArray(TriangleMesh);
 DefineDynamicArray(TriangleMesh);
 
-void RegisterTriangleMesh(TriangleMesh *mesh);
+static void RegisterTriangleMesh(TriangleMesh *mesh);
 
 static m4x4Array InterpolateKeyFrames(InterpolationDataArray prevBoneStates, InterpolationDataArray nextBoneStates, f32 t)
 {
@@ -303,9 +319,11 @@ static m4x4Array InterpolateKeyFrames(InterpolationDataArray prevBoneStates, Int
 
 static m4x4Array CalculateBoneTransforms(Skeleton *skeleton, KeyFramedAnimation *animation, f32 t)
 {
+   //Assert(skeleton->name == animation->meshName);
+   Assert(skeleton->bones.amount == animation->keyFrames[0].boneStates.amount);
+   
 	m4x4Array ret = PushArray(frameArena, m4x4, skeleton->bones.amount);
    
-	
 	if (!animation)
 	{
 		ret[0] = InterpolationDataToMatrix(skeleton->bones[0].interp);
@@ -314,8 +332,13 @@ static m4x4Array CalculateBoneTransforms(Skeleton *skeleton, KeyFramedAnimation 
 		{
 			Bone *bone = skeleton->bones + i;
 			Assert(bone->parentIndex < i);
-			ret[i] =  ret[bone->parentIndex] * InterpolationDataToMatrix(bone->interp); // todo is it faster to do this multiplication in InterpolationData ?
+			ret[i] =  ret[bone->parentIndex] * InterpolationDataToMatrix(bone->interp)  * bone->inverseBindShapeMatrix; // todo is it faster to do this multiplication in InterpolationData ?
 		}
+      
+      for (u32 i = 0; i < skeleton->bones.amount; i++)
+      {
+         ret[i] = ret[i] * skeleton->bones[i].inverseBindShapeMatrix;
+      }
       
 		return ret;
 	}
@@ -360,6 +383,11 @@ static m4x4Array CalculateBoneTransforms(Skeleton *skeleton, KeyFramedAnimation 
 		// this way around: first transform the hand -> transform the hand according to the arm transform.
 		ret[i] = ret[bone->parentIndex] * transformedMatrices[i];
 	}
+   
+   for (u32 i = 0; i < skeleton->bones.amount; i++)
+   {
+      ret[i] = ret[i] * skeleton->bones[i].inverseBindShapeMatrix;
+   }
    
 	return ret;
 }

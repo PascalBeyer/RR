@@ -1,6 +1,7 @@
 #ifndef RR_GENERATION
 #define RR_GENERATION
 
+#if 0
 
 static TriangleMesh GenerateMeshForFlatTile(AssetHandler *assetHandler, AABB aabb, Arena* arena)
 {
@@ -591,7 +592,6 @@ static TriangleArray CreateStoneAndPush(AABB aabb, f32 desiredVolume, Arena *are
 }
 
 
-#if 0
 static TriangleMesh GenerateAndPushTriangleFloorMesh(AABB aabb, Arena* arena, u32 meshSize = 255)
 {
 	TriangleMesh ret;

@@ -14,12 +14,16 @@
 #define V4i ivec4
 
 #define f32 float
+#define u32 int
+#define i32 int
+
 
 // these are all the defines in this file:
 // VertexCode
 // ShadowMapping
 // Phong
 // Textured
+// Animated
 
 #ifdef VertexCode
 // Vertex Code
@@ -63,8 +67,8 @@ smooth out float specular;
 #ifdef Animated
 const int Max_Num_Bones = 100;
 uniform mat4x4 boneStates[Max_Num_Bones];
-in int boneIndices[5];
-in f32 boneWeights[5];
+in v4i boneIndices;
+in v4  boneWeights;
 #endif
 
 smooth out vec4 fragColor;
@@ -77,21 +81,21 @@ void main(void)
    v4 inputVertex = vec4(vertP, 1);
    
 #ifdef Animated
-   v4 animatedVertex = V4();
-   for(u32 i = 0; i < 5; i++)
+   v4 animatedVertex = V4(0, 0, 0, 0);
+   for(u32 i = 0; i < 4; i++)
    {
-      animatedVertex += boneWeights[i] * (boneStates[boneIndeces[i]] * inputVertex);
+      animatedVertex += boneWeights[i] * (boneStates[boneIndices[i]] * inputVertex);
    }
    
    inputVertex = animatedVertex;
 #endif
-   
+   // we premul the cameraTransform by the objectTransform
    vec4 vertexInCameraSpace = cameraTransform * inputVertex;
    gl_Position = projection * vertexInCameraSpace;
    
    
 #ifdef Textured
-   fragCoord = vertUV; // not neccesary if I call them the same?
+   fragCoord = vertUV; // not neccesary if I call them the same? inout is a thing
 #endif
    
 #ifdef ShadowMapping

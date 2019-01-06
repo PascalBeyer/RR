@@ -9,6 +9,9 @@ enum RenderGroupEntryType
 	RenderGroup_EntryClear,
 	RenderGroup_EntryTriangleMesh,
    RenderGroup_EntryChangeRenderSetup,
+   RenderGroup_EntryAnimatedMesh,
+   
+   
 };
 
 // todo how does this work? this looks weird
@@ -65,6 +68,18 @@ struct EntryTriangleMesh
 	v3 pos;
 	f32 scale;
 	v4 scaleColor;
+};
+
+struct EntryAnimatedMesh
+{
+	RenderGroupEntryHeader header;
+	TriangleMesh mesh;
+	u32Array textureIDs;
+	Quaternion orientation;
+	v3 pos;
+	f32 scale;
+	v4 scaleColor;
+   m4x4Array boneStates;
 };
 
 struct EntryTexturedQuads
@@ -349,12 +364,68 @@ static void PushTriangleMesh(RenderGroup *rg, TriangleMesh *mesh, Quaternion ori
 	meshHeader->scaleColor = scaleColor;
 }
 
-
 static void PushTriangleMesh(RenderGroup *rg, u32 meshId, Quaternion orientation, v3 pos, f32 scale, v4 scaleColor)
 {
 	TriangleMesh *mesh = GetMesh(rg->assetHandler, meshId);
    
 	PushTriangleMesh(rg, mesh, orientation, pos, scale, scaleColor);
+}
+
+static void PushAnimatedMesh(RenderGroup *rg, TriangleMesh *mesh, Quaternion orientation, v3 pos, f32 scale, v4 scaleColor, m4x4Array boneStates)
+{
+	if (!mesh) return; // todo think about this, we want this if we redo our mesh write
+   
+	EntryAnimatedMesh *meshHeader = PushRenderEntry(EntryAnimatedMesh);
+	meshHeader->mesh = *mesh;
+	meshHeader->orientation = orientation;
+	u32Array arr = PushArray(frameArena, u32, mesh->indexSets.amount);
+	for (u32 i = 0; i < arr.amount; i++)
+	{
+		arr[i] = GetTexture(rg->assetHandler, mesh->indexSets[i].mat.bitmapID)->textureHandle;
+	}
+	meshHeader->textureIDs = arr;
+	meshHeader->pos = pos;
+	meshHeader->scale = scale;
+	meshHeader->scaleColor = scaleColor;
+   meshHeader->boneStates = boneStates;
+}
+
+static void PushAnimatedMeshImmidiet(RenderGroup *rg, TriangleMesh *mesh, Quaternion orientation, v3 pos, f32 scale, v4 scaleColor, m4x4Array boneStates)
+{
+   Skeleton *skeleton = &mesh->skeleton;
+   
+   
+	v3Array out = PushArray(frameArena, v3, mesh->positions.amount);
+   
+	for (u32 i = 0; i < mesh->positions.amount; i++)
+	{
+		u32 unflattend = skeleton->vertexMap[i];
+		WeightDataArray weights = skeleton->vertexToWeightsMap[unflattend];
+      
+		out[i] = V3();
+      
+		v4 v = V4(mesh->positions[i], 1.0f);
+      
+		For(weights)
+		{
+			out[i] += it->weight * (boneStates[it->boneIndex]  * v).xyz;
+		}
+      
+      
+	}
+   
+	for (u32 i = 0; i < mesh->indices.amount; i += 3)
+	{
+		u16 i1 = mesh->indices[i + 0];
+		u16 i2 = mesh->indices[i + 1];
+		u16 i3 = mesh->indices[i + 2];
+      
+		v3 p1 = out[i1];
+		v3 p2 = out[i2];
+		v3 p3 = out[i3];
+      
+		PushTriangle(rg, p1, p2, p3, scaleColor);
+	}
 }
 
 static void PushLine(RenderGroup *rg, v3 p1, v3 p2, u32 color = 0xFFFFFFFF)

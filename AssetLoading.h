@@ -224,10 +224,11 @@ static String GetDirectioryFromFilePath(String fileName)
 
 static TriangleMesh ReadObj(char *fileName, Arena *arena, Arena *workingArena)
 {
+   
 	String filename = CreateString(fileName);
 	String path = GetDirectioryFromFilePath(filename);
 	TriangleMesh ret = {};
-   
+#if 0 // todo nuked for now, not debugging everything at once, and this needs work anyways.
    {
       String name = filename;
       name = EatToCharFromBackReturnTail(&name, '/');
@@ -514,7 +515,7 @@ static TriangleMesh ReadObj(char *fileName, Arena *arena, Arena *workingArena)
 	ret.aabb = aabb;
    
 	Assert(success);
-   
+#endif
 	return ret;
 }
 
@@ -1085,6 +1086,24 @@ static void BuildBoneArray(BoneArray bones, DAENode *node, StringArray boneNames
 	}
 }
 
+static void SortByWeight(WeightDataArray arr) // todo for now bouble sort...
+{
+   for(u32 i = 0; i < arr.amount; i++)
+   {
+      for(u32 j = 0; j < arr.amount - 1; j++)
+      {
+         WeightData *a = arr + j;
+         WeightData *b = arr + j + 1;
+         
+         if(a->weight < b->weight)
+         {
+            WeightData temp = *a;
+            *a = *b;
+            *b = temp;
+         }
+      }
+   }
+}
 static DAEReturn ReadDAE(Arena *constantArena, char *fileName)
 {
 	TimedBlock;
@@ -1597,20 +1616,23 @@ static DAEReturn ReadDAE(Arena *constantArena, char *fileName)
 	}
    
 	u16Array skeletonVertexMap = PushArray(constantArena, u16, flattener);
-	VertexFormatPCUNArray vertices = PushArray(constantArena, VertexFormatPCUN, flattener);
+   v3Array  flatPositions = PushArray(constantArena, v3,  flattener);
+   v3Array  flatNormals   = PushArray(constantArena, v3,  flattener);
+   v2Array  flatUvs       = PushArray(constantArena, v2,  flattener);
+   u32Array flatColors    = PushArray(constantArena, u32, flattener);
    
 	For(flatten)
 	{
 		u16 it_index = (u16)(it - flatten.data);
 		for (UVList *c = *it; c; c = c->next)
 		{
-			VertexFormatPCUN* v = &vertices[c->flattendIndex];
-			v->c = 0xFFFFFFFF;
-			v->p = positions[it_index];
-			v->n = normals[c->normalIndex];
-			v->uv = uvs[c->uvIndex];
+         u32 i = c->flattendIndex;
+         flatColors[i]    = 0xFFFFFFFF;
+         flatPositions[i] = positions[it_index];
+			flatNormals[i]   = normals[c->normalIndex];
+         flatUvs[i]       = uvs[c->uvIndex];
          
-			skeletonVertexMap[c->flattendIndex] = it_index;
+			skeletonVertexMap[i] = it_index;
 		}
 	}
    
@@ -1731,6 +1753,7 @@ static DAEReturn ReadDAE(Arena *constantArena, char *fileName)
 		}
 	}
    
+   // collect weights
 	WeightDataArrayArray vertexToWeightsMap = PushArray(constantArena, WeightDataArray, positions.amount);
    
 	String vCountIt = daeSkin->vertex_weights.vcount;
@@ -1749,10 +1772,12 @@ static DAEReturn ReadDAE(Arena *constantArena, char *fileName)
 			it->weight = weights[weightIndex];
 			EatSpaces(&vIt);
 		}
+      
+      SortByWeight(*weightArray);
 	}
 	Assert(success);
    
-   
+   //collect animation
 	m4x4ArrayArray matrixArrayPerBone = PushArray(frameArena, m4x4Array, amountOfBones);
 	f32ArrayArray timeArrayPerBone = PushArray(frameArena, f32Array, amountOfBones);
    
@@ -1863,9 +1888,13 @@ static DAEReturn ReadDAE(Arena *constantArena, char *fileName)
 	skeleton.bones = bones;
    
 	TriangleMesh triangleMesh;
-	triangleMesh.type = TriangleMeshType_List;
-	triangleMesh.indices = indices;
-	triangleMesh.vertices = vertices;
+	triangleMesh.type      = TriangleMeshType_List;
+	triangleMesh.indices   = indices;
+	triangleMesh.positions = flatPositions;
+   triangleMesh.uvs       = flatUvs;
+   triangleMesh.normals   = flatNormals;
+   triangleMesh.colors    = flatColors;
+   
 	triangleMesh.indexSets = PushArray(constantArena, IndexSet, 1);
 	triangleMesh.indexSets[0].mat = {};
 	triangleMesh.indexSets[0].offset = 0;
@@ -1875,15 +1904,15 @@ static DAEReturn ReadDAE(Arena *constantArena, char *fileName)
    
 	AABB aabb = InvertedInfinityAABB();
    
-	For(triangleMesh.vertices)
+	For(triangleMesh.positions)
 	{
-		aabb.maxDim.x = Max(it->p.x, aabb.maxDim.x);
-		aabb.maxDim.y = Max(it->p.y, aabb.maxDim.y);
-		aabb.maxDim.z = Max(it->p.z, aabb.maxDim.z);
+		aabb.maxDim.x = Max(it->x, aabb.maxDim.x);
+		aabb.maxDim.y = Max(it->y, aabb.maxDim.y);
+		aabb.maxDim.z = Max(it->z, aabb.maxDim.z);
       
-		aabb.minDim.x = Min(it->p.x, aabb.minDim.x);
-		aabb.minDim.y = Min(it->p.y, aabb.minDim.y);
-		aabb.minDim.z = Min(it->p.z, aabb.minDim.z);
+		aabb.minDim.x = Min(it->x, aabb.minDim.x);
+		aabb.minDim.y = Min(it->y, aabb.minDim.y);
+		aabb.minDim.z = Min(it->z, aabb.minDim.z);
 	}
    
 	triangleMesh.aabb = aabb;
@@ -1940,7 +1969,11 @@ static TriangleMesh LoadMesh(AssetHandler *assetHandler, char *fileName, void **
    
 	ret.type = PullOff(u32);
    
-	PullOffArray(VertexFormatPCUN, ret.vertices);
+   PullOffArray(v3,  ret.positions);
+   PullOffArray(u32, ret.colors);
+   PullOffArray(v2,  ret.uvs);
+   PullOffArray(v3,  ret.normals);
+	
 	PullOffArray(u16, ret.indices);
 	PullOffArray(IndexSet, ret.indexSets);
    
@@ -2012,7 +2045,12 @@ static void WriteTriangleMesh(TriangleMesh mesh, char *fileName) // todo : when 
 	PushOnArray(u8, mesh.name);
    
 	PushOn(u32, mesh.type);
-	PushOnArray(VertexFormatPCUN, mesh.vertices);
+   
+   PushOnArray(v3,  mesh.positions);
+   PushOnArray(u32, mesh.colors);
+   PushOnArray(v2,  mesh.uvs);
+   PushOnArray(v3,  mesh.normals);
+   
 	PushOnArray(u16, mesh.indices);
 	PushOnArray(IndexSet, mesh.indexSets);
    

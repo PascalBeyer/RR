@@ -20,7 +20,7 @@ struct type##Array				\
 		return data[i];			\
 	}							\
 };								\
-								\
+\
 static type* operator+(type##Array arr, u32 index)								\
 {																				\
 	Assert(index < arr.amount);													\
@@ -44,7 +44,7 @@ struct type##DynamicArray														\
 	type *data;																	\
 	u32 amount;																	\
 	u32 capacity;																\
-																				\
+   \
 	type &operator[] (u32 i)													\
 	{																			\
 		Assert(i < amount);														\
@@ -56,7 +56,7 @@ static type* operator+(type##DynamicArray arr, u32 index)						\
 	Assert(index < arr.amount);													\
 	return arr.data + index;													\
 }																				\
-																				\
+\
 static u32 ArrayAdd(type##DynamicArray *arr, type t)							\
 {																				\
 	if (arr->amount + 1 < arr->capacity)										\
@@ -64,19 +64,19 @@ static u32 ArrayAdd(type##DynamicArray *arr, type t)							\
 		(arr->data)[arr->amount++] = t;											\
 		return (arr->amount - 1);												\
 	}																			\
-																				\
+   \
 	u32 newCapacity = 2 * arr->capacity + 1;									\
-																				\
+   \
 	type *newData = DynamicAlloc(type, newCapacity);							\
 	memcpy(newData, arr->data, arr->capacity * sizeof(type));					\
 	arr->capacity = newCapacity;												\
 	DynamicFree(arr->data);														\
 	arr->data = newData;														\
 	arr->data[arr->amount++] = t;												\
-																				\
+   \
 	return (arr->amount - 1);													\
 }																				\
-																				\
+\
 static type##DynamicArray type##CreateDynamicArray(u32 capacity = 8)			\
 {																				\
 	type##DynamicArray ret;														\
@@ -95,7 +95,7 @@ static void Reserve(type##DynamicArray *arr, u32 capacity)						\
 	{																			\
 		return;																	\
 	}																			\
-																				\
+   \
 	type *newData = DynamicAlloc(type, capacity);								\
 	memcpy(newData, arr->data, arr->capacity * sizeof(type));					\
 	arr->capacity = capacity;													\
@@ -103,7 +103,7 @@ static void Reserve(type##DynamicArray *arr, u32 capacity)						\
 	arr->data = newData;														\
 	return;																		\
 }																				\
-																				\
+\
 static void UnorderedRemove(type##DynamicArray *arr, u32 index)					\
 {																				\
 	Assert(index < arr->amount);												\
@@ -121,7 +121,7 @@ struct type##DFArray														\
 	type *data;																	\
 	u32 amount;																	\
 	u32 capacity;																\
-																				\
+   \
 	type &operator[] (u32 i)													\
 	{																			\
 		Assert(i < amount);														\
@@ -133,7 +133,7 @@ static type* operator+(type##DFArray arr, u32 index)						\
 	Assert(index < arr.amount);													\
 	return arr.data + index;													\
 }																				\
-																				\
+\
 static u32 ArrayAdd(type##DFArray *arr, type t)									\
 {																				\
 	if (arr->amount + 1 < arr->capacity)										\
@@ -141,18 +141,18 @@ static u32 ArrayAdd(type##DFArray *arr, type t)									\
 		(arr->data)[arr->amount++] = t;											\
 		return (arr->amount - 1);												\
 	}																			\
-																				\
+   \
 	u32 newCapacity = 2 * arr->capacity + 1;									\
-																				\
+   \
 	type *newData = PushData(frameArena, type, newCapacity);					\
 	memcpy(newData, arr->data, arr->capacity * sizeof(type));					\
 	arr->capacity = newCapacity;												\
 	arr->data = newData;														\
 	arr->data[arr->amount++] = t;												\
-																				\
+   \
 	return (arr->amount - 1);													\
 }																				\
-																				\
+\
 static type##DFArray type##CreateDFArray(u32 capacity = 8)						\
 {																				\
 	type##DFArray ret;														\
@@ -165,7 +165,7 @@ static void Clear(type##DFArray *arr)											\
 {																				\
 	arr->amount = 0;															\
 }																				\
-																				\
+\
 static void UnorderedRemove(type##DFArray *arr, u32 index)						\
 {																				\
 	Assert(index < arr->amount);												\
@@ -259,44 +259,6 @@ union v3
 	f32 v[3];
 };
 
-union v4
-{
-	struct
-	{
-		f32 a;
-		f32 r;
-		f32 g;
-		f32 b;
-	};
-
-	struct
-	{
-		f32 a;
-		v3 rgb;
-	};
-	struct
-	{
-		union
-		{
-			struct
-			{
-				union
-				{
-					struct
-					{
-						f32 x;
-						f32 y;					
-					};
-					v2 xy;
-				};
-				f32 z;
-			};
-			v3 xyz;
-		};
-		f32 w;
-	};
-};
-
 static v2i V2i(v2 a)
 {
 	return { (i32)a.x, (i32)a.y };
@@ -375,7 +337,7 @@ static v2 operator+(v2 a, v2 b)
 static v2& operator+=(v2 &a, v2 b)
 {
 	a = a + b;
-
+   
 	return a;
 }
 static v2 operator-(v2 a, v2 b)
@@ -408,7 +370,7 @@ static v2 operator*(f32 f, v2 a)
 static v2& operator*=(v2& a, f32 f)
 {
 	a = a * f;
-
+   
 	return a;
 }
 
@@ -479,7 +441,7 @@ static v2i operator+(v2i a, v2i b)
 static v2i& operator+=(v2i &a, v2i b)
 {
 	a = a + b;
-
+   
 	return a;
 }
 static v2i operator-(v2i a, v2i b)
@@ -512,7 +474,7 @@ static v2i operator*(i32 f, v2i a)
 static v2i& operator*=(v2i& a, i32 f)
 {
 	a = a * f;
-
+   
 	return a;
 }
 
@@ -1010,7 +972,7 @@ static v3i operator*(v3i a, v3i b)
 }
 static v3i& operator*=(v3i &a, v3i b)
 {
-	a = a + b;
+	a = a * b;
 	return a;
 }
 
@@ -1056,10 +1018,50 @@ static v3i operator-(v3i a)
 	return { -a.x, -a.y, -a.z };
 }
 
+union v4
+{
+	struct
+	{
+		f32 a;
+		f32 r;
+		f32 g;
+		f32 b;
+	};
+   
+	struct
+	{
+		f32 a;
+		v3 rgb;
+	};
+   
+	struct
+	{
+		union
+		{
+			struct
+			{
+				union
+				{
+					struct
+					{
+						f32 x;
+						f32 y;					
+					};
+					v2 xy;
+				};
+				f32 z;
+			};
+			v3 xyz;
+		};
+		f32 w;
+	};
+};
+
+
 static v4 V4()
 {
 	v4 ret;
-
+   
 	ret.a = 0;
 	ret.r = 0;
 	ret.g = 0;
@@ -1076,6 +1078,18 @@ static v4 V4(f32 a, f32 r, f32 g, f32 b)
 	ret.b = b;
 	return ret;
 }
+
+
+static v4 V4(i32 a, i32 r, i32 g, i32 b)
+{
+	v4 ret;
+	ret.a = (f32)a;
+	ret.r = (f32)r;
+	ret.g = (f32)g;
+	ret.b = (f32)b;
+	return ret;
+}
+
 static v4 V4(f32 a, v3 rgb)
 {
 	v4 ret;
@@ -1120,7 +1134,7 @@ static v4 operator-(v4 a, v4 b)
 static v4& operator-=(v4 &a, v4 b)
 {
 	a = a - b;
-
+   
 	return a;
 }
 
@@ -1219,5 +1233,273 @@ static bool operator!=(v4 a, v4 b)
 {
 	return !(a == b);
 }
+
+
+union v4i
+{
+	struct
+	{
+		i32 a;
+		i32 r;
+		i32 g;
+		i32 b;
+	};
+   
+	struct
+	{
+		i32 a;
+		v3i rgb;
+	};
+   
+	struct
+	{
+		i32 x, y, z, w;
+	};
+   struct 
+   {
+      v2i xy;
+      v2i zw;
+   };
+   
+   struct 
+   {
+      i32 x;
+      v2i yz;
+      i32 w;
+   };
+   
+   struct
+   {
+      v3i xyz;
+      i32 w;
+   };
+   
+	i32 v[4];
+};
+
+static v4 V4(v4i a)
+{
+	return V4(a.x, a.y, a.z, a.w);
+}
+
+static v4i V4i()
+{
+	v4i ret;
+	ret.x = 0;
+	ret.y = 0;
+	ret.z = 0;
+   ret.w = 0;
+	return ret;
+}
+
+static v4i V4i(i32 _x, i32 _y, i32 _z, i32 _w)
+{
+	v4i ret;
+	ret.x = _x;
+	ret.y = _y;
+	ret.z = _z; 
+   ret.w = _w;
+	return ret;
+}
+static v4i V4i(u32 _x, u32 _y, u32 _z, i32 _w)
+{
+	v4i ret;
+	ret.x = (i32)_x;
+	ret.y = (i32)_y;
+	ret.z = (i32)_z; 
+   ret.w = (i32)_w; 
+	return ret;
+}
+static v4i V4i(i32 _x, i32 _y, u32 _z, i32 _w)
+{
+	v4i ret;
+	ret.x = (i32)_x;
+	ret.y = (i32)_y;
+	ret.z = (i32)_z; 
+   ret.w = (i32)_w; 
+	return ret;
+}
+static v4i V4i(i32 _x, u32 _y, i32 _z, i32 _w)
+{
+	v4i ret;
+	ret.x = (i32)_x;
+	ret.y = (i32)_y;
+	ret.z = (i32)_z; 
+   ret.w = (i32)_w; 
+   return ret;
+}
+static v4i V4i(u32 _x, i32 _y, i32 _z, i32 _w)
+{
+	v4i ret;
+	ret.x = (i32)_x;
+	ret.y = (i32)_y;
+	ret.z = (i32)_z; 
+   ret.w = (i32)_w; 
+   return ret;
+}
+static v4i V4i(u32 _x, i32 _y, u32 _z, i32 _w)
+{
+	v4i ret;
+	ret.x = (i32)_x;
+	ret.y = (i32)_y;
+	ret.z = (i32)_z; 
+   ret.w = (i32)_w; 
+   return ret;
+}
+static v4i V4i(i32 _x, u32 _y, u32 _z, i32 _w)
+{
+	v4i ret;
+	ret.x = (i32)_x;
+	ret.y = (i32)_y;
+	ret.z = (i32)_z;
+   ret.w = (i32)_w; 
+	return ret;
+}
+static v4i V4i(u32 _x, u32 _y, i32 _z, i32 _w)
+{
+	v4i ret;
+	ret.x = (i32)_x;
+	ret.y = (i32)_y;
+	ret.z = (i32)_z;
+   ret.w = (i32)_w; 
+	return ret;
+}
+static v4i V4i(v2i xy, i32 z, i32 _w)
+{
+	v4i ret;
+	ret.x = xy.x;
+	ret.y = xy.y;
+	ret.z = z;
+   ret.w = (i32)_w; 
+	return ret;
+}
+static v4i V4i(v2i xy, u32 z, i32 _w)
+{
+	v4i ret;
+	ret.xy = xy;
+	ret.z = (i32)z;
+   ret.w = (i32)_w; 
+	return ret;
+}
+static v4i V4i(i32 x, v2i yz, i32 _w)
+{
+	v4i ret;
+	ret.x = x;
+	ret.yz = yz;
+   ret.w = (i32)_w; 
+	return ret;
+}
+static v4i V4i(u32 x, v2i yz, i32 _w)
+{
+	v4i ret;
+	ret.x = (i32)x;
+	ret.yz = yz;
+   ret.w = (i32)_w; 
+	return ret;
+}
+
+static v4i operator+(v4i a, v4i b)
+{
+	v4i ret;
+	ret.x = a.x + b.x;
+	ret.y = a.y + b.y;
+	ret.z = a.z + b.z;
+   ret.w = a.w + b.w;
+	return ret;
+}
+static v4i& operator+=(v4i &a, v4i b)
+{
+	a = a + b;
+	return a;
+}
+static v4i operator-(v4i a, v4i b)
+{
+	v4i ret;
+	ret.x = a.x - b.x;
+	ret.y = a.y - b.y;
+	ret.z = a.z - b.z;
+   ret.w = a.w - b.w;
+	return ret;
+}
+static v4i& operator-=(v4i &a, v4i b)
+{
+	a = a - b;
+	return a;
+}
+static v4i operator*(v4i a, i32 f)
+{
+	v4i ret;
+	ret.x = a.x * f;
+	ret.y = a.y * f;
+	ret.z = a.z * f;
+   ret.w = a.w * f;
+	return ret;
+}
+
+static v4i operator*(i32 scalar, v4i a)
+{
+	v4i ret;
+	ret.x = scalar * a.x;
+	ret.y = scalar * a.y;
+	ret.z = scalar * a.z;
+   ret.w = scalar * a.w;
+	return ret;
+}
+static v4i& operator*=(v4i& a, i32 f)
+{
+	a = a * f;
+	return a;
+}
+static v4i operator*(v4i a, v4i b)
+{
+	v4i ret;
+	ret.x = a.x * b.x;
+	ret.y = a.y * b.y;
+	ret.z = a.z * b.z;
+   ret.w = a.w * b.w;
+	return ret;
+}
+static v4i& operator*=(v4i &a, v4i b)
+{
+	a = a * b;
+	return a;
+}
+
+static v4i operator/(v4i a, i32 f)
+{
+	v4i ret;
+	ret.x = a.x / f;
+	ret.y = a.y / f;
+	ret.z = a.z / f;
+   ret.w = a.w / f;
+	return ret;
+}
+
+static v4i& operator/=(v4i& a, i32 f)
+{
+	a = a / f;
+	return a;
+}
+
+static bool operator==(v4i a, v4i b)
+{
+	return (
+		a.x == b.x &&
+		a.y == b.y &&
+		a.z == b.z &&
+      a.w == b.w
+		);
+}
+
+static bool operator!=(v4i a, v4i b)
+{
+	return !(a == b);
+}
+
+static v4i operator-(v4i a)
+{
+	return { -a.x, -a.y, -a.z, -a.w };
+}
+
 
 #endif

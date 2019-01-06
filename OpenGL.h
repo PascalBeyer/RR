@@ -230,6 +230,7 @@ struct OpenGLProgram
 	GLuint shadowTransform;
 	GLuint lightP;
 	GLuint scaleColor;
+   GLuint boneStates;
    
 	//GLuint cameraPos;
 	GLuint specularExponent;
@@ -242,7 +243,10 @@ struct OpenGLProgram
 	GLuint vertC;
 	GLuint vertUV;
 	GLuint vertN;
+   GLuint boneIndices;
+   GLuint boneWeights;
 };
+
 
 struct FrameBuffer
 {
@@ -264,6 +268,7 @@ struct OpenGLContext
    OpenGLProgram basicMesh;
    OpenGLProgram shadow;
    OpenGLProgram zBias;
+   OpenGLProgram animated;
    
    FrameBuffer renderBuffer;
    FrameBuffer shadowBuffer;
@@ -395,7 +400,6 @@ static OpenGLProgram OpenGLMakeProgram(char *shaderCode, u32 flags)
       Assert(err == GL_NO_ERROR);
    }
    
-   
    S("#version 130 \n", frameArena);
    
    if(flags & ShaderFlags_Phong)
@@ -409,6 +413,10 @@ static OpenGLProgram OpenGLMakeProgram(char *shaderCode, u32 flags)
    if(flags & ShaderFlags_ShadowMapping)
    {
       S("#define ShadowMapping \n", frameArena);
+   }
+   if(flags & ShaderFlags_Animated)
+   {
+      S("#define Animated \n", frameArena);
    }
    
    *PushStruct(frameArena, Char) = '\0';
@@ -473,6 +481,8 @@ static OpenGLProgram OpenGLMakeProgram(char *shaderCode, u32 flags)
 	ret.vertC  = glGetAttribLocation(ret.program, "vertC");
 	ret.vertUV = glGetAttribLocation(ret.program, "vertUV");
 	ret.vertN  = glGetAttribLocation(ret.program, "vertN");
+   ret.boneIndices = glGetAttribLocation(ret.program, "boneIndices");
+   ret.boneWeights = glGetAttribLocation(ret.program, "boneWeights");
    
 	ret.projection = glGetUniformLocation(ret.program, "projection");
 	ret.cameraTransform = glGetUniformLocation(ret.program, "cameraTransform");
@@ -483,12 +493,11 @@ static OpenGLProgram OpenGLMakeProgram(char *shaderCode, u32 flags)
 	//ret.cameraPos = glGetUniformLocation(ret.program, "cameraPos");
 	ret.specularExponent = glGetUniformLocation(ret.program, "specularExponent");
 	ret.scaleColor = glGetUniformLocation(ret.program, "scaleColor");
+   ret.boneStates = glGetUniformLocation(ret.program, "boneStates");
    
    glUniform1i(ret.textureSampler, Sampler_Texture);
 	glUniform1i(ret.depthSampler,   Sampler_Depth);
 	
-   
-   
    {
       GLuint err = glGetError();
       Assert(err == GL_NO_ERROR);
@@ -514,17 +523,95 @@ static void UpdateWrapingTexture(Bitmap bitmap)
 	glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void RegisterTriangleMesh(TriangleMesh *mesh)
+static f32 SumV4(v4 a)
 {
-	glGenBuffers(1, &mesh->vertexVBO);
-	glGenBuffers(1, &mesh->indexVBO);
+   return (a.x + a.y + a.z + a.w);
+}
+
+static void RegisterTriangleMesh(TriangleMesh *mesh)
+{
+	void *data = NULL;
+   u32 stride = 0; 
    
-	Assert(mesh->vertices.amount < 65536); // <, because reset index
+   // todo maybe make flags
+   if(mesh->skeleton.bones.amount)
+   {
+      stride = sizeof(VertexFormatPCUNBD);
+      
+      VertexFormatPCUNBD *packedData = PushData(frameArena, VertexFormatPCUNBD, 0);
+      
+      for(u32 i = 0; i < mesh->positions.amount; i++)
+      {
+         VertexFormatPCUNBD *v =  PushStruct(frameArena, VertexFormatPCUNBD);
+         v->p  = mesh->positions[i];
+         v->c  = mesh->colors[i];
+         v->uv = mesh->uvs[i];
+         v->n  = mesh->normals[i];
+         
+         u32 unflattendIndex = mesh->skeleton.vertexMap[i];
+         WeightDataArray weights = mesh->skeleton.vertexToWeightsMap[unflattendIndex];
+         
+         switch(weights.amount)
+         {
+            case 0:
+            {
+               v->bw = V4();
+               v->bi = V4i();
+            }break;
+            case 1:
+            {
+               v->bw = V4(weights[0].weight, 0.0f, 0.0f, 0.0f);
+               v->bi = V4i(weights[0].boneIndex, 0, 0, 0);
+            }break;
+            case 2:
+            {
+               v->bw = V4(weights[0].weight, weights[1].weight, 0.0f, 0.0f);
+               v->bi = V4i(weights[0].boneIndex, weights[1].boneIndex, 0, 0);
+            }break;
+            case 3:
+            {
+               v->bw = V4(weights[0].weight, weights[1].weight, weights[2].weight, 0.0f);
+               v->bi = V4i(weights[0].boneIndex, weights[1].boneIndex, weights[2].boneIndex, 0);
+            }break;
+            default:
+            {
+               // todo I think the weights are presorted.... check this, otherwise do it in the parsing
+               v->bw = V4(weights[0].weight, weights[1].weight, weights[2].weight, weights[3].weight);
+               v->bw /= SumV4(v->bw);
+               v->bi = V4i(weights[0].boneIndex, weights[1].boneIndex, weights[2].boneIndex, weights[3].boneIndex);
+            }break;
+         }
+         
+      }
+      
+      data = packedData;
+   }
+   else
+   {
+      stride = sizeof(VertexFormatPCUN);
+      
+      VertexFormatPCUN *packedData = PushData(frameArena, VertexFormatPCUN, 0);
+      
+      for(u32 i = 0; i < mesh->positions.amount; i++)
+      {
+         VertexFormatPCUN *v =  PushStruct(frameArena, VertexFormatPCUN);
+         v->p = mesh->positions[i];
+         v->c = mesh->colors[i];
+         v->uv = mesh->uvs[i];
+         v->n = mesh->normals[i];
+      }
+      
+      data = packedData;
+   }
+   
+	Assert(mesh->positions.amount < 65536); // <, because reset index
    
 	//todo look up what those GL_Stream_Draw mean?
+   glGenBuffers(1, &mesh->vertexVBO);
 	glBindBuffer(GL_ARRAY_BUFFER, mesh->vertexVBO);
-	glBufferData(GL_ARRAY_BUFFER, mesh->vertices.amount * sizeof(VertexFormatPCUN), mesh->vertices.data, GL_STREAM_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, mesh->positions.amount * stride, data, GL_STREAM_DRAW);
    
+   glGenBuffers(1, &mesh->indexVBO);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->indexVBO);
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh->indices.amount * sizeof(mesh->indices[0]), mesh->indices.data, GL_STREAM_DRAW);
    
@@ -557,6 +644,7 @@ struct OpenGLUniformInfo
    m4x4 shadowMat = {}; // more part of the setup
    m4x4 objectTransform = Identity();
    v4 scaleColor = V4(1.0f, 1.0f, 1.0f, 1.0f);
+   m4x4Array boneStates = {};
 };
 
 static void BeginUseProgram(OpenGLContext *context, OpenGLProgram prog, RenderSetup setup, OpenGLUniformInfo uniforms)
@@ -584,7 +672,12 @@ static void BeginUseProgram(OpenGLContext *context, OpenGLProgram prog, RenderSe
       glActiveTexture(GL_TEXTURE0);
    }
    
-	glBindBuffer(GL_ARRAY_BUFFER,         uniforms.vertexBuffer);
+   if(prog.flags & ShaderFlags_Animated)
+   {
+      glUniformMatrix4fv(prog.boneStates, uniforms.boneStates.amount, GL_TRUE, (GLfloat *)uniforms.boneStates.data);
+   }
+   
+	glBindBuffer(GL_ARRAY_BUFFER, uniforms.vertexBuffer);
    if(uniforms.indexBuffer != 0xFFFFFFFF) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, uniforms.indexBuffer);
    
 }
@@ -638,7 +731,36 @@ static void BeginAttribArraysPCUN(OpenGLProgram prog)
       glEnableVertexAttribArray(prog.vertN);
       glVertexAttribPointer(prog.vertN, 3, GL_FLOAT, false, sizeof(VertexFormatPCUN), (void *)OffsetOf(VertexFormatPCUN, n));
    }
+}
+
+static void BeginAttribArraysPCUNBD(OpenGLProgram prog)
+{
+   glEnableVertexAttribArray(prog.vertP);
+	glEnableVertexAttribArray(prog.vertC);
    
+   glVertexAttribPointer(prog.vertP, 3, GL_FLOAT, false, sizeof(VertexFormatPCUNBD), (void *)OffsetOf(VertexFormatPCUNBD, p));
+   glVertexAttribPointer(prog.vertC, 4, GL_UNSIGNED_BYTE, true, sizeof(VertexFormatPCUNBD), (void *)OffsetOf(VertexFormatPCUNBD, c));
+   
+	if(prog.flags & ShaderFlags_Textured)
+	{
+      glEnableVertexAttribArray(prog.vertUV);
+		glVertexAttribPointer(prog.vertUV, 2, GL_FLOAT, false, sizeof(VertexFormatPCUNBD), (void *)OffsetOf(VertexFormatPCUNBD, uv));
+	}
+   
+   if(prog.flags & ShaderFlags_Phong)
+   {
+      glEnableVertexAttribArray(prog.vertN);
+      glVertexAttribPointer(prog.vertN, 3, GL_FLOAT, false, sizeof(VertexFormatPCUNBD), (void *)OffsetOf(VertexFormatPCUNBD, n));
+   }
+   
+   if(prog.flags & ShaderFlags_Animated)
+   {
+      glEnableVertexAttribArray(prog.boneIndices);
+      glVertexAttribPointer(prog.boneIndices, 4, GL_INT, false, sizeof(VertexFormatPCUNBD), (void *)OffsetOf(VertexFormatPCUNBD, bi));
+      
+      glEnableVertexAttribArray(prog.boneWeights);
+      glVertexAttribPointer(prog.boneWeights, 4, GL_FLOAT, false, sizeof(VertexFormatPCUNBD), (void *)OffsetOf(VertexFormatPCUNBD, bw));
+   }
 }
 
 static void EndAttribArrays(OpenGLProgram prog)
@@ -654,6 +776,11 @@ static void EndAttribArrays(OpenGLProgram prog)
 	{
 		glDisableVertexAttribArray(prog.vertN);
 	}
+   if(prog.flags & ShaderFlags_Animated)
+   {
+      glDisableVertexAttribArray(prog.boneIndices);
+      glDisableVertexAttribArray(prog.boneWeights);
+   }
 }
 
 
@@ -704,6 +831,7 @@ static OpenGLContext OpenGLInit(bool modernContext)
    // used for untextured quads
    ret.basic = OpenGLMakeProgram((char *)file.data, ShaderFlags_ShadowMapping);
 	
+   ret.animated = OpenGLMakeProgram((char *)file.data, ShaderFlags_Animated|ShaderFlags_ShadowMapping|ShaderFlags_Phong|ShaderFlags_Textured);
    
    ret.basicMesh = OpenGLMakeProgram((char *)file.data, ShaderFlags_ShadowMapping|ShaderFlags_Phong|ShaderFlags_Textured);
    
@@ -798,6 +926,9 @@ static OpenGLContext OpenGLInit(bool modernContext)
       shadowBuffer.texture = 0xFFFFFFFF;
       
    }
+   
+   ret.shadowBuffer = shadowBuffer;
+   
    {
       GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
       Assert(status == GL_FRAMEBUFFER_COMPLETE);
@@ -846,6 +977,10 @@ static u32 HeaderSize(RenderGroupEntryHeader *header)
       {
          return sizeof(EntryColoredVertices);
       }break;
+      case RenderGroup_EntryAnimatedMesh:
+      {
+         return sizeof(EntryAnimatedMesh);
+      }break;
       default:
       {
          Die;
@@ -854,7 +989,7 @@ static u32 HeaderSize(RenderGroupEntryHeader *header)
 	}
 }
 
-void RenderIntoShadowMap(RenderCommands *rg, OpenGLContext *context)
+static void RenderIntoShadowMap(RenderCommands *rg, OpenGLContext *context)
 {
 	TimedBlock;
    
@@ -907,7 +1042,14 @@ void RenderIntoShadowMap(RenderCommands *rg, OpenGLContext *context)
             
             BeginUseProgram(context, context->shadow, currentSetup, uniforms);
             
-            BeginAttribArraysPCUN(context->shadow);
+            if(mesh.skeleton.bones.amount)
+            {
+               BeginAttribArraysPCUNBD(context->shadow);
+            }
+            else
+            {
+               BeginAttribArraysPCUN(context->shadow);
+            }
             
             For(mesh.indexSets)
             {
@@ -1065,7 +1207,14 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             
             BeginUseProgram(context, context->basicMesh, currentSetup, uniforms);
             
-            BeginAttribArraysPCUN(context->basicMesh);
+            if(mesh.skeleton.bones.amount) // this feels dumb
+            {
+               BeginAttribArraysPCUNBD(context->basicMesh);
+            }
+            else
+            {
+               BeginAttribArraysPCUN(context->basicMesh);
+            }
             
             for(u32 i = 0; i < mesh.indexSets.amount; i++)
             {
@@ -1092,6 +1241,62 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             }
             
             EndUseProgram(context->basicMesh);
+            pBufferIt += sizeof(*meshHeader);
+         }break;
+         case RenderGroup_EntryAnimatedMesh:
+         {
+            EntryAnimatedMesh *meshHeader = (EntryAnimatedMesh *)header;
+            
+            
+            // this should become InterpolationData
+            v3 pos       = meshHeader->pos;
+            f32 scale    = meshHeader->scale;
+            Quaternion q = meshHeader->orientation;
+            
+            // todo slow
+            m4x4 objectTransform = Translate(QuaternionToMatrix(q) * ScaleMatrix(scale), pos);
+            
+            v4 lightP = currentSetup.cameraTransform * V4(currentSetup.lightPos, 1.0f);
+            
+            TriangleMesh mesh = meshHeader->mesh;
+            
+            OpenGLUniformInfo uniforms;
+            uniforms.objectTransform = objectTransform;
+            uniforms.shadowMat       = shadowMat;
+            uniforms.scaleColor      = meshHeader->scaleColor;
+            uniforms.vertexBuffer    = mesh.vertexVBO;
+            uniforms.indexBuffer     = mesh.indexVBO;
+            uniforms.boneStates      = meshHeader->boneStates;
+            
+            BeginUseProgram(context, context->animated, currentSetup, uniforms);
+            
+            BeginAttribArraysPCUNBD(context->animated);
+            
+            for(u32 i = 0; i < mesh.indexSets.amount; i++)
+            {
+               auto it = &mesh.indexSets[i];
+               
+               glUniform1f(context->basicMesh.specularExponent, it->mat.spectularExponent);
+               glBindTexture(GL_TEXTURE_2D, meshHeader->textureIDs[i]);
+               
+               switch (mesh.type)
+               {
+                  case TriangleMeshType_List:
+                  {
+                     glDrawElements(GL_TRIANGLES, it->amount, GL_UNSIGNED_SHORT, (void *) ((u64)it->offset * sizeof(u16)));
+                  }break;
+                  case TrianlgeMeshType_Strip:
+                  {
+                     glDrawElements(GL_TRIANGLE_STRIP, it->amount, GL_UNSIGNED_SHORT, (void *)((u64)it->offset * sizeof(u16)));
+                  }break;
+                  default:
+                  {
+                     Die;
+                  }break;
+               }
+            }
+            
+            EndUseProgram(context->animated);
             pBufferIt += sizeof(*meshHeader);
          }break;
          case RenderGroup_EntryClear:
