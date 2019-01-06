@@ -28,7 +28,7 @@ struct String
 		u32 amount;
 		u32 length;
 	};
-    
+   
 	Char& operator[](u32 i)
 	{
 		return data[i];
@@ -83,6 +83,7 @@ static String CreateString(char *string, u32 size)
 	return ret;
 }
 
+// note, this does not check for null, right now I think thats good. Se we know if we fucked up
 static u32 NullTerminatedStringLength(const char* c)
 {
 	u32 ret = 0;
@@ -119,7 +120,7 @@ static String S(char *nullTerminatedString, Arena *arena, bool keepNullterminate
 	ret = PushArray(arena, Char, length);
 	
 	memcpy(ret.data, nullTerminatedString, (length + keepNullterminated) * sizeof(Char));
-    
+   
 	ret.length -= keepNullterminated;
 	return ret;
 }
@@ -154,10 +155,10 @@ static String operator+(String a, String b)
 static String UtoS(u64 integer, Arena *arena = frameArena)
 {
 	String ret;
-    
+   
 	u64 scaler = 1;
 	u64 converter = integer ? (u64)integer : 1;
-    
+   
 	u32 counter = 0;
 	while (converter != 0)
 	{
@@ -166,59 +167,59 @@ static String UtoS(u64 integer, Arena *arena = frameArena)
 		converter /= 10;
 	}
 	u32 index = 0;
-    
+   
 	ret = PushArray(arena, Char, counter);
 	
 	while (index != counter)
 	{
 		scaler /= 10;
-        
+      
 		switch ((integer / scaler) % 10)
 		{
-            case 0:
-            {
-                ret.data[index] = '0';
-            }break;
-            case 1:
-            {
-                ret.data[index] = '1';
-            }break;
-            case 2:
-            {
-                ret.data[index] = '2';
-            }break;
-            case 3:
-            {
-                ret.data[index] = '3';
-            }break;
-            case 4:
-            {
-                ret.data[index] = '4';
-            }break;
-            case 5:
-            {
-                ret.data[index] = '5';
-            }break;
-            case 6:
-            {
-                ret.data[index] = '6';
-            }break;
-            case 7:
-            {
-                ret.data[index] = '7';
-            }break;
-            case 8:
-            {
-                ret.data[index] = '8';
-            }break;
-            case 9:
-            {
-                ret.data[index] = '9';
-            }break;
+         case 0:
+         {
+            ret.data[index] = '0';
+         }break;
+         case 1:
+         {
+            ret.data[index] = '1';
+         }break;
+         case 2:
+         {
+            ret.data[index] = '2';
+         }break;
+         case 3:
+         {
+            ret.data[index] = '3';
+         }break;
+         case 4:
+         {
+            ret.data[index] = '4';
+         }break;
+         case 5:
+         {
+            ret.data[index] = '5';
+         }break;
+         case 6:
+         {
+            ret.data[index] = '6';
+         }break;
+         case 7:
+         {
+            ret.data[index] = '7';
+         }break;
+         case 8:
+         {
+            ret.data[index] = '8';
+         }break;
+         case 9:
+         {
+            ret.data[index] = '9';
+         }break;
 		}
 		index++;
 	}
-    
+   
 	return ret;
 }
 
@@ -265,19 +266,19 @@ struct FloatSpread
 static FloatSpread SpreadFloat(f64 f)
 {
 	Assert(f >= 0);
-    
+   
 	u64 convertedF = *(u64 *)&f;
-    
+   
 	i32 bias = 1023;
-    
+   
 	FloatSpread ret;
 	ret.exp = ((convertedF & 0xFFF0000000000000) >> 52); // 12 bits sign + exponents, 52  mantisse
 	ret.mant = (convertedF & 0x000FFFFFFFFFFFFF) 
-        | 0x0010000000000000; // getting the mantisse and the adding the hidden bit
-    
+      | 0x0010000000000000; // getting the mantisse and the adding the hidden bit
+   
 	ret.exp = ret.exp - bias; // I think the exponent is rolled such that 0 is actually 0
 	ret.exp = ret.exp - 52; // making it such that ret.mant * 2^ret.exp = f again
-    
+   
 	return ret;
 }
 
@@ -288,15 +289,15 @@ static FloatSpread Mult(FloatSpread x, FloatSpread y)
 	u64 bx = x.mant & 0xFFFFFFFF;
 	u64 ay = y.mant >> 32;
 	u64 by = y.mant & 0xFFFFFFFF;
-    
+   
 	// multiplication accordint to the distributive law
 	u64 upperParts = ax*ay; // should be multiplied by 2^32
 	u64 lowerParts = bx*by; // should be multiplied by 2^0
 	u64 mixed_axby = ax*by;	// should be multiplied by 2^16
 	u64 mixed_bxay = bx*ay; // should be multiplied by 2^16
-    
+   
 	// we do that at the end by doing exponent stuff and dividing everything else instead
-    
+   
 	// we throw away the lowest 16 bits of lowerPart, as these would get rounded for floats
 	// we are just interested in how lowerparts makes us round.
 	u64 temp = (lowerParts >> 32) + (mixed_axby & 0xFFFF) + (mixed_bxay & 0xFFFF); // should be multiplied by 2^16
@@ -416,10 +417,10 @@ inline CachedPower GetCachedPower(int index)
 		0xD433179D9C8CB841, // e =   986, k =  316,
 		0x9E19DB92B4E31BA9, // e =  1013, k =  324, // <<< double-precision (1013 - 1137 + 64 = -60)
 	};
-    
+   
 	int const k = kCachedPowersMinDecExp + index * kCachedPowersDecExpStep;
 	int const e = BinaryExponentFromDecimalExponent(k);
-    
+   
 	return { kSignificands[index], e, k };
 }
 
@@ -443,7 +444,7 @@ static u32 CountLeadingZeros(u64 mant)
 static FloatSpread Normalize(FloatSpread f)
 {
 	u32 leadingZeros = CountLeadingZeros(f.mant);
-    
+   
 	FloatSpread ret;
 	ret.exp = f.exp - leadingZeros;
 	ret.mant = (f.mant << leadingZeros);
@@ -470,12 +471,12 @@ static void Grisu(Arena *arena, f64 f) // todo does not work.
 	FloatSpread c = { pow.f, pow.e };
 	
 	FloatSpread asd = Mult(normalized, c);
-    
+   
 	u32 parts[3];
 	Cut(asd, parts);
 	
 	ConsoleOutput("%u32%u32%u32e%i32", parts[0], parts[1], parts[2], pow.k);
-    
+   
 }
 
 
@@ -491,26 +492,26 @@ static String FtoS(float rational, u32 numberOfDigits, Arena *arena = frameArena
 	//FloatSpread f6 = Mult(f0, f2);
 	//FloatSpread f7 = Mult(f0, f3);
 	//FloatSpread f8 = Mult(f0, f4);
-    
+   
 	int intPart = (int)rational;
 	float ratPart = rational - intPart;
 	if (ratPart < 0)
 	{
 		ratPart *= -1.0f;
 	}
-    
+   
 	String ret = PushArray(arena, Char, 0);
 	ItoS(intPart, arena);
 	*PushStruct(arena, Char) = '.';
 	for (u32 i = 0; i < numberOfDigits; i++) // todo table lookup?
 	{
 		ratPart *= 10.0f;
-        Char upart = (Char)ratPart;
+      Char upart = (Char)ratPart;
 		*PushStruct(arena, Char) = '0' + upart;
 		ratPart -= (f32)upart;
 		//if (!ratPart) break;
 	}
-    
+   
 	ret.length = (u32)((Char *)arena->current - ret.data);
 	return ret;
 }
@@ -532,7 +533,7 @@ static String CreateString(Arena *arena, char character)
 static bool operator==(String a, String b)
 {
 	if (a.length != b.length) return false;
-    
+   
 	for (u32 i = 0; i < a.length; i++)
 	{
 		if (a[i] != b[i]) return false;
@@ -637,7 +638,7 @@ static void EatSpacesFromEnd(String *string)
 static String EatToNextSpaceReturnHead(String *string)
 {
 	String ret = *string;
-    
+   
 	for (u32 i = 0; i < ret.length; i++)
 	{
 		if (ret[i] == ' ')
@@ -657,7 +658,7 @@ static bool BeginsWith(String toCheck, char *cStr) // todo audit speed
 	{
 		if (*cStr != toCheck[i]) return false;
 	}
-    
+   
 	return !(*cStr);
 }
 
@@ -670,14 +671,14 @@ static bool BeginsWithEat(String *_toCheck, char *cStr) // todo audit speed
 	{
 		if (*cStr != toCheck[i]) return false;
 	}
-    
+   
 	bool ret = !(*cStr);
-    
+   
 	if (ret)
 	{
 		Eat(i, _toCheck);
 	}
-    
+   
 	return ret;
 }
 
@@ -686,7 +687,7 @@ static bool BeginsWithEat(String *_toCheck, char *cStr) // todo audit speed
 static String EatToCharReturnHead(String *string, Char c)
 {
 	String ret = *string;
-    
+   
 	for (u32 i = 0; i < ret.length; i++)
 	{
 		if (ret[i] == c)
@@ -703,7 +704,7 @@ static String EatToCharReturnHead(String *string, Char c)
 static String GetToChar(String s, Char c)
 {
 	String ret = s;
-    
+   
 	for (u32 i = 0; i < ret.length; i++)
 	{
 		if (ret[i] == c)
@@ -719,7 +720,7 @@ static String GetToChar(String s, Char c)
 static String EatToCharFromBackReturnTail(String *string, Char c)
 {
 	String ret = *string;
-    
+   
 	for (u32 i = ret.length - 1; i < ret.length; i--)
 	{
 		if (ret[i] == c)
@@ -730,14 +731,14 @@ static String EatToCharFromBackReturnTail(String *string, Char c)
 		}
 		string->length--;
 	}
-    
+   
 	return ret;
 }
 
 static String GetBackToChar(String string, Char c) // #zerg
 {
 	String ret = string;
-    
+   
 	for (u32 i = ret.length - 1; i < ret.length; i--)
 	{
 		if (ret[i] == c)
@@ -747,7 +748,7 @@ static String GetBackToChar(String string, Char c) // #zerg
 			return ret;
 		}
 	}
-    
+   
 	return ret;
 }
 
@@ -755,7 +756,7 @@ static String GetBackToChar(String string, Char c) // #zerg
 static String EatToCharReturnHead(String *string, Char c1, Char c2)
 {
 	String ret = *string;
-    
+   
 	for (u32 i = 0; i < ret.length; i++)
 	{
 		if (ret[i] == c1 || ret[i] == c2)
@@ -795,7 +796,7 @@ static i32 StoI(String string, b32 *success)
 		Eat1(&string);
 		return - (i32)StoU(string, success);
 	}
-    
+   
 	return StoU(string, success);
 }
 
@@ -805,7 +806,7 @@ static b32 StoB(String string, b32 *success)
 	if (string == "true") return 1;
 	if (string == "0") return 0;
 	if (string == "1") return 1;
-    
+   
 	*success = false;
 	return -1;
 }
@@ -813,7 +814,7 @@ static b32 StoB(String string, b32 *success)
 static f64 PowerOfTen(i32 exp) // todo speed this is stupid
 {
 	if (exp < 0) return 1.0 / PowerOfTen(-exp);
-    
+   
 	f64 ret = 1.0f;
 	for (u32 i = 0; i < (u32)exp; i++)
 	{
@@ -831,21 +832,21 @@ static f32 StoF(String string, b32 *success) // todo, gawd this is slow and tras
 		return 0.0f;
 	}
 	bool negative = false;
-    
+   
 	if (string[0] == '-')
 	{
 		Eat1(&string);
 		negative = true;
 	}
-    
+   
 	u64 sum = 0u;
 	f64 exp = 1.0;
-    
+   
 	while (string.length && string[0] == '0') 
 	{
 		Eat1(&string);
 	}
-    
+   
 	while(string.length && string[0] != '.' && string[0] != 'e')
 	{
 		u32 charToUInt = Eat1(&string) - '0';
@@ -859,12 +860,12 @@ static f32 StoF(String string, b32 *success) // todo, gawd this is slow and tras
 			return 0.0f;
 		}
 	}
-    
+   
 	if (string.length && string[0] != 'e')
 	{
 		Eat1(&string);
 	}
-    
+   
 	while(string.length && string[0] != 'e')
 	{
 		u32 charToUInt = Eat1(&string) - '0';
@@ -879,26 +880,26 @@ static f32 StoF(String string, b32 *success) // todo, gawd this is slow and tras
 			return 0.0f;
 		}
 	}
-    
+   
 	if (string[0] == 'e')
 	{
 		Eat1(&string);
 		i32 exponent = StoI(string, success);
 		exp /= PowerOfTen(exponent);
 	}
-    
+   
 	f64 mantissa = (f64)sum;
 	f32 ret = (f32)(mantissa / exp); // this is exact for any exponents we care about.
-    
+   
 	if (negative) ret *= -1.0f;
-    
+   
 	return ret;
 }
 
 static f32 Eatf32(String *s, b32 *success)
 {
 	String a = *s;
-    
+   
 	For(a)
 	{
 		if (!(*it == '-') && !(*it == '.') && ! ('0' <= *it && *it <= '9') && (*it != 'e'))
@@ -907,15 +908,15 @@ static f32 Eatf32(String *s, b32 *success)
 			break;
 		}
 	}
-    
+   
 	if (!a.length)
 	{
 		*success = false;
 		return 0.0f;
 	}
-    
+   
 	Eat(a.length, s);
-    
+   
 	return StoF(a, success);
 }
 
@@ -923,7 +924,7 @@ static f32 Eatf32(String *s, b32 *success)
 static u32 Eatu32(String *s, b32 *success)
 {
 	String a = *s;
-    
+   
 	For(a)
 	{
 		if (!(*it == '-') && !('0' <= *it && *it <= '9'))
@@ -932,15 +933,15 @@ static u32 Eatu32(String *s, b32 *success)
 			break;
 		}
 	}
-    
+   
 	if (!a.length)
 	{
 		*success = false;
 		return 0u;
 	}
-    
+   
 	Eat(a.length, s);
-    
+   
 	return StoU(a, success);
 }
 
@@ -955,19 +956,19 @@ static String ConsumeNextLine(String *inp) // returns head inclusive of the endl
 			String ret;
 			ret.data = inp->data;
 			ret.length = i;
-            
+         
 			inp->length -= i;
 			inp->data += i;
-            
+         
 			return ret;
 		}
 	}
-    
+   
 	String ret = *inp;
-    
+   
 	inp->length = 0;
 	inp->data = NULL; // not sure if this should be one past the end, but this seems "safer".
-    
+   
 	return ret;
 }
 
@@ -979,14 +980,14 @@ static void Sanitize(String *s) //todo: this maybe should be "RemoveChars" and g
 	{
 		switch (s->data[i])
 		{
-            case '\n':
-            case '\r':
-            {
-                currentOffset++;
-                continue;
-            }break;
+         case '\n':
+         case '\r':
+         {
+            currentOffset++;
+            continue;
+         }break;
 		}
-        
+      
 		s->data[i - currentOffset] = s->data[i];
 	}
 	s->length -= currentOffset;
@@ -1023,7 +1024,7 @@ String ConsumeNextLineSanitizeEatSpaces(String *inp)
 static v2 StoV2(String string, b32 *success)
 {
 	String s = string;
-    
+   
 	EatSpaces(&s);
 	if (!s.length || s[0] != '(')
 	{
@@ -1031,24 +1032,24 @@ static v2 StoV2(String string, b32 *success)
 		return V2();
 	}
 	Eat1(&s);
-    
+   
 	EatSpaces(&s);
 	String val1 = EatToCharReturnHead(&s, ',');
 	f32 a1 = StoF(val1, success);
-    
+   
 	if (!s.length || !success)
 	{
 		*success = false;
 		return V2();
 	}
 	Eat1(&s);
-    
+   
 	EatSpaces(&s);
 	String val2 = EatToCharReturnHead(&s, ')');
 	f32 a2 = StoF(val2, success);
-    
+   
 	if (!success) return V2();
-    
+   
 	//sanity check
 	Eat1(&s);
 	EatSpaces(&s);
@@ -1057,7 +1058,7 @@ static v2 StoV2(String string, b32 *success)
 		*success = false;
 		return V2(a1, a2);
 	}
-    
+   
 	return V2(a1, a2);
 }
 
@@ -1065,7 +1066,7 @@ static v2 StoV2(String string, b32 *success)
 static v3 StoV3(String string, b32 *success)
 {
 	String s = string;
-    
+   
 	EatSpaces(&s);
 	if (!s.length || s[0] != '(')
 	{
@@ -1073,22 +1074,22 @@ static v3 StoV3(String string, b32 *success)
 		return V3();
 	}
 	Eat1(&s);
-    
+   
 	EatSpaces(&s);
 	String val1 = EatToCharReturnHead(&s, ',');
 	f32 a1 = StoF(val1, success);
-    
+   
 	if (!s.length || !success)
 	{
 		*success = false;
 		return V3();
 	}
 	Eat1(&s);
-    
+   
 	EatSpaces(&s);
 	String val2 = EatToCharReturnHead(&s, ',');
 	f32 a2 = StoF(val2, success);
-    
+   
 	if (!s.length || !success)
 	{
 		*success = false;
@@ -1098,9 +1099,9 @@ static v3 StoV3(String string, b32 *success)
 	EatSpaces(&s);
 	String val3 = EatToCharReturnHead(&s, ')');
 	f32 a3 = StoF(val3, success);
-    
+   
 	if (!success) return V3();
-    
+   
 	//sanity check
 	Eat1(&s);
 	EatSpaces(&s);
@@ -1109,7 +1110,7 @@ static v3 StoV3(String string, b32 *success)
 		*success = -1;
 		return V3(a1, a2, a3); // todo maybe just warn that there was junk
 	}
-    
+   
 	return V3(a1, a2, a3);
 }
 
@@ -1117,7 +1118,7 @@ static v3 StoV3(String string, b32 *success)
 static v4 StoV4(String string, b32 *success)
 {
 	String s = string;
-    
+   
 	EatSpaces(&s);
 	if (!s.length || s[0] != '(')
 	{
@@ -1125,46 +1126,46 @@ static v4 StoV4(String string, b32 *success)
 		return V4();
 	}
 	Eat1(&s);
-    
+   
 	EatSpaces(&s);
 	String val1 = EatToCharReturnHead(&s, ',');
 	f32 a1 = StoF(val1, success);
-    
+   
 	if (!s.length || !success)
 	{
 		*success = false;
 		return V4();
 	}
 	Eat1(&s);
-    
+   
 	EatSpaces(&s);
 	String val2 = EatToCharReturnHead(&s, ',');
 	f32 a2 = StoF(val2, success);
-    
+   
 	if (!s.length || !success)
 	{
 		*success = false;
 		return V4();
 	}
 	Eat1(&s);
-    
+   
 	EatSpaces(&s);
 	String val3 = EatToCharReturnHead(&s, ',');
 	f32 a3 = StoF(val3, success);
-    
+   
 	if (!s.length || !success)
 	{
 		*success = false;
 		return V4();
 	}
 	Eat1(&s);
-    
+   
 	EatSpaces(&s);
 	String val4 = EatToCharReturnHead(&s, ')');
 	f32 a4 = StoF(val4, success);
-    
+   
 	if (!success) return V4();
-    
+   
 	//sanity check
 	Eat1(&s);
 	EatSpaces(&s);
@@ -1173,7 +1174,7 @@ static v4 StoV4(String string, b32 *success)
 		*success = false;
 		return V4(a1, a2, a3, a4);
 	}
-    
+   
 	return V4(a1, a2, a3, a4);
 }
 
@@ -1181,21 +1182,21 @@ static v4 StoV4(String string, b32 *success)
 static String V2toS(v2 vec, Arena *arena = frameArena)
 {
 	String ret = BeginConcatenate(arena);
-    
+   
 	S("(", arena);
 	FtoS(vec.x, arena);
 	S(",", arena);
 	FtoS(vec.y, arena);
 	S(")", arena);
 	EndConcatenate(&ret, arena);
-    
+   
 	return ret;
 }
 
 static String V3toS(v3 vec, Arena *arena = frameArena)
 {
 	String ret = BeginConcatenate(arena);
-    
+   
 	S("(", arena);
 	FtoS(vec.x, arena);
 	S(",", arena);
@@ -1203,7 +1204,7 @@ static String V3toS(v3 vec, Arena *arena = frameArena)
 	S(",", arena);
 	FtoS(vec.z, arena);
 	S(")", arena);
-    
+   
 	EndConcatenate(&ret, arena);
 	return ret;
 }
@@ -1211,7 +1212,7 @@ static String V3toS(v3 vec, Arena *arena = frameArena)
 static String V4toS(v4 vec, Arena *arena = frameArena)
 {
 	String ret = BeginConcatenate(arena);
-    
+   
 	S("(", arena);
 	FtoS(vec.a, arena);
 	S(",", arena);
@@ -1221,7 +1222,7 @@ static String V4toS(v4 vec, Arena *arena = frameArena)
 	S(",", arena);
 	FtoS(vec.b, arena);
 	S(")", arena);
-    
+   
 	EndConcatenate(&ret, arena);
 	return ret;
 }
@@ -1245,14 +1246,14 @@ static String StringFormatHelper(Arena *arena, char *format, va_list args)
 	String ret = BeginConcatenate(arena);
 	String inp = S(format); // todo speed slow, unnecessary
 	String head = EatToCharReturnHead(&inp, '%');
-    
+   
 	CopyString(head, arena);
-    
+   
 	while (inp.length)
 	{
 		Assert(inp[0] == '%');
 		Eat1(&inp);
-        
+      
 		b32 hasLength = true;
 		u32 desiredLength = Eatu32(&inp, &hasLength);
 		b32 rightBound = false;
@@ -1268,294 +1269,294 @@ static String StringFormatHelper(Arena *arena, char *format, va_list args)
 				Eat(2, &inp);
 				rightBound = false;
 			}
-            
+         
 		}
-        
+      
 		switch (inp[0])
 		{
-            case '%':
+         case '%':
+         {
+            Char *percent = PushStruct(arena, Char);
+            *percent = '%';
+            Eat1(&inp);
+         }break;
+         case 'i':
+         {
+            i64 val = 0;
+            if (inp[1] == '3' && inp[2] == '2')
             {
-                Char *percent = PushStruct(arena, Char);
-                *percent = '%';
-                Eat1(&inp);
-            }break;
-            case 'i':
+               val = (i64)va_arg(args, i32);
+               
+            }
+            else if(inp[1] == '6' && inp[2] == '4')
             {
-                i64 val = 0;
-                if (inp[1] == '3' && inp[2] == '2')
-                {
-                    val = (i64)va_arg(args, i32);
-                    
-                }
-                else if(inp[1] == '6' && inp[2] == '4')
-                {
-                    val = va_arg(args, i64);
-                }
-                else
-                {
-                    Assert(!"Unhandled integer type!");
-                }
-                
-                if (hasLength)
-                {
-                    u32 length = val ? (u32)log10((f64)val) + 1 : 1;
-                    if (desiredLength > length)
-                    {
-                        u32 delta = desiredLength - length;
-                        
-                        if (rightBound)
-                        {
-                            SpaceString(delta, arena);
-                            ItoS(val, arena);
-                        }
-                        else
-                        {
-                            ItoS(val, arena);
-                            SpaceString(delta, arena);
-                        }
-                        
-                    }
-                    else
-                    {
-                        ItoS(val, arena);
-                    }
-                }
-                else
-                {
-                    ItoS(val, arena);
-                }
-                
-                Eat(3, &inp);
-            }break;
-            case 'u':
+               val = va_arg(args, i64);
+            }
+            else
             {
-                u64 val = 0;
-                if (inp[1] == '3' && inp[2] == '2')
-                {
-                    val = (u64)va_arg(args, u32);
-                }
-                else if (inp[1] == '6' && inp[2] == '4')
-                {
-                    val = va_arg(args, u64);
-                }
-                else
-                {
-                    Assert(!"Unhandled unsigned type!");
-                }
-                
-                if (hasLength)
-                {
-                    u32 length = val ? (u32)log10((f64)val) + 1 : 1;
-                    if (desiredLength > length)
-                    {
-                        u32 delta = desiredLength - length;
-                        
-                        if (rightBound)
-                        {
-                            SpaceString(delta, arena);
-                            UtoS(val, arena);
-                        }
-                        else
-                        {
-                            UtoS(val, arena);
-                            SpaceString(delta, arena);
-                        }
-                        
-                    }
-                    else
-                    {
-                        UtoS(val, arena);
-                    }
-                }
-                else
-                {
-                    UtoS(val, arena);
-                }
-                
-                Eat(3, &inp);
-            }break;
-            case 'f':
+               Assert(!"Unhandled integer type!");
+            }
+            
+            if (hasLength)
             {
-                f64 val = 0.0f;
-                if (inp[1] == '3' && inp[2] == '2')
-                {
-                    val = va_arg(args, f64);
-                    
-                }
-                else if (inp[1] == '6' && inp[2] == '4')
-                {
-                    val = va_arg(args, f64);
-                }
-                else
-                {
-                    Assert(!"Unhandled floating Point type!");
-                }
-                
-                u32 tailSize = 5;
-                
-                if (hasLength)
-                {
-                    u32 log = 0;
-                    if (val)
-                    {
-                        f64 l = log10(Abs(val));
-                        log = (l > 0) ? (u32)l : 0;
-                    }
-                    u32 length =  (log + 1 + 1 + tailSize);
-                    if (desiredLength > length)
-                    {
-                        u32 delta = desiredLength - length;
-                        
-                        if (rightBound)
-                        {
-                            SpaceString(delta, arena);
-                            FtoS((f32)val, tailSize, arena);
-                        }
-                        else
-                        {
-                            FtoS((f32)val, tailSize, arena);
-                            SpaceString(delta, arena);
-                        }
-                        
-                    }
-                    else
-                    {
-                        FtoS((f32)val, tailSize, arena);
-                    }
-                }
-                else
-                {
-                    FtoS((f32)val, tailSize, arena);
-                }
-                
-                Eat(3, &inp);
-            }break;
-            case 'v':
+               u32 length = val ? (u32)log10((f64)val) + 1 : 1;
+               if (desiredLength > length)
+               {
+                  u32 delta = desiredLength - length;
+                  
+                  if (rightBound)
+                  {
+                     SpaceString(delta, arena);
+                     ItoS(val, arena);
+                  }
+                  else
+                  {
+                     ItoS(val, arena);
+                     SpaceString(delta, arena);
+                  }
+                  
+               }
+               else
+               {
+                  ItoS(val, arena);
+               }
+            }
+            else
             {
-                switch (inp[1])
-                {
-                    case '2':
-                    {
-                        v2 val = va_arg(args, v2);
-                        V2toS(val, arena);
-                        
-                    }break;
-                    case '3':
-                    {
-                        v3 val = va_arg(args, v3);
-                        V3toS(val, arena);
-                        
-                    }break;
-                    
-                    case '4':
-                    {
-                        v4 val = va_arg(args, v4);
-                        V4toS(val, arena);
-                        
-                    }break;
-                    default:
-                    {
-                        Assert(!"Unhandled vector size!")
-                    }break;
-                }
-                Eat(2, &inp);
-            }break;
-            case 's':
+               ItoS(val, arena);
+            }
+            
+            Eat(3, &inp);
+         }break;
+         case 'u':
+         {
+            u64 val = 0;
+            if (inp[1] == '3' && inp[2] == '2')
             {
-                String val = va_arg(args, String);
-                
-                u32 stringLength = val.length;
-                
-                if (hasLength)
-                {
-                    i32 deltaLength = (i32)desiredLength - (i32)stringLength;
-                    if (deltaLength < 0)
-                    {
+               val = (u64)va_arg(args, u32);
+            }
+            else if (inp[1] == '6' && inp[2] == '4')
+            {
+               val = va_arg(args, u64);
+            }
+            else
+            {
+               Assert(!"Unhandled unsigned type!");
+            }
+            
+            if (hasLength)
+            {
+               u32 length = val ? (u32)log10((f64)val) + 1 : 1;
+               if (desiredLength > length)
+               {
+                  u32 delta = desiredLength - length;
+                  
+                  if (rightBound)
+                  {
+                     SpaceString(delta, arena);
+                     UtoS(val, arena);
+                  }
+                  else
+                  {
+                     UtoS(val, arena);
+                     SpaceString(delta, arena);
+                  }
+                  
+               }
+               else
+               {
+                  UtoS(val, arena);
+               }
+            }
+            else
+            {
+               UtoS(val, arena);
+            }
+            
+            Eat(3, &inp);
+         }break;
+         case 'f':
+         {
+            f64 val = 0.0f;
+            if (inp[1] == '3' && inp[2] == '2')
+            {
+               val = va_arg(args, f64);
+               
+            }
+            else if (inp[1] == '6' && inp[2] == '4')
+            {
+               val = va_arg(args, f64);
+            }
+            else
+            {
+               Assert(!"Unhandled floating Point type!");
+            }
+            
+            u32 tailSize = 5;
+            
+            if (hasLength)
+            {
+               u32 log = 0;
+               if (val)
+               {
+                  f64 l = log10(Abs(val));
+                  log = (l > 0) ? (u32)l : 0;
+               }
+               u32 length =  (log + 1 + 1 + tailSize);
+               if (desiredLength > length)
+               {
+                  u32 delta = desiredLength - length;
+                  
+                  if (rightBound)
+                  {
+                     SpaceString(delta, arena);
+                     FtoS((f32)val, tailSize, arena);
+                  }
+                  else
+                  {
+                     FtoS((f32)val, tailSize, arena);
+                     SpaceString(delta, arena);
+                  }
+                  
+               }
+               else
+               {
+                  FtoS((f32)val, tailSize, arena);
+               }
+            }
+            else
+            {
+               FtoS((f32)val, tailSize, arena);
+            }
+            
+            Eat(3, &inp);
+         }break;
+         case 'v':
+         {
+            switch (inp[1])
+            {
+               case '2':
+               {
+                  v2 val = va_arg(args, v2);
+                  V2toS(val, arena);
+                  
+               }break;
+               case '3':
+               {
+                  v3 val = va_arg(args, v3);
+                  V3toS(val, arena);
+                  
+               }break;
+               
+               case '4':
+               {
+                  v4 val = va_arg(args, v4);
+                  V4toS(val, arena);
+                  
+               }break;
+               default:
+               {
+                  Assert(!"Unhandled vector size!")
+               }break;
+            }
+            Eat(2, &inp);
+         }break;
+         case 's':
+         {
+            String val = va_arg(args, String);
+            
+            u32 stringLength = val.length;
+            
+            if (hasLength)
+            {
+               i32 deltaLength = (i32)desiredLength - (i32)stringLength;
+               if (deltaLength < 0)
+               {
+                  CopyString(val, arena);
+               }
+               else
+               {
+                  if (rightBound)
+                  {
+                     SpaceString(deltaLength, arena);
+                     CopyString(val, arena);
+                  }
+                  else
+                  {
+                     CopyString(val, arena);
+                     SpaceString(deltaLength, arena);
+                  }
+               }
+            }
+            else
+            {
+               CopyString(val, arena);
+            }
+            
+            Eat1(&inp);
+         }break;
+         case 'c':
+         {
+            switch (inp[1])
+            {
+               case '1':
+               {
+                  char val = va_arg(args, char);
+                  
+                  S(val, arena);
+                  
+               }break;
+               case '*':
+               {
+                  char *cval = va_arg(args, char *);
+                  String val = S(cval);
+                  
+                  u32 stringLength = val.length;
+                  
+                  if (hasLength)
+                  {
+                     i32 deltaLength = (i32)desiredLength - (i32)stringLength;
+                     if (deltaLength < 0)
+                     {
                         CopyString(val, arena);
-                    }
-                    else
-                    {
+                     }
+                     else
+                     {
                         if (rightBound)
                         {
-                            SpaceString(deltaLength, arena);
-                            CopyString(val, arena);
+                           SpaceString(deltaLength, arena);
+                           CopyString(val, arena);
                         }
                         else
                         {
-                            CopyString(val, arena);
-                            SpaceString(deltaLength, arena);
+                           CopyString(val, arena);
+                           SpaceString(deltaLength, arena);
                         }
-                    }
-                }
-                else
-                {
-                    CopyString(val, arena);
-                }
-                
-                Eat1(&inp);
-            }break;
-            case 'c':
-            {
-                switch (inp[1])
-                {
-                    case '1':
-                    {
-                        char val = va_arg(args, char);
-                        
-                        S(val, arena);
-                        
-                    }break;
-                    case '*':
-                    {
-                        char *cval = va_arg(args, char *);
-                        String val = S(cval);
-                        
-                        u32 stringLength = val.length;
-                        
-                        if (hasLength)
-                        {
-                            i32 deltaLength = (i32)desiredLength - (i32)stringLength;
-                            if (deltaLength < 0)
-                            {
-                                CopyString(val, arena);
-                            }
-                            else
-                            {
-                                if (rightBound)
-                                {
-                                    SpaceString(deltaLength, arena);
-                                    CopyString(val, arena);
-                                }
-                                else
-                                {
-                                    CopyString(val, arena);
-                                    SpaceString(deltaLength, arena);
-                                }
-                            }
-                        }
-                        else
-                        {
-                            CopyString(val, arena);
-                        }
-                        
-                    }break;
-                    default:
-                    {
-                        Assert(!"Unhandled cstyle input");
-                    }break;
-                }
-                Eat(2, &inp);
-            }break;
-            default:
-            {
-                Assert(!"Unhandled % input");
-            }break;
+                     }
+                  }
+                  else
+                  {
+                     CopyString(val, arena);
+                  }
+                  
+               }break;
+               default:
+               {
+                  Assert(!"Unhandled cstyle input");
+               }break;
+            }
+            Eat(2, &inp);
+         }break;
+         default:
+         {
+            Assert(!"Unhandled % input");
+         }break;
 		}
-        
+      
 		head = EatToCharReturnHead(&inp, '%');
 		CopyString(head, arena);
 	}
-    
+   
 	EndConcatenate(&ret, arena);
 	return ret;
 }

@@ -67,9 +67,7 @@ in int boneIndices[5];
 in f32 boneWeights[5];
 #endif
 
-
 smooth out vec4 fragColor;
-
 
 void main(void)
 {

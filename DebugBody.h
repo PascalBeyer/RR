@@ -15,11 +15,9 @@ inline void AdvanceMod(u32 *a, u32 mod) // todo can make fast version of this by
 static void LoadDebugVariablesFile() //todo strings?
 {
 	File *file = PushStruct(globalDebugState.arena, File);
-	*file = LoadFile("DebugVariables.txt"); // todo : make own version, we need general purpose allocation
+	*file = LoadFile("src/DebugVariables.txt");
 	globalDebugState.tweekerFile = file;
 }
-
-
 
 #if 0
 static String CreateSaneFileName(Char *fileName)
@@ -50,7 +48,7 @@ enum DebugUIElementFlag
 {
 	DebugUIFlag_Closed = 0x0,
 	DebugUIFlag_Open   = 0x1,
-    
+   
 };
 
 
@@ -73,7 +71,7 @@ static void DrawTweekers(RenderGroup *rg, Font font)
 				s->first = data;
 				break;
 			}
-            
+         
 			s = s->next;
 		}
 		if (!s)
@@ -87,7 +85,7 @@ static void DrawTweekers(RenderGroup *rg, Font font)
 			data->first->tweeker = it;
 		}
 	}
-    
+   
 	u32 i = 1;
 	while (stack)
 	{
@@ -105,25 +103,25 @@ static void DrawTweekers(RenderGroup *rg, Font font)
 static void InitDebug()
 {
 	DebugState *s = &globalDebugState;
-    
+   
 	RandomSeries series = GetRandomSeries();
 	for (u32 i = 0; i < debugRecordsAmount; i++)
 	{
 		debugInfoArray[i].color = RandomColorU32(&series);
 	}
-    
+   
 	s->tweekers = TweekerCreateDynamicArray();
 	s->lastFrameTime = 1.0f;
-    
+   
 	for (u32 i = 0; i < DEBUG_AMOUNT_OF_DEBUG_FRAMES; i++)
 	{
 		s->debugFrames[i] = PushArray(s->arena, FrameTimeInfo, debugRecordsAmount);
 	}
-    
+   
 	LoadDebugVariablesFile();
-    
+   
 	s->uiElements = PushArray(s->arena, DebugUIElement, 0);
-    
+   
 	//BuildStaticArray(s->arena, s->uiElements, )
 }
 
@@ -151,50 +149,50 @@ static void CollectDebugRecords(f32 frameTime)
 {
 	TimedBlock;
 	if (globalDebugState.paused) return;
-    
+   
 	DebugState *s = &globalDebugState;
-    
+   
 	u32 thisFrameIndex = s->rollingFrameIndex ? (s->rollingFrameIndex - 1) : (DEBUG_AMOUNT_OF_DEBUG_FRAMES - 1);
 	u32 amountOfEventsToHandle = globalDebugState.amountOfEventsLastFrame;
 	DebugEvent *firstEvent = globalDebugState.events[thisFrameIndex];
 	u64 startCycles = firstEvent->cycles;
 	s->lastFrameTime = frameTime;
-    
+   
 	auto frame = s->debugFrames[thisFrameIndex];
 	For(frame.times)
 	{
 		it->cycles = 0;
 		it->hitCount = 0;
 	}
-    
+   
 	DeferRestore(globalDebugState.arena);
 	Arena *arena = globalDebugState.arena;
-    
+   
 	for (DebugEvent *it = firstEvent; it < firstEvent + amountOfEventsToHandle; it++)
 	{
 		switch (it->type)
 		{
-            case DebugEvent_BeginTimedBlock:
-            {
-                *PushStruct(arena, DebugEvent) = *it;
-                
-                
-            }break;
-            case DebugEvent_EndTimedBlock:
-            {
-                DebugEvent e = PopStruct(arena, DebugEvent);
-                Assert(e.debugRecordIndex == it->debugRecordIndex);
-                u32 cycleD = it->cycles - e.cycles;
-                
-                frame.times[it->debugRecordIndex].cycles += cycleD;
-                frame.times[it->debugRecordIndex].hitCount += e.hitMultiplicity;
-                
-            }break;
-            default:
-            {
-                
-            }break;
+         case DebugEvent_BeginTimedBlock:
+         {
+            *PushStruct(arena, DebugEvent) = *it;
             
+            
+         }break;
+         case DebugEvent_EndTimedBlock:
+         {
+            DebugEvent e = PopStruct(arena, DebugEvent);
+            Assert(e.debugRecordIndex == it->debugRecordIndex);
+            u32 cycleD = it->cycles - e.cycles;
+            
+            frame.times[it->debugRecordIndex].cycles += cycleD;
+            frame.times[it->debugRecordIndex].hitCount += e.hitMultiplicity;
+            
+         }break;
+         default:
+         {
+            
+         }break;
+         
 		}
 	}
 }
@@ -215,23 +213,23 @@ static void DrawDebugRecords(RenderGroup *rg, Font font, f32 secondsPerFrame, In
 	u32 amountOfEventsToHandle = globalDebugState.amountOfEventsLastFrame;
 	
 	auto frameInfo = s->debugFrames[thisFrameIndex];
-    
+   
 	DebugEvent *firstEvent = globalDebugState.events[thisFrameIndex];
 	DebugEvent *lastEvent = amountOfEventsToHandle ? firstEvent + (amountOfEventsToHandle - 1) : firstEvent;
-    
+   
 	DeferRestore(globalDebugState.arena);
 	Arena *arena = globalDebugState.arena;
-    
+   
 	u32 startCycles = firstEvent->cycles;
 	u32 endCycles = lastEvent->cycles;
 	u32 deltaCycles = endCycles - startCycles;
-    
+   
 	f32 lastFrameTime = s->lastFrameTime;
-    
+   
 	f64 secondsPerCycle = deltaCycles ? (f64)lastFrameTime / (f64)deltaCycles : 0.0;
-    
+   
 	f32 amountOfTimeToDisplay = Max(4.0f *secondsPerFrame, 1.1f * lastFrameTime);
-    
+   
 	f64 amountOfCyclesToDisplay = amountOfTimeToDisplay / secondsPerCycle;
 	
 	
@@ -239,9 +237,9 @@ static void DrawDebugRecords(RenderGroup *rg, Font font, f32 secondsPerFrame, In
 	FrameTimeInfoArray frameCopy = PushArray(frameArena, FrameTimeInfo, frameInfo.times.amount); // todo can we just sort frameTimeInfo?
 	memcpy(frameCopy.data, frameInfo.times.data, frameInfo.times.amount * sizeof(FrameTimeInfo));
 #endif // todo sort
-    
+   
 	PushRectangle(rg, V2(0.1f, 0.2f), 0.75f, debugDisplayBarSize * (f32)frameInfo.times.amount, V4(0.95f, 0.0f, 0.0f, 0.0f));
-    
+   
 	For(frameInfo.times)
 	{
 		u32 it_index = (u32)(it - frameInfo.times.data);
@@ -249,52 +247,52 @@ static void DrawDebugRecords(RenderGroup *rg, Font font, f32 secondsPerFrame, In
 		String toDisplay = FormatString("%25lbc* %9rbf32ms, %2rbu32hit", debugInfoArray[it_index].function, (f32)((f64)it->cycles * secondsPerCycle * 1000.0), it->hitCount);
 		PushString(rg, V2(0.1f, 0.2f + it_index * debugDisplayBarSize), toDisplay, debugDisplayBarSize, font);
 	}
-    
+   
 	f64 cycleMult = 1.0 / amountOfCyclesToDisplay;
-    
+   
 	for (u32 i = 0; i < 4; i++)
 	{
 		f32 percent = (f32)i * secondsPerFrame / amountOfTimeToDisplay;
 		PushLine(rg, V2(percent, 0.0f), V2(percent, 0.1f));
 	}
-    
+   
 	u32 depth = 0;	
 	for (DebugEvent *it = firstEvent; it < firstEvent + amountOfEventsToHandle; it++)
 	{
 		switch (it->type)
 		{
-            case DebugEvent_BeginTimedBlock:
-            {
-                *PushStruct(arena, DebugEvent) = *it;
-                depth++;
-            }break;
-            case DebugEvent_EndTimedBlock:
-            {
-                DebugEvent e = PopStruct(arena, DebugEvent);
-                Assert(e.debugRecordIndex == it->debugRecordIndex);
-                
-                u32 cycleD = it->cycles - e.cycles;
-                v2 pos = V2((f32)((e.cycles - startCycles) * cycleMult), (f32)(depth * debugDisplayBarSize));
-                f32 width = (f32)(cycleD * cycleMult);
-                
-                u32 color = debugInfoArray[it->debugRecordIndex].color;
-                PushRectangle(rg, pos, width, debugDisplayBarSize, color);
-                if (PointInRectangle(pos, width, debugDisplayBarSize, input.mouseZeroToOne))
-                {
-                    PushString(rg, input.mouseZeroToOne, debugInfoArray[it->debugRecordIndex].function, debugDisplayBarSize, font);
-                }
-                
-                depth--;
-                
-            }break;
-            default:
-            {
-                
-            }break;
+         case DebugEvent_BeginTimedBlock:
+         {
+            *PushStruct(arena, DebugEvent) = *it;
+            depth++;
+         }break;
+         case DebugEvent_EndTimedBlock:
+         {
+            DebugEvent e = PopStruct(arena, DebugEvent);
+            Assert(e.debugRecordIndex == it->debugRecordIndex);
             
+            u32 cycleD = it->cycles - e.cycles;
+            v2 pos = V2((f32)((e.cycles - startCycles) * cycleMult), (f32)(depth * debugDisplayBarSize));
+            f32 width = (f32)(cycleD * cycleMult);
+            
+            u32 color = debugInfoArray[it->debugRecordIndex].color;
+            PushRectangle(rg, pos, width, debugDisplayBarSize, color);
+            if (PointInRectangle(pos, width, debugDisplayBarSize, input.mouseZeroToOne))
+            {
+               PushString(rg, input.mouseZeroToOne, debugInfoArray[it->debugRecordIndex].function, debugDisplayBarSize, font);
+            }
+            
+            depth--;
+            
+         }break;
+         default:
+         {
+            
+         }break;
+         
 		}
 	}
-    
+   
 }
 
 static void ReportLoadDebugVariablesError(char *string, u32 lineNumber)
@@ -316,65 +314,65 @@ static void ReportLoadDebugVariablesError(char *string, u32 lineNumber)
 static Tweeker ExtractTweekerFromFile(String toFind)
 {
 	Assert(toFind.length);
-    
+   
 	File *file = globalDebugState.tweekerFile;
-    
+   
 	char *data = (char *)file->memory;
 	String inputString = CreateString(data);
-    
+   
 	//Sanitize(&inputString);
-    
+   
 	u32 lineNumber = 0;
-    
+   
 	while (inputString.length)
 	{
 		String head = ConsumeNextLine(&inputString); // could have like a eat all spaces version of sanitize and then every thing is a bit easier... thinking.
 		
 		EatSpaces(&head);
-        
+      
 		if (!head.length) { lineNumber++; continue; } 
-        
+      
 		String name = EatToNextSpaceReturnHead(&head);
-        
+      
 		if (!(name == toFind)) { lineNumber++; continue; }
-        
+      
 		if (head[head.length - 1] == '\n') head.length--;
-        
+      
 		EatSpaces(&head);
-        
+      
 		if (!head.length)
 		{
 			ReportLoadDebugVariablesError("Value not found!", lineNumber++);
 			continue;
 		}
-        
+      
 		if (head[0] == '(') //vector
 		{
 			Eat1(&head);
 			EatSpaces(&head);
-            
+         
 			String val1 = EatToCharReturnHead(&head, ','); // for now it has to be 1.0, not 1.0  ,
-            
+         
 			b32 success = true;
 			f32 a1 = StoF(val1, &success);
-            
+         
 			if (!head.length)
 			{
 				ReportLoadDebugVariablesError("Expected ',' after first value!", lineNumber++);
 				continue;
 			}
-            
+         
 			Eat1(&head);
 			EatSpaces(&head);
 			String val2 = EatToCharReturnHead(&head, ',', ')');
 			f32 a2 = StoF(val2, &success);
-            
+         
 			if (!head.length)
 			{
 				ReportLoadDebugVariablesError("Expected ',' or ')' after second value!", lineNumber++);
 				continue;
 			}
-            
+         
 			if (head[0] == ')')
 			{
 				if (!success)
@@ -382,25 +380,25 @@ static Tweeker ExtractTweekerFromFile(String toFind)
 					ReportLoadDebugVariablesError("Error reading values of v2!", lineNumber++);
 					continue;
 				}
-                
+            
 				Tweeker t;
 				t.type = Tweeker_v2;
 				t.vec2 = V2(a1, a2);
 				t.name = CopyString(name, globalDebugState.arena);
 				return t;
 			}
-            
+         
 			Eat1(&head);
 			EatSpaces(&head);
 			String val3 = EatToCharReturnHead(&head, ',', ')');
 			f32 a3 = StoF(val3, &success);
-            
+         
 			if (!head.length || !((head[0] == ',') | (head[0] == ')')))
 			{
 				ReportLoadDebugVariablesError("Expected ',' or ')' after first value!", lineNumber++);
 				continue;
 			}
-            
+         
 			if (head[0] == ')')
 			{
 				if (!success)
@@ -408,31 +406,31 @@ static Tweeker ExtractTweekerFromFile(String toFind)
 					ReportLoadDebugVariablesError("Error reading values of v3!", lineNumber++);
 					continue;
 				}
-                
+            
 				Tweeker t;
 				t.type = Tweeker_v3;
 				t.vec3 = V3(a1, a2, a3);
 				t.name = CopyString(name, globalDebugState.arena);
 				return t;
 			}
-            
+         
 			Eat1(&head);
 			EatSpaces(&head);
 			String val4 = EatToCharReturnHead(&head, ')');
 			f32 a4 = StoF(val4, &success);
-            
+         
 			if (!head.length)
 			{
 				ReportLoadDebugVariablesError("Expected ',' or ')' after first value!", lineNumber++);
 				continue;
 			}
-            
+         
 			if (!success)
 			{
 				ReportLoadDebugVariablesError("Error reading values of v4!", lineNumber++);
 				continue;
 			}
-            
+         
 			Tweeker t;
 			t.type = Tweeker_v4;
 			t.vec4 = V4(a1, a2, a3, a4);
@@ -444,7 +442,7 @@ static Tweeker ExtractTweekerFromFile(String toFind)
 			//non vector
 			b32 success = true;
 			EatSpacesFromEnd(&head);
-            
+         
 			u32 u = StoU(head, &success);
 			if (success)
 			{
@@ -455,7 +453,7 @@ static Tweeker ExtractTweekerFromFile(String toFind)
 				t.name = CopyString(name, globalDebugState.arena);
 				return t;
 			}
-            
+         
 			success = true;
 			f32 f = StoF(head, &success);
 			if (success)
@@ -467,7 +465,7 @@ static Tweeker ExtractTweekerFromFile(String toFind)
 				t.name = CopyString(name, globalDebugState.arena);
 				return t;
 			}
-            
+         
 			success = true;
 			b32 b = StoB(head, &success);
 			if (success)
@@ -479,14 +477,14 @@ static Tweeker ExtractTweekerFromFile(String toFind)
 				t.name = CopyString(name, globalDebugState.arena);
 				return t;
 			}
-            
+         
 			//here string. probably with ""
-            
-            
+         
+         
 			ReportLoadDebugVariablesError("Could not read value", lineNumber++);
 		}
 	}
-    
+   
 	Tweeker error;
 	error.type = Tweeker_Invalid;
 	return error;
@@ -510,10 +508,10 @@ static void *MaybeAddTweekerReturnValue(char *_name, TweekerType type, char *_fu
 			WriteSingleTweeker(t);
 		}
 		Assert(t.type == type); // right now we can't have multiple tweekers of the same name, and thats fine
-        
+      
 		t.name = name;
 		t.function = function;
-        
+      
 		u32 addedIndex = ArrayAdd(&globalDebugState.tweekers, t);
 		return (void *)(&(globalDebugState.tweekers.data + addedIndex)->u);
 	}
@@ -536,10 +534,10 @@ static void *MaybeAddTweekerReturnValue(char *_name, TweekerType type, char *_fu
 			WriteSingleTweeker(t);
 		}
 		Assert(t.type == type); // right now we can't have multiple tweekers of the same name, and thats fine
-        
+      
 		t.name = name;
 		t.function = function;
-        
+      
 		u32 addedIndex = ArrayAdd(&globalDebugState.tweekers, t);
 		return (void *)(&(globalDebugState.tweekers.data + addedIndex)->u);
 	}
@@ -550,31 +548,31 @@ static void *MaybeAddTweekerReturnValue(char *_name, TweekerType type, char *_fu
 static void WriteSingleTweeker(Tweeker tweeker) 
 {
 	File *file = globalDebugState.tweekerFile;
-    
+   
 	char *data = (char *)file->memory;
 	String inputString = CreateString(data);
 	u32 initialLength = inputString.length;
-    
+   
 	//Sanitize(&inputString); should allready be sane
-    
+   
 	while (inputString.length)
 	{
 		u32 remainingLength = inputString.length;
-        
+      
 		String head = ConsumeNextLine(&inputString); 
-        
+      
 		EatSpaces(&head);
-        
+      
 		if (!head.length) { continue; }
-        
+      
 		String name = EatToNextSpaceReturnHead(&head);
-        
+      
 		if (!(name == tweeker.name)) { continue; }
-        
+      
 		EatSpaces(&head);
-        
+      
 		String toWrite = TweekerToString(tweeker);
-        
+      
 		if (toWrite.length < head.length) // there should be endlines after every single one
 		{
 			u32 headLenghtSave = head.length;
@@ -588,55 +586,55 @@ static void WriteSingleTweeker(Tweeker tweeker)
 		}
 		else
 		{
-            
+         
 			u32 headLength = initialLength - remainingLength;
 			u32 tailLength = inputString.length;
-            
+         
 			String toAdd = FormatString("%s %s\n", tweeker.name, TweekerToString(tweeker));
-            
+         
 			File newFile;
 			newFile.fileSize = (headLength + tailLength + toAdd.length)* sizeof(*toAdd.data);
 			newFile.memory = PushData(frameArena, u8, newFile.fileSize);
-            
+         
 			// source
 			u8 *headMem = (u8 *)file->memory;
 			u8 *tailMem = (u8 *)file->memory + (initialLength - inputString.length);
-            
+         
 			// dest
 			u8 *destHead		= (u8 *)newFile.memory;
 			u8 *destInsertLine	= (u8 *)newFile.memory + headLength * sizeof(*toAdd.data);
 			u8 *destTail		= (u8 *)newFile.memory + headLength * sizeof(Char) + toAdd.length * sizeof(*toAdd.data);
-            
+         
 			memcpy(destHead,		headMem,	headLength * sizeof(Char));
 			memcpy(destInsertLine,	toAdd.data, toAdd.length * sizeof(*toAdd.data));
 			memcpy(destTail,		tailMem,	tailLength * sizeof(Char));
-            
+         
 			WriteEntireFile("DebugVariables.txt", newFile);
-            
+         
 			//todo : hack
 			FreeFile(*globalDebugState.tweekerFile);
 			*globalDebugState.tweekerFile = LoadFile("DebugVariables.txt");
-            
+         
 			ConsoleOutput("Saved to file."); // todo  somehow there no failing right now
 		}
 		return;
 	}
-    
+   
 	String toAdd = FormatString("%s %s\n", tweeker.name, TweekerToString(tweeker));
 	
 	File newFile;
 	newFile.fileSize = file->fileSize + toAdd.length * sizeof(*toAdd.data);
 	newFile.memory = PushData(frameArena, u8, newFile.fileSize);
-    
+   
 	memcpy(newFile.memory, file->memory, file->fileSize);
 	memcpy((u8 *)newFile.memory + file->fileSize, toAdd.data, toAdd.length * sizeof(*toAdd.data));
-    
+   
 	WriteEntireFile("DebugVariables.txt", newFile); 
-    
+   
 	//todo : hack
 	FreeFile(*globalDebugState.tweekerFile);
 	*globalDebugState.tweekerFile = LoadFile("DebugVariables.txt");
-    
+   
 	ConsoleOutputError("Saved to file."); // todo  somehow there no failing right now
 }
 
@@ -644,9 +642,9 @@ static void WriteSingleTweeker(Tweeker tweeker)
 static void WriteDebugVariables() 
 {
 	u8 *data = PushData(frameArena, u8, 0);
-    
+   
 	// todo : sorting by file and then lex add comments to make it pretty,
-    
+   
 	For(globalDebugState.tweekers)
 	{
 		CopyString(it->name, frameArena);
@@ -656,11 +654,11 @@ static void WriteDebugVariables()
 		S('\n', frameArena);
 	}
 	S('\0'); // do not know if I need this, seemed to work without it, but that might just be because i call virtualAlloc... todo: test
-    
+   
 	File file = CreateFile(data, (u32)(frameArena->current - data));
-    
+   
 	WriteEntireFile("DebugVariables.txt", file);
-    
+   
 	//clearing back for the lulz
 	frameArena->current = data;
 }
@@ -684,9 +682,9 @@ static void TestAllocator(BuddyAllocator *buddyAlloc)
 	for (u32 i = 0; i < 1000000000; i++)
 	{
 		u32 index = (RandomU32(&series) % sizeOfTest);
-        
+      
 		BuddyFree(buddyAlloc, allocated[index]);
-        
+      
 		u32 a = (RandomU32(&series) % MegaBytes(3)) + 1;
 		allocated[index] = (u8 *)BuddyAlloc(buddyAlloc, a);
 	}

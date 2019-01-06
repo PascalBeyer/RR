@@ -209,10 +209,12 @@ enum SamplerLocations
 
 enum OpenGLShaderFlags : u32
 {
-   ShaderFlags_None = 0x0,
-   ShaderFlags_Textured = 0x1,
-   ShaderFlags_ShadowMapping = 0x2,
-   ShaderFlags_Phong = 0x4,
+   ShaderFlags_None           = 0x0,
+   ShaderFlags_Textured       = 0x1,
+   ShaderFlags_ShadowMapping  = 0x2,
+   ShaderFlags_Phong          = 0x4,
+   ShaderFlags_Animated       = 0x8,
+   
    
 };
 
@@ -242,24 +244,33 @@ struct OpenGLProgram
 	GLuint vertN;
 };
 
-//globals
-static OpenGLInfo openGLInfo;
+struct FrameBuffer
+{
+   GLuint id;
+   GLuint texture;
+   GLuint depth;
+   
+   u32 width;
+   u32 height;
+};
 
-static GLuint vertexBuffer;
-static GLuint elementBuffer;
-static GLuint defaultInternalTextureFormat;
+struct OpenGLContext
+{
+   OpenGLInfo info;
+   GLuint vertexBuffer;
+   GLuint defaultInternalTextureFormat;
+   
+   OpenGLProgram basic;
+   OpenGLProgram basicMesh;
+   OpenGLProgram shadow;
+   OpenGLProgram zBias;
+   
+   FrameBuffer renderBuffer;
+   FrameBuffer shadowBuffer;
+};
 
-static OpenGLProgram basic;
-static OpenGLProgram basicMesh;
-static OpenGLProgram shadow;
-static OpenGLProgram zBias;
 
-static GLuint renderFrameBuffer;
-static GLuint renderTexture;
-static GLuint renderDepth;
-
-static GLuint shadowFrameBuffer;
-static GLuint shadowTexture;
+//static GLuint elementBuffer;
 
 bool GLCStringEquals(char *first, u64 firstSize, char* second)
 {
@@ -548,7 +559,7 @@ struct OpenGLUniformInfo
    v4 scaleColor = V4(1.0f, 1.0f, 1.0f, 1.0f);
 };
 
-static void BeginUseProgram(OpenGLProgram prog, RenderSetup setup, OpenGLUniformInfo uniforms)
+static void BeginUseProgram(OpenGLContext *context, OpenGLProgram prog, RenderSetup setup, OpenGLUniformInfo uniforms)
 {
    
 	glUseProgram(prog.program);
@@ -569,7 +580,7 @@ static void BeginUseProgram(OpenGLProgram prog, RenderSetup setup, OpenGLUniform
       m4x4 shadowMat = uniforms.shadowMat * uniforms.objectTransform;
       glUniformMatrix4fv(prog.shadowTransform, 1, GL_TRUE, shadowMat.a[0]);
       glActiveTexture(GL_TEXTURE1);
-      glBindTexture(GL_TEXTURE_2D, shadowTexture);
+      glBindTexture(GL_TEXTURE_2D, context->shadowBuffer.depth);
       glActiveTexture(GL_TEXTURE0);
    }
    
@@ -646,12 +657,16 @@ static void EndAttribArrays(OpenGLProgram prog)
 }
 
 
-static void OpenGLInit()
+static OpenGLContext OpenGLInit(bool modernContext)
 {
 	//GLuint reservedBltTexture;
 	//glGenTextures(1, &reservedBltTexture);
    
-   OpenGLInfo info = openGLInfo; // right now this is global, so we can always just check  it should probably make a opengl context
+   OpenGLContext ret;
+   
+   OpenGLInfo info = OpenGLGetInfo(modernContext);
+   
+   ret.info = info;
    
 	if (glDebugMessageCallback)
 	{
@@ -659,78 +674,92 @@ static void OpenGLInit()
 		glDebugMessageCallback(OpenGLDebugCallback, 0);
 	}
    
-	defaultInternalTextureFormat = GL_RGBA;
+	ret.defaultInternalTextureFormat = GL_RGBA;
 	if (info.GL_EXT_texture_sRGB)
 	{
-		defaultInternalTextureFormat = GL_SRGB_ALPHA;
+		ret.defaultInternalTextureFormat = GL_SRGB_ALPHA;
 	}
    
 	GLuint DummyVertexArray;
 	glGenVertexArrays(1, &DummyVertexArray);
 	glBindVertexArray(DummyVertexArray);
    
+   
+   GLuint vertexBuffer;
 	glGenBuffers(1, &vertexBuffer);
 	glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
 	
+   ret.vertexBuffer = vertexBuffer;
+   
+#if 0
 	glGenBuffers(1, &elementBuffer);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementBuffer);
+#endif
    
-   
-   File file = LoadFile("ubershader.glsl");
+   File file = LoadFile("src/ubershader.glsl");
    
    // used for textured quads
-   zBias = OpenGLMakeProgram((char *)file.data, ShaderFlags_Textured);
+   ret.zBias = OpenGLMakeProgram((char *)file.data, ShaderFlags_Textured);
    
    // used for untextured quads
-   basic = OpenGLMakeProgram((char *)file.data, ShaderFlags_ShadowMapping);
+   ret.basic = OpenGLMakeProgram((char *)file.data, ShaderFlags_ShadowMapping);
 	
    
-   basicMesh = OpenGLMakeProgram((char *)file.data, ShaderFlags_ShadowMapping|ShaderFlags_Phong|ShaderFlags_Textured);
+   ret.basicMesh = OpenGLMakeProgram((char *)file.data, ShaderFlags_ShadowMapping|ShaderFlags_Phong|ShaderFlags_Textured);
    
    //SetUpDepthProgram();
-   shadow = OpenGLMakeProgram((char *)file.data, ShaderFlags_None); 
+   ret.shadow = OpenGLMakeProgram((char *)file.data, ShaderFlags_None); 
    
    
    u32 amountOfMultiSamples = Min(info.amountOfMultiSamples, 4u);
    
 #define SHOULD_RENDER_MULTISAMPLED 0 // todo, just to work around renderdoc not working...
    
-	GLuint texture_map;
-	glGenTextures(1, &texture_map);
-	glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, texture_map);
-	
-	//glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	//glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	//glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-	//glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+   FrameBuffer renderBuffer;
+   {
+      renderBuffer.width = 1280;
+      renderBuffer.height = 720;
+      
+      // renderBuffer
+      GLuint texture_map;
+      glGenTextures(1, &texture_map);
+      glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, texture_map);
+      
+      //glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      //glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+      //glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+      //glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+      
+      glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, amountOfMultiSamples, ret.defaultInternalTextureFormat, renderBuffer.width, renderBuffer.height, GL_FALSE);
+      //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1280, 720, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+      
+      renderBuffer.texture = texture_map;
+      glBindTexture(GL_TEXTURE_2D, 0);
+      
+      
+      GLuint depth_texture;
+      glGenTextures(1, &depth_texture);
+      glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, depth_texture);
+      //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+      //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+      //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+      //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+      //glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, 1280, 720, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE, NULL);
+      glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, amountOfMultiSamples, GL_DEPTH_COMPONENT, renderBuffer.width, renderBuffer.height, GL_FALSE);
+      
+      
+      renderBuffer.depth = depth_texture;
+      
+      // Build the framebuffer.
+      GLuint framebuffer;
+      glGenFramebuffers(1, &framebuffer);
+      glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)framebuffer);
+      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D_MULTISAMPLE, texture_map, 0);
+      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D_MULTISAMPLE, depth_texture, 0);
+      renderBuffer.id = framebuffer;
+   }
    
-	glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, amountOfMultiSamples, defaultInternalTextureFormat, 1280, 720, GL_FALSE);
-	//glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1280, 720, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-   
-	renderTexture = texture_map;
-   
-	glBindTexture(GL_TEXTURE_2D, 0);
-   
-	// Build the texture that will serve as the depth attachment for the framebuffer.
-	GLuint depth_texture;
-	glGenTextures(1, &depth_texture);
-	glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, depth_texture);
-	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	//glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, 1280, 720, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE, NULL);
-	glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, amountOfMultiSamples, GL_DEPTH_COMPONENT, 1280, 720, GL_FALSE);
-	glBindTexture(GL_TEXTURE_2D, 0);
-	renderDepth = depth_texture;
-   
-	// Build the framebuffer.
-	GLuint framebuffer;
-	glGenFramebuffers(1, &framebuffer);
-	glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)framebuffer);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D_MULTISAMPLE, texture_map, 0);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D_MULTISAMPLE, depth_texture, 0);
-	renderFrameBuffer = framebuffer;
+   ret.renderBuffer = renderBuffer;
    
    {
       GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
@@ -740,20 +769,35 @@ static void OpenGLInit()
 	glBindTexture(GL_TEXTURE_2D, 0);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
    
-   glGenFramebuffers(1, &shadowFrameBuffer);
-	glBindFramebuffer(GL_FRAMEBUFFER, shadowFrameBuffer);
-	
-	glGenTextures(1, &shadowTexture);
-	glBindTexture(GL_TEXTURE_2D, shadowTexture);
-	
-	//glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1024, 1024, 0, GL_BGRA_EXT, GL_FLOAT, 0 );
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16, 1024, 1024, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+   FrameBuffer shadowBuffer;
    
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowTexture, 0);
+   {
+      GLuint shadowFrameBuffer;
+      shadowBuffer.width  = 1024;
+      shadowBuffer.height = 1024;
+      
+      
+      glGenFramebuffers(1, &shadowFrameBuffer);
+      glBindFramebuffer(GL_FRAMEBUFFER, shadowFrameBuffer);
+      
+      GLuint shadowTexture;
+      glGenTextures(1, &shadowTexture);
+      glBindTexture(GL_TEXTURE_2D, shadowTexture);
+      
+      //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1024, 1024, 0, GL_BGRA_EXT, GL_FLOAT, 0 );
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16, shadowBuffer.width, shadowBuffer.height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+      
+      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowTexture, 0);
+      
+      shadowBuffer.id      = shadowFrameBuffer;
+      shadowBuffer.depth   = shadowTexture;
+      shadowBuffer.texture = 0xFFFFFFFF;
+      
+   }
    {
       GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
       Assert(status == GL_FRAMEBUFFER_COMPLETE);
@@ -779,6 +823,7 @@ static void OpenGLInit()
       Assert(err == GL_NO_ERROR);
    }
    
+   return ret;
 }
 
 static u32 HeaderSize(RenderGroupEntryHeader *header)
@@ -809,18 +854,18 @@ static u32 HeaderSize(RenderGroupEntryHeader *header)
 	}
 }
 
-void RenderIntoShadowMap(RenderCommands *rg)
+void RenderIntoShadowMap(RenderCommands *rg, OpenGLContext *context)
 {
 	TimedBlock;
    
 	glDisable(GL_CULL_FACE);
 	//glCullFace(GL_FRONT);
    
-	glUseProgram(shadow.program);
+	glUseProgram(context->shadow.program);
    
-	glBindFramebuffer(GL_FRAMEBUFFER, shadowFrameBuffer);
+	glBindFramebuffer(GL_FRAMEBUFFER, context->shadowBuffer.id);
    
-	glViewport(0, 0, 1024, 1024);  // is this per framebuffer?
+	glViewport(0, 0, context->shadowBuffer.width, context->shadowBuffer.height);  // is this per framebuffer?
    
    // todo hardcoded. this is the size of the shadow texture
 	glClearDepth(1.0f);
@@ -860,9 +905,9 @@ void RenderIntoShadowMap(RenderCommands *rg)
             uniforms.vertexBuffer    = mesh.vertexVBO;
             uniforms.indexBuffer     = mesh.indexVBO;
             
-            BeginUseProgram(shadow, currentSetup, uniforms);
+            BeginUseProgram(context, context->shadow, currentSetup, uniforms);
             
-            BeginAttribArraysPCUN(shadow);
+            BeginAttribArraysPCUN(context->shadow);
             
             For(mesh.indexSets)
             {
@@ -884,9 +929,8 @@ void RenderIntoShadowMap(RenderCommands *rg)
                }
                
             }
-            EndAttribArrays(shadow);
-            
-            EndUseProgram(shadow);
+            EndAttribArrays(context->shadow);
+            EndUseProgram(context->shadow);
             
             pBufferIt += sizeof(*meshHeader);
          }break;
@@ -904,14 +948,14 @@ void RenderIntoShadowMap(RenderCommands *rg)
    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void OpenGlRenderGroupToOutput(RenderCommands *rg)
+void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
 {
    TimedBlock;
    
-   RenderIntoShadowMap(rg);
+   RenderIntoShadowMap(rg, context);
    
-   glBindFramebuffer(GL_FRAMEBUFFER, renderFrameBuffer);
-   glViewport(0, 0, rg->width, rg->height);
+   glBindFramebuffer(GL_FRAMEBUFFER, context->renderBuffer.id);
+   glViewport(0, 0, context->renderBuffer.width, context->renderBuffer.height);
    glClearDepth(1.0f);
    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
    
@@ -955,11 +999,10 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg)
             
             OpenGLUniformInfo uniforms;
             uniforms.shadowMat = shadowMat;
-            uniforms.vertexBuffer = vertexBuffer;
+            uniforms.vertexBuffer = context->vertexBuffer;
             
-            BeginUseProgram(zBias, currentSetup, uniforms);
-            
-            BeginAttribArraysPCU(zBias);
+            BeginUseProgram(context, context->zBias, currentSetup, uniforms);
+            BeginAttribArraysPCU(context->zBias);
             
             glBufferData(GL_ARRAY_BUFFER, quadHeader->vertexCount * sizeof(VertexFormatPCU), quadHeader->data, GL_STREAM_DRAW);
             
@@ -972,8 +1015,8 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg)
             
             glBindTexture(GL_TEXTURE_2D, 0);
             
-            EndAttribArrays(zBias);
-            EndUseProgram(zBias);
+            EndAttribArrays(context->zBias);
+            EndUseProgram(context->zBias);
             
             pBufferIt += sizeof(*quadHeader);
          }break;
@@ -981,20 +1024,20 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg)
          {
             EntryColoredVertices *trianglesHeader = (EntryColoredVertices *)header;
             
-            OpenGLProgram prog = (currentSetup.flag & Setup_ShadowMapping) ? basic : shadow;
+            OpenGLProgram prog = (currentSetup.flag & Setup_ShadowMapping) ? context->basic : context->shadow;
             
             OpenGLUniformInfo uniforms;
             uniforms.shadowMat = shadowMat;
-            uniforms.vertexBuffer = vertexBuffer;
+            uniforms.vertexBuffer = context->vertexBuffer;
             
-            BeginUseProgram(prog, currentSetup, uniforms);
+            BeginUseProgram(context, prog, currentSetup, uniforms);
             
-            BeginAttribArraysPC(shadow);
+            BeginAttribArraysPC(prog);
             
             glBufferData(GL_ARRAY_BUFFER, trianglesHeader->vertexCount * sizeof(VertexFormatPC), trianglesHeader->data, GL_STREAM_COPY);
             glDrawArrays(GL_TRIANGLES, 0, trianglesHeader->vertexCount);
             
-            EndUseProgram(shadow);
+            EndUseProgram(prog);
             
             pBufferIt += sizeof(*trianglesHeader);
          }break;
@@ -1020,15 +1063,15 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg)
             uniforms.vertexBuffer = mesh.vertexVBO;
             uniforms.indexBuffer  = mesh.indexVBO;
             
-            BeginUseProgram(basicMesh, currentSetup, uniforms);
+            BeginUseProgram(context, context->basicMesh, currentSetup, uniforms);
             
-            BeginAttribArraysPCUN(basicMesh);
+            BeginAttribArraysPCUN(context->basicMesh);
             
             for(u32 i = 0; i < mesh.indexSets.amount; i++)
             {
                auto it = &mesh.indexSets[i];
                
-               glUniform1f(basicMesh.specularExponent, it->mat.spectularExponent);
+               glUniform1f(context->basicMesh.specularExponent, it->mat.spectularExponent);
                glBindTexture(GL_TEXTURE_2D, meshHeader->textureIDs[i]);
                
                switch (mesh.type)
@@ -1048,7 +1091,7 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg)
                }
             }
             
-            EndUseProgram(basicMesh);
+            EndUseProgram(context->basicMesh);
             pBufferIt += sizeof(*meshHeader);
          }break;
          case RenderGroup_EntryClear:
@@ -1064,16 +1107,16 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg)
             EntryColoredVertices *lineHeader = (EntryColoredVertices*)header;
             
             OpenGLUniformInfo uniforms;
-            uniforms.vertexBuffer = vertexBuffer;
+            uniforms.vertexBuffer = context->vertexBuffer;
             
-            BeginUseProgram(basic, currentSetup, uniforms);
+            BeginUseProgram(context, context->basic, currentSetup, uniforms);
             
-            BeginAttribArraysPC(basic);
+            BeginAttribArraysPC(context->basic);
             glBufferData(GL_ARRAY_BUFFER, lineHeader->vertexCount * sizeof(VertexFormatPC), lineHeader->data, GL_STREAM_COPY);
             glDrawArrays(GL_LINES, 0, lineHeader->vertexCount);
             
-            EndAttribArrays(basic);
-            EndUseProgram(basic);
+            EndAttribArrays(context->basic);
+            EndUseProgram(context->basic);
             pBufferIt += sizeof(*lineHeader);
          }break;
          
@@ -1086,10 +1129,10 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg)
       }
    }
    
-   glBindFramebuffer(GL_READ_FRAMEBUFFER, renderFrameBuffer);
+   glBindFramebuffer(GL_READ_FRAMEBUFFER, context->renderBuffer.id);
    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
    
-   glBlitFramebuffer(0, 0, rg->width, rg->height, 0, 0, rg->width, rg->height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+   glBlitFramebuffer(0, 0, context->renderBuffer.width, context->renderBuffer.height, 0, 0, rg->width, rg->height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
    
    
    //flush

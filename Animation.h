@@ -249,8 +249,8 @@ struct Bone
 	m4x4 inverseBindShapeMatrix;
 	InterpolationData interp; // do I need this?
 };
-
 DefineArray(Bone);
+
 struct Skeleton
 {
 	u16Array vertexMap; // from flattend to not flattend

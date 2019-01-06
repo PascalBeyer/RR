@@ -30,7 +30,7 @@ command_list = {
 	},
 	{
 		.name = "run",
-		.cmd = {{ "start /D w: build/win32", .os = "win" },},
+		.cmd = {{ "start /D w: build\win32", .os = "win" },},
 	},
 	{
 		.name = "msDev",

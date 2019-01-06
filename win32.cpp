@@ -702,8 +702,9 @@ static void win32LoadWglExtensions()
 	}
 }
 
-static void win32InitOpenGL(HWND window)
+static OpenGLContext win32InitOpenGL(HWND window)
 {
+   OpenGLContext ret = {};
    
 	win32LoadWglExtensions();
 	HDC windowDC = GetDC(window);
@@ -775,12 +776,12 @@ static void win32InitOpenGL(HWND window)
 		WGLPROC(glUniform4f);
 		WGLPROC(glBindAttribLocation);
       
-      // todo these could be merged
-      openGLInfo = OpenGLGetInfo(modernContext);
-		OpenGLInit();
+		ret = OpenGLInit(modernContext);
 	}
    
 	ReleaseDC(window, windowDC);
+   
+   return ret;
 }
 
 
@@ -1071,158 +1072,162 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
    
 	i32 windowWidth = 1280, windowHeight = 720;
 	initializeImageBuffer(&globalInfo, &globalImageBuffer, windowWidth, windowHeight);
-	if (RegisterClass(&windowClass))
+	if (!RegisterClass(&windowClass))
 	{
-		globalWindow = CreateWindowEx(0, windowClass.lpszClassName, "Game Try 1", WS_POPUP|WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, windowWidth, windowHeight, 0, 0, instance, 0);
-		if (globalWindow)
-		{
-			
-			running = true;
-			HDC deviceContext = GetDC(globalWindow);
+      return 0;
+   }
+   globalWindow = CreateWindowEx(0, windowClass.lpszClassName, "Game Try 1", WS_POPUP|WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, windowWidth, windowHeight, 0, 0, instance, 0);
+   if (!globalWindow)
+   {
+      return 0;
+   }
+   
+   running = true;
+   HDC deviceContext = GetDC(globalWindow);
+   
+   OpenGLContext openGLContext = win32InitOpenGL(globalWindow);
+   
+   //todo move the allocation stuff into the game?
+   u32 pushBufferSize = MegaBytes(4);
+   void* pushBuffer = VirtualAlloc(0, pushBufferSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+   RenderCommands renderCommands = {};
+   renderCommands.maxBufferSize = pushBufferSize;
+   renderCommands.pushBufferSize = 0;
+   renderCommands.pushBufferBase = (u8 *)pushBuffer;
+   
+   renderCommands.height = globalImageBuffer.height;
+   renderCommands.width = globalImageBuffer.width;
+   renderCommands.aspectRatio = (f32) globalImageBuffer.width / (f32) globalImageBuffer.height;
+   
+   
+   // todo redo this, but make it so that the mouse position gets adjusted at the beginning of the frame, so if the window is not active, this does not do anything
+   /*
+      RECT windowRect;
+if (GetWindowRect(window, &windowRect))
+ClipCursor(&windowRect);
+*/
+   SoundBuffer soundOutput = {};
+   initializeSoundBuffer(globalWindow, &soundOutput);
+   i16 *samples = (i16 *)VirtualAlloc(0, soundOutput.secondaryBufferSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+   soundOutput.soundSamples = samples;
+   int sampleAmount = soundOutput.secondaryBufferSize / sizeof(i16);
+   for (u32 i = 0; i < (soundOutput.secondaryBufferSize/sizeof(i16)); i++)
+   {
+      samples[i] = 0;
+   }
+   win32FillSoundBuffer(&soundOutput, 0, 0, samples);
+   
+   int monitorRefreshHz = 60;
+   HDC refreshDC = GetDC(globalWindow);
+   int win32RefreshRate = GetDeviceCaps(refreshDC, VREFRESH);
+   ReleaseDC(globalWindow, refreshDC);
+   if (win32RefreshRate > 1)
+   {
+      monitorRefreshHz = win32RefreshRate;
+   }
+   f32 gameUpdateHz = (float)(monitorRefreshHz);
+   f32 targetSecondsPerFrame = 1.0f / (f32)gameUpdateHz;
+   
+   gameState = InitGame(windowWidth, windowHeight, &workHandler, constantArena);
+   
+   Clear(frameArena);
+   
+   LARGE_INTEGER timeCounter;
+   QueryPerformanceCounter(&timeCounter);
+   
+   while (running)
+   {	
+      if (globalGamePaused)
+      {
+         HandleWindowsMassages(&keyMessageBuffer);
+         SwapBuffers(deviceContext);
+         continue;
+      }
+      
+      ResetDebugState();
+      
+      TimedBlock;
+      
+      LARGE_INTEGER endCounter;
+      QueryPerformanceCounter(&endCounter);
+      f32 deltaTime = win32GetSecondsElapsed(timeCounter, endCounter);
+      timeCounter = endCounter;
+      
+      CollectDebugRecords(deltaTime); // collect for last frame
+      
+      HandleWindowsMassages(&keyMessageBuffer);
+      
+      soundOutput.soundIsValid = false;
+      DWORD playCursor = 0;
+      DWORD writeCursor = 0;
+      DWORD targetCursor = 0;
+      DWORD bytesToWrite = 0;
+      DWORD byteToLock = 0;
+      if (SUCCEEDED(globalSoundBuffer->GetCurrentPosition(&playCursor, &writeCursor)))
+      {
          
-			win32InitOpenGL(globalWindow);
+         byteToLock = (soundOutput.runningSampleIndex*soundOutput.bytesPerSample) % soundOutput.secondaryBufferSize;
+         targetCursor =((playCursor +(soundOutput.latencySampleCount*soundOutput.bytesPerSample)) % soundOutput.secondaryBufferSize);
          
-			//todo move the allocation stuff into the game?
-			u32 pushBufferSize = MegaBytes(4);
-			void* pushBuffer = VirtualAlloc(0, pushBufferSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-			RenderCommands renderCommands = {};
-			renderCommands.maxBufferSize = pushBufferSize;
-			renderCommands.pushBufferSize = 0;
-			renderCommands.pushBufferBase = (u8 *)pushBuffer;
-         
-			renderCommands.height = globalImageBuffer.height;
-			renderCommands.width = globalImageBuffer.width;
-			renderCommands.aspectRatio = (f32) globalImageBuffer.width / (f32) globalImageBuffer.height;
-         
-         
-         // todo redo this, but make it so that the mouse position gets adjusted at the beginning of the frame, so if the window is not active, this does not do anything
-			/*
-            RECT windowRect;
-   if (GetWindowRect(window, &windowRect))
-    ClipCursor(&windowRect);
-   */
-			SoundBuffer soundOutput = {};
-			initializeSoundBuffer(globalWindow, &soundOutput);
-			i16 *samples = (i16 *)VirtualAlloc(0, soundOutput.secondaryBufferSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-			soundOutput.soundSamples = samples;
-			int sampleAmount = soundOutput.secondaryBufferSize / sizeof(i16);
-			for (u32 i = 0; i < (soundOutput.secondaryBufferSize/sizeof(i16)); i++)
-			{
-				samples[i] = 0;
-			}
-			win32FillSoundBuffer(&soundOutput, 0, 0, samples);
-         
-			int monitorRefreshHz = 60;
-			HDC refreshDC = GetDC(globalWindow);
-			int win32RefreshRate = GetDeviceCaps(refreshDC, VREFRESH);
-			ReleaseDC(globalWindow, refreshDC);
-			if (win32RefreshRate > 1)
-			{
-				monitorRefreshHz = win32RefreshRate;
-			}
-			f32 gameUpdateHz = (float)(monitorRefreshHz);
-			f32 targetSecondsPerFrame = 1.0f / (f32)gameUpdateHz;
-			
-			gameState = InitGame(windowWidth, windowHeight, &workHandler, constantArena);
-         
-			Clear(frameArena);
-         
-			LARGE_INTEGER timeCounter;
-			QueryPerformanceCounter(&timeCounter);			
-			while (running)
-			{	
-				if (globalGamePaused)
-				{
-					HandleWindowsMassages(&keyMessageBuffer);
-					SwapBuffers(deviceContext);
-					continue;
-				}
-            
-				ResetDebugState();
-            
-				TimedBlock;
-            
-				LARGE_INTEGER endCounter;
-				QueryPerformanceCounter(&endCounter);
-				f32 deltaTime = win32GetSecondsElapsed(timeCounter, endCounter);
-				timeCounter = endCounter;
-            
-				CollectDebugRecords(deltaTime); // collect for last frame
-				
-				HandleWindowsMassages(&keyMessageBuffer);
-				
-				soundOutput.soundIsValid = false;
-				DWORD playCursor = 0;
-				DWORD writeCursor = 0;
-				DWORD targetCursor = 0;
-				DWORD bytesToWrite = 0;
-				DWORD byteToLock = 0;
-				if (SUCCEEDED(globalSoundBuffer->GetCurrentPosition(&playCursor, &writeCursor)))
-				{
-					
-					byteToLock = (soundOutput.runningSampleIndex*soundOutput.bytesPerSample) % soundOutput.secondaryBufferSize;
-					targetCursor =((playCursor +(soundOutput.latencySampleCount*soundOutput.bytesPerSample)) % soundOutput.secondaryBufferSize);
-					
-					if (byteToLock > targetCursor) //we looped
-					{
-						bytesToWrite = soundOutput.secondaryBufferSize - byteToLock; //everything to the end of the buffer
-						bytesToWrite += targetCursor; //what is still left
-					}
-					else // did not loop
-					{
-						bytesToWrite = targetCursor - byteToLock; //fill from the byteToLock till the Cursor
-					}
-					soundOutput.soundIsValid = true;
-				}
-				soundOutput.sampleAmount = bytesToWrite / soundOutput.bytesPerSample;
-				Input input;
-				UpdateInput(&input, globalMouseInput, windowWidth, windowHeight, deltaTime, keyMessageBuffer);
-            
-				GameUpdateAndRender(&gameState, &renderCommands, input, &soundOutput);
-				
-				//AnimationCreatorUpdateAndRender(&renderCommands, &input);
-				
-				if (soundOutput.soundIsValid)
-				{
-					win32FillSoundBuffer(&soundOutput, byteToLock, bytesToWrite, samples);
-				}
-				if (!soundOutput.soundIsPlaying)
-				{
-					globalSoundBuffer->Play(0, 0, DSBPLAY_LOOPING);
-					soundOutput.soundIsPlaying = true;
-				}
-				
+         if (byteToLock > targetCursor) //we looped
+         {
+            bytesToWrite = soundOutput.secondaryBufferSize - byteToLock; //everything to the end of the buffer
+            bytesToWrite += targetCursor; //what is still left
+         }
+         else // did not loop
+         {
+            bytesToWrite = targetCursor - byteToLock; //fill from the byteToLock till the Cursor
+         }
+         soundOutput.soundIsValid = true;
+      }
+      soundOutput.sampleAmount = bytesToWrite / soundOutput.bytesPerSample;
+      Input input;
+      UpdateInput(&input, globalMouseInput, windowWidth, windowHeight, deltaTime, keyMessageBuffer);
+      
+      GameUpdateAndRender(&gameState, &renderCommands, input, &soundOutput);
+      
+      //AnimationCreatorUpdateAndRender(&renderCommands, &input);
+      
+      if (soundOutput.soundIsValid)
+      {
+         win32FillSoundBuffer(&soundOutput, byteToLock, bytesToWrite, samples);
+      }
+      if (!soundOutput.soundIsPlaying)
+      {
+         globalSoundBuffer->Play(0, 0, DSBPLAY_LOOPING);
+         soundOutput.soundIsPlaying = true;
+      }
+      
 #if 1
-				RenderGroup renderGroup = InitRenderGroup(&gameState.assetHandler, &renderCommands);
-				RenderGroup *rg = &renderGroup;
-				Font font = gameState.font;
-            
-				String s = FtoS(deltaTime);
-            
-				float screenWidth = (f32)renderCommands.width;
-				float screenHeight = (f32)renderCommands.height;
-            
-				PushRenderSetup(rg, {}, V3(), Setup_Orthogonal);
-            
-				PushString(rg, V2(20.1f, 10.1f), s, 20, font);
-				
-				PushRenderSetup(rg, {}, V3(), Setup_Orthogonal | Setup_ZeroToOne);
-				
-				DrawDebugRecords(rg, gameState.font, targetSecondsPerFrame, input);
-				//DrawTweekers(rg, font);
-            
+      RenderGroup renderGroup = InitRenderGroup(&gameState.assetHandler, &renderCommands);
+      RenderGroup *rg = &renderGroup;
+      Font font = gameState.font;
+      
+      String s = FtoS(deltaTime);
+      
+      float screenWidth = (f32)renderCommands.width;
+      float screenHeight = (f32)renderCommands.height;
+      
+      PushRenderSetup(rg, {}, V3(), Setup_Orthogonal);
+      
+      PushString(rg, V2(20.1f, 10.1f), s, 20, font);
+      
+      PushRenderSetup(rg, {}, V3(), Setup_Orthogonal | Setup_ZeroToOne);
+      
+      DrawDebugRecords(rg, gameState.font, targetSecondsPerFrame, input);
+      //DrawTweekers(rg, font);
+      
 #endif
-            
-				OpenGlRenderGroupToOutput(&renderCommands);
-            
-				displayImageBuffer(deviceContext);
-            
-				Clear(frameArena);
-			}
-         
-			//ClipCursor(NULL);
-		}
-	}
+      
+      OpenGlRenderGroupToOutput(&renderCommands, &openGLContext);
+      
+      displayImageBuffer(deviceContext);
+      
+      Clear(frameArena);
+   }
+   //ClipCursor(NULL);
+   
+   return 0;
 }
 //todo clean this file up really good....
 
