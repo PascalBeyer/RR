@@ -3,13 +3,8 @@ version(1);
 project_name = "RR";
 
 patterns = {
-"*.cpp",
-"*.h",
-};
-
-blacklist_patterns = 
-{
-	"4coder/*",
+   "*.cpp",
+   "*.h",
 };
 
 load_paths = 
@@ -18,7 +13,7 @@ load_paths =
 		{
 			{"."}
 		}, .os = "win",
-
+      
 	},
 };
 
@@ -31,7 +26,7 @@ command_list = {
 	{
 		.name = "run",
 		.out = "compilation.txt", .footer_panel = false, .save_dirty_files = true, .cursor_at_end = false,
-		.cmd = {{ "start /D w: build\win32", .os = "win" },},
+		.cmd = {{ "run.bat", .os = "win" },},
 	},
 	{
 		.name = "msDev",

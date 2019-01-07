@@ -343,7 +343,12 @@ static void WINAPI OpenGLDebugCallback(GLenum source, GLenum type, GLuint id, GL
 		OutputDebugStringA(ErrorMessage);
 		OutputDebugStringA("\n");
 #endif
-		Assert(!"OpenGL Error encountered");
+		//Assert(!"OpenGL Error encountered");
+      
+      printf("OPENGL:\n");
+      printf(ErrorMessage);
+      printf("\n");
+      running = false;
 	}
 }
 

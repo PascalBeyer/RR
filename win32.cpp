@@ -21,6 +21,8 @@
 #undef CreateFile
 #undef PlaySound
 
+// note this is so when we compile shaders we can just stop.
+static bool running;
 #include "OpenGL.h"
 
 struct windowDimension
@@ -35,7 +37,6 @@ typedef DIRECT_SOUND_CREATE(direct_sound_create);
 
 
 // todo: remove all globals?
-static bool running;
 static bool globalGamePaused;
 static ImageBuffer globalImageBuffer;
 static LPDIRECTSOUNDBUFFER globalSoundBuffer;
@@ -1000,13 +1001,39 @@ static void HandleWindowsMassages(KeyMessageBuffer *buffer) //todo make this buf
 	}
 }
 
+#if 0
+//int __stdcall WiaaanMainCRTStartup(void)
+#endif
+
 int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showCode)
 {
+   printf("do we work?\n");
    
-   fputs("Does it work?\n", stdout);
-   fputs("Does it work?\n", stdout);
-   fputs("Does it work?\n", stdout);
-   fputs("Does it work?\n", stdout);
+#if 0
+   AllocConsole();
+   
+   CONSOLE_SCREEN_BUFFER_INFO csbiInfo; 
+   
+   
+	HANDLE hStdout = GetStdHandle(STD_OUTPUT_HANDLE);
+   Assert(hStdout != INVALID_HANDLE_VALUE);
+   
+   Assert(GetConsoleScreenBufferInfo(hStdout, &csbiInfo));
+   
+   DWORD err0r = GetLastError();
+   
+   
+   SetConsoleScreenBufferSize(GetStdHandle(STD_OUTPUT_HANDLE), csbiInfo.dwSize);
+   
+   
+   Assert(SetConsoleTextAttribute(hStdout, FOREGROUND_RED | FOREGROUND_INTENSITY));
+   
+   LPSTR lpszPrompt1 = "Type a line and press Enter, or q to quit: ";
+   DWORD cWritten;
+   
+	Assert(WriteFile(hStdout, lpszPrompt1, lstrlenA(lpszPrompt1), &cWritten, NULL));
+#endif
+   
    
 	u32 constantMemorySize = GigaBytes(1);
 	u32 frameMemorySize = MegaBytes(100);
