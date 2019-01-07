@@ -110,6 +110,8 @@ typedef void WINAPI glGetShaderInfoLog_(GLuint shader, GLsizei bufSize, GLsizei 
 typedef GLint WINAPI glGetUniformLocation_(GLuint program, const GLchar *name);
 typedef void WINAPI glUseProgram_(GLuint program);
 typedef void WINAPI glVertexAttribPointer_(GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const GLvoid *pointer);
+typedef void WINAPI glVertexAttribIPointer_(GLuint index, GLint size, GLenum type,GLsizei stride,const GLvoid *pointer);
+
 typedef void WINAPI glEnableVertexAttribArray_(GLuint index);
 typedef void WINAPI glDisableVertexAttribArray_(GLuint index);
 typedef GLint WINAPI glGetAttribLocation_(GLuint program, const GLchar *name);
@@ -179,6 +181,7 @@ static glUniform4fv_ *glUniform4fv;
 static glUniform1iv_ *glUniform1iv;
 static glGetUniformLocation_ *glGetUniformLocation;
 static glUseProgram_ *glUseProgram;
+static glVertexAttribIPointer_ *glVertexAttribIPointer;
 static glVertexAttribPointer_ *glVertexAttribPointer;
 static glEnableVertexAttribArray_ *glEnableVertexAttribArray;
 static glDisableVertexAttribArray_ *glDisableVertexAttribArray;
@@ -345,55 +348,15 @@ static void WINAPI OpenGLDebugCallback(GLenum source, GLenum type, GLuint id, GL
 #endif
 		//Assert(!"OpenGL Error encountered");
       
-      printf("OPENGL:\n");
-      printf(ErrorMessage);
-      printf("\n");
-      running = false;
-	}
-}
-
-static GLuint OpenGLCreateProgram(char *headerCode, char *vertexCode, char *fragmentCode)
-{
-	GLuint vertexShaderID = glCreateShader(GL_VERTEX_SHADER);
-	GLchar *vertexShaderCode[] =
-	{
-		headerCode, vertexCode
-	};
-	glShaderSource(vertexShaderID, ArrayCount(vertexShaderCode), vertexShaderCode, 0);
-	glCompileShader(vertexShaderID);
-   
-	GLuint fragmentShaderID = glCreateShader(GL_FRAGMENT_SHADER);
-	GLchar *fragmentShaderCode[] =
-	{
-		headerCode, fragmentCode
-	};
-	glShaderSource(fragmentShaderID, ArrayCount(fragmentShaderCode), fragmentShaderCode, 0);
-	glCompileShader(fragmentShaderID);
-   
-	GLuint programID = glCreateProgram();
-	glAttachShader(programID, vertexShaderID);
-	glAttachShader(programID, fragmentShaderID);
-	glLinkProgram(programID);
-   
-	glValidateProgram(programID);
-	GLint linkValidated = false;
-	glGetProgramiv(programID, GL_LINK_STATUS, &linkValidated);
-	//glGetProgramiv(programID, GL_COMPILE_STATUS, &compileValidated);
-	GLint validated = linkValidated;
-	if (!validated)
-	{
-		GLsizei length;
-		char programError[4096];
-		char vertexError[4096];
-		char fragmentError[4096];
-		glGetProgramInfoLog(programID, sizeof(programError), &length, programError);
-		glGetShaderInfoLog(vertexShaderID, sizeof(vertexError), &length, vertexError);
-		glGetShaderInfoLog(fragmentShaderID, sizeof(fragmentError), &length, fragmentError);
+      fprintf(stderr, "OPENGL:\n");
+      fprintf(stderr, ErrorMessage);
+      fprintf(stderr, "\n");
       
-		Assert(!"ShaderError");
+      fflush(stderr);
+      
+      ExitProcess(0);
+      //running = false;
 	}
-   
-	return programID;
 }
 
 static OpenGLProgram OpenGLMakeProgram(char *shaderCode, u32 flags)
@@ -470,6 +433,20 @@ static OpenGLProgram OpenGLMakeProgram(char *shaderCode, u32 flags)
 		glGetProgramInfoLog(programID, sizeof(programError), &length, programError);
 		glGetShaderInfoLog(vertexShaderID, sizeof(vertexError), &length, vertexError);
 		glGetShaderInfoLog(fragmentShaderID, sizeof(fragmentError), &length, fragmentError);
+      
+      
+      fprintf(stderr, "OpenGL shader error:\n");
+      fprintf(stderr, "Program error:\n");
+      fprintf(stderr, programError);
+      fprintf(stderr, "Vertex error:\n");
+      fprintf(stderr, vertexError);
+      fprintf(stderr, "Fragment error:\n");
+      fprintf(stderr, fragmentError);
+      fprintf(stderr, "\n");
+      
+      fflush(stderr);
+      
+      ExitProcess(0);
       
 		Assert(!"ShaderError");
 	}
@@ -773,7 +750,7 @@ static void BeginAttribArraysPCUNBD(OpenGLProgram prog)
    if(prog.flags & ShaderFlags_Animated)
    {
       glEnableVertexAttribArray(prog.boneIndices);
-      glVertexAttribPointer(prog.boneIndices, 4, GL_INT, false, sizeof(VertexFormatPCUNBD), (void *)OffsetOf(VertexFormatPCUNBD, bi));
+      glVertexAttribIPointer(prog.boneIndices, 4, GL_INT, sizeof(VertexFormatPCUNBD), (void *)OffsetOf(VertexFormatPCUNBD, bi));
       
       glEnableVertexAttribArray(prog.boneWeights);
       glVertexAttribPointer(prog.boneWeights, 4, GL_FLOAT, false, sizeof(VertexFormatPCUNBD), (void *)OffsetOf(VertexFormatPCUNBD, bw));

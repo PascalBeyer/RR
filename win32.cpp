@@ -758,6 +758,7 @@ static OpenGLContext win32InitOpenGL(HWND window)
 		WGLPROC(glUniform1iv);
 		WGLPROC(glGetUniformLocation);
 		WGLPROC(glUseProgram);
+      WGLPROC(glVertexAttribIPointer);
 		WGLPROC(glVertexAttribPointer);
 		WGLPROC(glEnableVertexAttribArray);
 		WGLPROC(glDisableVertexAttribArray);

@@ -83,18 +83,17 @@ void main(void)
 #ifdef Animated
    v3 animatedVertex = V3(0, 0, 0);
    
-   animatedVertex += boneWeights.x * (boneStates[boneIndices.x] * inputVertex).xyz;
-   animatedVertex += boneWeights.y * (boneStates[boneIndices.y] * inputVertex).xyz;
-   animatedVertex += boneWeights.z * (boneStates[boneIndices.z] * inputVertex).xyz;
-   animatedVertex += boneWeights.w * (boneStates[boneIndices.w] * inputVertex).xyz;
+   v3 valx = (boneStates[boneIndices.x] * inputVertex).xyz;
+   v3 valy = (boneStates[boneIndices.y] * inputVertex).xyz; 
+   v3 valz = (boneStates[boneIndices.z] * inputVertex).xyz;
+   v3 valw = (boneStates[boneIndices.w] * inputVertex).xyz;
    
+   animatedVertex = (boneWeights.x * valx) + (boneWeights.y * valy) + (boneWeights.z * valz) + (boneWeights.w * valw);
    inputVertex = V4(animatedVertex, 1.0f);
-   
 #endif
    // we premul the cameraTransform by the objectTransform
    vec4 vertexInCameraSpace = cameraTransform * inputVertex;
    gl_Position = projection * vertexInCameraSpace;
-   
    
 #ifdef Textured
    fragCoord = vertUV; // not neccesary if I call them the same? inout is a thing
@@ -181,6 +180,7 @@ void main(void)
 #ifdef Phong
    resultColor += vec4(specular);
 #endif
+   
 }
 
 #endif // fragment Code
