@@ -81,13 +81,15 @@ void main(void)
    v4 inputVertex = vec4(vertP, 1);
    
 #ifdef Animated
-   v4 animatedVertex = V4(0, 0, 0, 0);
-   for(u32 i = 0; i < 4; i++)
-   {
-      animatedVertex += boneWeights[i] * (boneStates[boneIndices[i]] * inputVertex);
-   }
+   v3 animatedVertex = V3(0, 0, 0);
    
-   inputVertex = animatedVertex;
+   animatedVertex += boneWeights.x * (boneStates[boneIndices.x] * inputVertex).xyz;
+   animatedVertex += boneWeights.y * (boneStates[boneIndices.y] * inputVertex).xyz;
+   animatedVertex += boneWeights.z * (boneStates[boneIndices.z] * inputVertex).xyz;
+   animatedVertex += boneWeights.w * (boneStates[boneIndices.w] * inputVertex).xyz;
+   
+   inputVertex = V4(animatedVertex, 1.0f);
+   
 #endif
    // we premul the cameraTransform by the objectTransform
    vec4 vertexInCameraSpace = cameraTransform * inputVertex;
@@ -99,6 +101,9 @@ void main(void)
 #endif
    
 #ifdef ShadowMapping
+#ifdef Animated // hack
+   inputVertex = boneWeights[0] * boneStates[boneIndices[0]] * inputVertex;
+#endif
    shadowCoord = shadowTransform * inputVertex;
 #endif
    

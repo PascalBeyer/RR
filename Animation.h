@@ -68,12 +68,6 @@ struct VertexFormatPCUNBD
    v4  bw;
 };
 
-enum TriangleMeshType
-{
-	TriangleMeshType_List,
-	TrianlgeMeshType_Strip,
-};
-
 struct Material
 {
 	f32 spectularExponent;		// Ns
@@ -271,6 +265,12 @@ struct Skeleton
 	// m4x4 bindShapeMatrix; // this should be premultiplied into the bindshape matricies above? and is now.
 };
 
+enum TriangleMeshType
+{
+	TriangleMeshType_List,
+	TrianlgeMeshType_Strip,
+};
+
 struct TriangleMesh
 {
 	String name;
@@ -288,6 +288,8 @@ struct TriangleMesh
 	Skeleton skeleton;
    
 	AABB aabb;
+   
+   VertexFormatPCUNBD *dumbDebugPointer;
    
 	u32 vertexVBO; // to init this call glBufferData and glBindData
 	u32 indexVBO;

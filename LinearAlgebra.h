@@ -70,19 +70,19 @@ static v3 ExpressInBasis(v3 point, Vector3Basis basis)
 	float d1 = Dot(point, basis.d1);
 	float d2 = Dot(point, basis.d2);
 	float d3 = Dot(point, basis.d3);
-
+   
 	return V3(d1, d2, d3);
 }
 
 static v2 ProjectOntoRectangle(float distToRect, Vector3Basis rectBasis, v3 pointToProject)
 {
 	v3 relPoint = ExpressInBasis(pointToProject, rectBasis);
-
+   
 	float zScale = distToRect / relPoint.z;
-
+   
 	float projectedX = relPoint.x * zScale;
 	float projectedY = relPoint.y * zScale;
-
+   
 	v2 ret = V2(projectedX, projectedY);
 	return ret;
 }
@@ -105,6 +105,13 @@ static v3 Round(v3 a)
 	return V3((i32)(a.x + 0.5f), (i32)(a.y + 0.5f), (i32)(a.z + 0.5f));
 }
 
+
+static f32 SumV4(v4 a)
+{
+   return (a.x + a.y + a.z + a.w);
+}
+
+
 static bool PointInQuadraliteral(v2 p1, v2 p2, v2 p3, v2 p4, v2 pointToCheck);
 static bool PointInCenteredRectangle(v2 pos, float width, float height, v2 pointToCheck);
 static bool PointInRectangle(v2 pos, float width, float height, v2 pointToCheck);
@@ -113,22 +120,22 @@ bool PointInQuadraliteral(v2 p1, v2 p2, v2 p3, v2 p4, v2 pointToCheck)
 {
 	v2 p12 = p2 - p1;
 	v2 pp12 = PerpendicularVector(p12);
-
+   
 	v2 p13 = p3 - p1;
 	v2 pp13 = PerpendicularVector(p13);
-
+   
 	v2 p42 = p2 - p4;
 	v2 pp42 = PerpendicularVector(p42);
-
+   
 	v2 p43 = p3 - p4;
 	v2 pp43 = PerpendicularVector(p43);
-
-
+   
+   
 	float s12 = Dot(pp12, pointToCheck - p1);
 	float s13 = Dot(pp13, pointToCheck - p1);
 	float s42 = Dot(pp42, pointToCheck - p4);
 	float s43 = Dot(pp43, pointToCheck - p4);
-
+   
 	return (s12 >= 0.0f && s43 >= 0.0f && s13 <= 0.0f && s42 <= 0.0f);
 }
 bool PointInCenteredRectangle(v2 pos, float width, float height, v2 pointToCheck)
@@ -160,7 +167,7 @@ static Rectangle2D CreateRectangle2D(v2 pos, f32 width, f32 height)
 	ret.pos = pos;
 	ret.width = width;
 	ret.height = height;
-
+   
 	return ret;
 }
 

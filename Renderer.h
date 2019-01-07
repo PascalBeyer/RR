@@ -394,7 +394,7 @@ static void PushAnimatedMeshImmidiet(RenderGroup *rg, TriangleMesh *mesh, Quater
 {
    Skeleton *skeleton = &mesh->skeleton;
    
-   
+#if 0
 	v3Array out = PushArray(frameArena, v3, mesh->positions.amount);
    
 	for (u32 i = 0; i < mesh->positions.amount; i++)
@@ -408,11 +408,10 @@ static void PushAnimatedMeshImmidiet(RenderGroup *rg, TriangleMesh *mesh, Quater
       
 		For(weights)
 		{
-			out[i] += it->weight * (boneStates[it->boneIndex]  * v).xyz;
+			out[i] += it->weight * (boneStates[it->boneIndex] * v).xyz;
 		}
-      
-      
 	}
+#endif
    
 	for (u32 i = 0; i < mesh->indices.amount; i += 3)
 	{
@@ -420,9 +419,43 @@ static void PushAnimatedMeshImmidiet(RenderGroup *rg, TriangleMesh *mesh, Quater
 		u16 i2 = mesh->indices[i + 1];
 		u16 i3 = mesh->indices[i + 2];
       
-		v3 p1 = out[i1];
-		v3 p2 = out[i2];
-		v3 p3 = out[i3];
+      VertexFormatPCUNBD x1 = mesh->dumbDebugPointer[i1];
+      VertexFormatPCUNBD x2 = mesh->dumbDebugPointer[i2];
+      VertexFormatPCUNBD x3 = mesh->dumbDebugPointer[i3];
+      
+		v3 p1 = V3();
+      {
+         v4 boneWeights = x1.bw;
+         v4i boneIndices = x1.bi;
+         v4 inputVertex = V4(x1.p, 1.0f);
+         
+         p1 += boneWeights.x * (boneStates[boneIndices.x] * inputVertex).xyz;
+         p1 += boneWeights.y * (boneStates[boneIndices.y] * inputVertex).xyz;
+         p1 += boneWeights.z * (boneStates[boneIndices.z] * inputVertex).xyz;
+         p1 += boneWeights.w * (boneStates[boneIndices.w] * inputVertex).xyz;
+      }
+		v3 p2 = V3();
+      {
+         v4 boneWeights = x2.bw;
+         v4i boneIndices = x2.bi;
+         v4 inputVertex = V4(x2.p, 1.0f);
+         
+         p2 += boneWeights.x * (boneStates[boneIndices.x] * inputVertex).xyz;
+         p2 += boneWeights.y * (boneStates[boneIndices.y] * inputVertex).xyz;
+         p2 += boneWeights.z * (boneStates[boneIndices.z] * inputVertex).xyz;
+         p2 += boneWeights.w * (boneStates[boneIndices.w] * inputVertex).xyz;
+      }
+		v3 p3 = V3();
+      {
+         v4 boneWeights = x3.bw;
+         v4i boneIndices = x3.bi;
+         v4 inputVertex = V4(x3.p, 1.0f);
+         
+         p3 += boneWeights.x * (boneStates[boneIndices.x] * inputVertex).xyz;
+         p3 += boneWeights.y * (boneStates[boneIndices.y] * inputVertex).xyz;
+         p3 += boneWeights.z * (boneStates[boneIndices.z] * inputVertex).xyz;
+         p3 += boneWeights.w * (boneStates[boneIndices.w] * inputVertex).xyz;
+      }
       
 		PushTriangle(rg, p1, p2, p3, scaleColor);
 	}

@@ -523,30 +523,38 @@ static void UpdateWrapingTexture(Bitmap bitmap)
 	glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-static f32 SumV4(v4 a)
-{
-   return (a.x + a.y + a.z + a.w);
-}
-
 static void RegisterTriangleMesh(TriangleMesh *mesh)
 {
 	void *data = NULL;
    u32 stride = 0; 
+   
+   Arena *arena = globalDebugState.arena;
    
    // todo maybe make flags
    if(mesh->skeleton.bones.amount)
    {
       stride = sizeof(VertexFormatPCUNBD);
       
-      VertexFormatPCUNBD *packedData = PushData(frameArena, VertexFormatPCUNBD, 0);
+      v3Array colors = PushArray(frameArena, v3, mesh->skeleton.bones.amount);
+      
+      RandomSeries series = GetRandomSeries();
+      
+      For(colors)
+      {
+         it->r = (u32)(RandomU32(&series) & 0xFF) / 255.0f;
+         it->g = (u32)(RandomU32(&series) & 0xFF) / 255.0f;
+         it->b = (u32)(RandomU32(&series) & 0xFF) / 255.0f;
+      }
+      
+      VertexFormatPCUNBD *packedData = PushData(arena, VertexFormatPCUNBD, 0);
       
       for(u32 i = 0; i < mesh->positions.amount; i++)
       {
-         VertexFormatPCUNBD *v =  PushStruct(frameArena, VertexFormatPCUNBD);
+         VertexFormatPCUNBD *v =  PushStruct(arena, VertexFormatPCUNBD);
          v->p  = mesh->positions[i];
-         v->c  = mesh->colors[i];
          v->uv = mesh->uvs[i];
          v->n  = mesh->normals[i];
+         //v->c  = mesh->colors[i];
          
          u32 unflattendIndex = mesh->skeleton.vertexMap[i];
          WeightDataArray weights = mesh->skeleton.vertexToWeightsMap[unflattendIndex];
@@ -560,17 +568,17 @@ static void RegisterTriangleMesh(TriangleMesh *mesh)
             }break;
             case 1:
             {
-               v->bw = V4(weights[0].weight, 0.0f, 0.0f, 0.0f);
-               v->bi = V4i(weights[0].boneIndex, 0, 0, 0);
+               v->bw = V4 (weights[0].weight,    0.0f, 0.0f, 0.0f);
+               v->bi = V4i(weights[0].boneIndex, 0,    0,    0);
             }break;
             case 2:
             {
-               v->bw = V4(weights[0].weight, weights[1].weight, 0.0f, 0.0f);
-               v->bi = V4i(weights[0].boneIndex, weights[1].boneIndex, 0, 0);
+               v->bw = V4 (weights[0].weight,    weights[1].weight,    0.0f, 0.0f);
+               v->bi = V4i(weights[0].boneIndex, weights[1].boneIndex, 0,    0);
             }break;
             case 3:
             {
-               v->bw = V4(weights[0].weight, weights[1].weight, weights[2].weight, 0.0f);
+               v->bw = V4 (weights[0].weight,    weights[1].weight,    weights[2].weight,    0.0f);
                v->bi = V4i(weights[0].boneIndex, weights[1].boneIndex, weights[2].boneIndex, 0);
             }break;
             default:
@@ -580,11 +588,15 @@ static void RegisterTriangleMesh(TriangleMesh *mesh)
                v->bw /= SumV4(v->bw);
                v->bi = V4i(weights[0].boneIndex, weights[1].boneIndex, weights[2].boneIndex, weights[3].boneIndex);
             }break;
+            
+            Assert(SumV4(v->bw) == 1.0f);
          }
          
+         v->c = Pack3x8(v->bw.x * colors[v->bi.x] /*+ v->bw.y * colors[v->bi.y] + v->bw.z * colors[v->bi.z] +v->bw.w * colors[v->bi.w]*/);
       }
       
       data = packedData;
+      mesh->dumbDebugPointer = packedData;
    }
    else
    {
@@ -841,25 +853,17 @@ static OpenGLContext OpenGLInit(bool modernContext)
    
    u32 amountOfMultiSamples = Min(info.amountOfMultiSamples, 4u);
    
-#define SHOULD_RENDER_MULTISAMPLED 0 // todo, just to work around renderdoc not working...
-   
    FrameBuffer renderBuffer;
+#if 0 // to work around renderdoc not working...
    {
       renderBuffer.width = 1280;
       renderBuffer.height = 720;
       
-      // renderBuffer
       GLuint texture_map;
       glGenTextures(1, &texture_map);
       glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, texture_map);
       
-      //glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-      //glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-      //glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-      //glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-      
       glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, amountOfMultiSamples, ret.defaultInternalTextureFormat, renderBuffer.width, renderBuffer.height, GL_FALSE);
-      //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1280, 720, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
       
       renderBuffer.texture = texture_map;
       glBindTexture(GL_TEXTURE_2D, 0);
@@ -868,11 +872,6 @@ static OpenGLContext OpenGLInit(bool modernContext)
       GLuint depth_texture;
       glGenTextures(1, &depth_texture);
       glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, depth_texture);
-      //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-      //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-      //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-      //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-      //glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, 1280, 720, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE, NULL);
       glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, amountOfMultiSamples, GL_DEPTH_COMPONENT, renderBuffer.width, renderBuffer.height, GL_FALSE);
       
       
@@ -886,6 +885,47 @@ static OpenGLContext OpenGLInit(bool modernContext)
       glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D_MULTISAMPLE, depth_texture, 0);
       renderBuffer.id = framebuffer;
    }
+   
+#else // not multisampled
+   {
+      renderBuffer.width = 1280;
+      renderBuffer.height = 720;
+      
+      // renderBuffer
+      GLuint texture_map;
+      glGenTextures(1, &texture_map);
+      glBindTexture(GL_TEXTURE_2D, texture_map);
+      
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+      
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1280, 720, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+      
+      renderBuffer.texture = texture_map;
+      glBindTexture(GL_TEXTURE_2D, 0);
+      
+      GLuint depth_texture;
+      glGenTextures(1, &depth_texture);
+      glBindTexture(GL_TEXTURE_2D, depth_texture);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, 1280, 720, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE, NULL);
+      
+      renderBuffer.depth = depth_texture;
+      
+      // Build the framebuffer.
+      GLuint framebuffer;
+      glGenFramebuffers(1, &framebuffer);
+      glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)framebuffer);
+      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture_map, 0);
+      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth_texture, 0);
+      renderBuffer.id = framebuffer;
+   }
+   
+#endif
    
    ret.renderBuffer = renderBuffer;
    
@@ -1254,7 +1294,7 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             Quaternion q = meshHeader->orientation;
             
             // todo slow
-            m4x4 objectTransform = Translate(QuaternionToMatrix(q) * ScaleMatrix(scale), pos);
+            m4x4 objectTransform = Identity(); //Translate(QuaternionToMatrix(q) * ScaleMatrix(scale), pos);
             
             v4 lightP = currentSetup.cameraTransform * V4(currentSetup.lightPos, 1.0f);
             
