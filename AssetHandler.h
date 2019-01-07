@@ -153,7 +153,7 @@ static AssetCatalog LoadAssetCatalog(char *path, char *fileType, AssetType asset
 		u32 it_index = (u32)(it - ret.data);
 		it->currentlyLoaded = false;
 		it->id = it_index | (assetType << Asset_Type_Offset);
-		it->name = meshFiles[it_index]; 
+		it->name = meshFiles[it_index];
 		it->type = assetType;
 		it->loadedIndex = it_index;
 		it->meshInfo = NULL;

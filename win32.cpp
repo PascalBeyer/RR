@@ -10,12 +10,13 @@
 #define OffsetOf(type, Member) (umm)&(((type *)0)->Member)
 #define Die Assert(false)
 
-
 #include "Game.h"
 
 #include <Windows.h>
 #include <gl/gl.h>
 #include <dsound.h>
+#include <cstdio>
+
 
 #undef CreateFile
 #undef PlaySound
@@ -1001,6 +1002,12 @@ static void HandleWindowsMassages(KeyMessageBuffer *buffer) //todo make this buf
 
 int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showCode)
 {
+   
+   fputs("Does it work?\n", stdout);
+   fputs("Does it work?\n", stdout);
+   fputs("Does it work?\n", stdout);
+   fputs("Does it work?\n", stdout);
+   
 	u32 constantMemorySize = GigaBytes(1);
 	u32 frameMemorySize = MegaBytes(100);
 	u32 workingMemorySize = MegaBytes(5);

@@ -3,18 +3,29 @@
 
 
 typedef unsigned char Char;
-//todo : remove this
-#include <string.h>
 
-/*
-static void memcpy(u8 *dest, u8 *source, u64 amount)
+static void memcpy(void *dest, void *source, u64 amount)
 {
- for (u64 it = 0; it < amount; it++)
- {
-  *dest++ = *source++;
- }
+   u8 *_dest   = (u8 *)dest;
+   u8 *_source = (u8 *)source;
+   for (u64 it = 0; it < amount; it++)
+   {
+      *_dest++ = *_source++;
+   }
 }
-*/
+
+
+static void memset(void *dest, u8 val, u64 amount)
+{
+   u8 *it = (u8*)dest;
+   for (u64 i = 0; i < amount; i++)
+   {
+      *it++ = val;
+   }
+}
+
+
+
 struct String
 {
 	union

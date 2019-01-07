@@ -183,6 +183,8 @@ static bool operator!(type##DFArray arr)										\
 
 #define BuildStaticArray(arena, arr, item) PushData(arena, u8, sizeof(item)); arr.data[arr.amount++] = item;
 
+// todo check if there is some (,) hack
+
 #define ForArr(arr) for(auto it = (arr).data; it < (arr).data + (arr).amount; it++)
 #define ForVarArr(it, arr) for(auto it = (arr).data; it < (arr).data + (arr).amount; it++)
 

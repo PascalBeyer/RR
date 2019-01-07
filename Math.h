@@ -27,10 +27,19 @@ static Interval InvertedInfinityInterval()
 	return ret;
 }
 
+static f32 Floor(f32 f)
+{
+	return floorf(f);
+}
+
+static f32 Ceil(f32 f)
+{
+	return ceilf(f);
+}
 
 static i32 Round(float f)
 {
-	return (i32)(f + 0.5f); // todo round intrinsic.
+	return _mm_cvtss_si32(_mm_set_ss(f));
 }
 
 static f32 Max(f32 a, f32 b)
