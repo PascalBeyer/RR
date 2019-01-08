@@ -35,50 +35,17 @@ static b32 PointInAABB(AABB target, v3 point)
 }
 
 
-struct VertexFormatPC
-{
-	v3  p;
-	u32 c;
-};
-
-struct VertexFormatPCU
-{
-	v3  p;
-	u32 c;
-   v2  uv;
-};
-DefineArray(VertexFormatPC);
-
-struct VertexFormatPCUN
-{
-	v3  p;
-   u32 c;
-	v2  uv;
-	v3  n;
-};
-DefineArray(VertexFormatPCUN);
-
-struct VertexFormatPCUNBD
-{
-   v3  p;
-   u32 c;
-   v2  uv;
-   v3  n;
-   v4i bi;
-   v4  bw;
-};
-
 struct Material
 {
 	f32 spectularExponent;		// Ns
-	v3 ambientColor;			// Ka
-	v3 diffuseColor;			// Kd
-	v3 specularColor;			// Ks
+	v3 ka;		            	//  ambientColor
+	v3 kd;	            		// diffuseColor
+	v3 ks;	            		// specularColor
 	v3 ke;						// not in the spec and always (0,0,0)
    
 	f32 indexOfReflection;		// Ni ("optical density")	0.001 - 10
 	f32 dissolved;				// d						0 - 1	
-   //v3 transmissionFilter;		// Tf						
+   //v3 transmissionFilter;	  // Tf						
 	u32 illuminationModel;		// illum					0 - 10
 	u32 bitmapID;
 	String name;
@@ -288,8 +255,6 @@ struct TriangleMesh
 	Skeleton skeleton;
    
 	AABB aabb;
-   
-   VertexFormatPCUNBD *dumbDebugPointer;
    
 	u32 vertexVBO; // to init this call glBufferData and glBindData
 	u32 indexVBO;

@@ -178,7 +178,7 @@ static bool AssetExits(AssetHandler *handler, String assetName, AssetType type)
 }
 
 // returns whether we imported something
-static bool ConvertNewAssets(AssetHandler *handler, Arena *currentStateArena, Arena *workingArena)
+static bool ConvertNewAssets(AssetHandler *handler, Arena *currentStateArena)
 {
 	bool imported = false;
 	StringArray fileNames = FindAllFiles("import\\", "", frameArena);
@@ -221,7 +221,7 @@ static bool ConvertNewAssets(AssetHandler *handler, Arena *currentStateArena, Ar
 		{
 			if (AssetExits(handler, *it, Asset_Mesh)) continue;
 			char *nameToSave = FormatCString("mesh/%s.mesh", GetToChar(*it, '.'));
-			TriangleMesh mesh = ReadObj(nameToLoad, currentStateArena, workingArena);
+			TriangleMesh mesh = ReadObj(nameToLoad, frameArena);
 			if (!mesh.positions.amount)
 			{
 				ConsoleOutputError("Probably file name wrong. Might have loaded a mesh w/0 vertices.");
@@ -235,7 +235,7 @@ static bool ConvertNewAssets(AssetHandler *handler, Arena *currentStateArena, Ar
 		else if (type == "dae")
 		{
 			if (AssetExits(handler, *it, Asset_Animation)) continue;
-			DAEReturn dae = ReadDAE(currentStateArena, nameToLoad);
+			DAEReturn dae = ReadDAE(frameArena, nameToLoad);
 			if (!dae.success)
 			{
 				ConsoleOutputError("Tried loading DAE %c*, but we failed!", nameToLoad);
@@ -268,7 +268,7 @@ static AssetHandler CreateAssetHandler(Arena *arena, Arena *workingArena)
 	ret.meshCatalog = LoadAssetCatalog("mesh/", ".mesh", Asset_Mesh, arena);
 	ret.animationCatalog = LoadAssetCatalog("animation/", ".animation", Asset_Animation, arena);
    
-	if (ConvertNewAssets(&ret, arena, workingArena))
+	if (ConvertNewAssets(&ret, arena))
 	{
 		arena->current = arena->current;
       

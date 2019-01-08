@@ -107,15 +107,21 @@ void main(void)
 #endif
    
 #ifdef Phong
+   // todo pass the object transform for this? I don't know why we work in camera space.
+   // but the camera transform should be an isometry so whatevs
+   
+   // simple ambient light ka
+   //v3 ambient = 0.1 * V3(1, 1, 1);
+   
    // simple diffuse light
    vec3 point = vertexInCameraSpace.xyz;
-   vec3 lightDirection = normalize(lightPos - point);
-   
    vec4 transformedNormal = cameraTransform * vec4(vertN, 0);
    vec3 normal = normalize(transformedNormal.xyz);
-   f32 interpolationC = 0.1;
-   cosinAttenuation = (1-interpolationC) * max(dot(lightDirection, normal), 0) + interpolationC;
    
+   vec3 lightDirection = normalize(lightPos - point);
+   cosinAttenuation = max(dot(lightDirection, normal), 0);
+   
+   //v3 diffuse = cosinusAttenuation * 0.5 * V3(1, 1, 1);
    
    // simple specular light
    vec3 incomingLightDir = -lightDirection;

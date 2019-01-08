@@ -443,10 +443,9 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
 	
    {
       static float t = 0.0f;
-      t += 0.001f * dt;
+      t += dt;
       m4x4Array boneStates = CalculateBoneTransforms(&mesh->skeleton, animation, t);
-      PushAnimatedMeshImmidiet(rg, mesh, {1, 0, 0, 0}, V3(), 1.0f, V4(0.1f, 0.1f, 0.1f, 0.1f), boneStates);
-      
+      //PushAnimatedMeshImmidiet(rg, mesh, {1, 0, 0, 0}, V3(), 1.0f, V4(0.1f, 0.1f, 0.1f, 0.1f), boneStates);
       PushAnimatedMesh(rg, mesh, {1, 0, 0, 0}, V3(0, 0, 0), 1.0f, V4(1.0f, 1.0f, 1.0f, 1.0f), boneStates);
    }
 	//AnimationTestStuff(rg, &ret, dt);

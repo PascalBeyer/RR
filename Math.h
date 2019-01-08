@@ -1,8 +1,8 @@
 #ifndef RR_MATH
 #define RR_MATH
 
-#define PI		3.14159265359f
-#define pi32	3.14159265359f
+#define PI    3.14159265359f
+#define pi32  3.14159265359f
 
 #include <math.h>
 
@@ -183,7 +183,7 @@ static v2 Project(v2 a, v2 b)
 	return V2(
 		Dot(a, b) / ((float)pow(b.x, 2) + (float)pow(b.y, 2))*b.x,
 		Dot(a, b) / ((float)pow(b.x, 2) + (float)pow(b.y, 2))*b.y
-	);
+      );
 }
 
 static float QuadNorm(v2 a)
@@ -224,10 +224,10 @@ static v2 PerpendicularVector(v2 a) //rotates 90° to the left
 static v2 RotateAroundOrigin(v2 vec, float angle)
 {
 	v2 temp = V2(vec.x, vec.y);
-
+   
 	vec.x = temp.x * cosf(angle) - temp.y *sinf(angle);
 	vec.y = temp.y * cosf(angle) + temp.x *sinf(angle);
-
+   
 	return vec;
 }
 
@@ -235,10 +235,10 @@ static v2 RotateAroundOrigin(v2 vec, float angle)
 static v2 RotateAround(v2 origin, float angle, v2 v)
 {
 	v2 ret;
-
+   
 	ret.x = (v.x - origin.x)*cosf(angle) - (v.y - origin.y) * sinf(angle) + origin.x;
 	ret.y = (v.y - origin.y)*cosf(angle) + (v.x - origin.x) * sinf(angle) + origin.y;
-
+   
 	return ret;
 }
 
@@ -288,7 +288,7 @@ static v3 Normalize(v3 a)
 	{
 		return v3();
 	}
-
+   
 }
 
 static v3 FastNormalize(v3 a)
@@ -325,7 +325,7 @@ static v3 CrossProduct(v3 a, v3 b)
 		a.y * b.z - a.z * b.y,
 		a.z * b.x - a.x * b.z,
 		a.x * b.y - a.y * b.x
-	);
+      );
 }
 
 static float QuadNorm(v3 a)
@@ -376,12 +376,12 @@ static u32 Pack3x8(v3 pack)
 	float r = (pack.r * 255.0f);
 	float g = (pack.g * 255.0f);
 	float b = (pack.b * 255.0f);
-
+   
 	return (((u32)(a + 0.5f) << 24) |
-		((u32)(b + 0.5f) << 16) |
-		((u32)(g + 0.5f) << 8) |
-		((u32)(r + 0.5f) << 0));
-
+           ((u32)(b + 0.5f) << 16) |
+           ((u32)(g + 0.5f) << 8) |
+           ((u32)(r + 0.5f) << 0));
+   
 }
 static u32 SavePack3x8(v3 pack)
 {
@@ -389,11 +389,11 @@ static u32 SavePack3x8(v3 pack)
 	float r = (Min(pack.r, 1.0f) *255.0f);
 	float g = (Min(pack.g, 1.0f)* 255.0f);
 	float b = (Min(pack.b, 1.0f)* 255.0f);
-
+   
 	return (((u32)(a + 0.5f) << 24) |
-		((u32)(b + 0.5f) << 16) |
-		((u32)(g + 0.5f) << 8) |
-		((u32)(r + 0.5f) << 0));
+           ((u32)(b + 0.5f) << 16) |
+           ((u32)(g + 0.5f) << 8) |
+           ((u32)(r + 0.5f) << 0));
 }
 
 static v3 Zinversion(v3 v)
@@ -451,7 +451,7 @@ static v4 Unpack4x8(u32 *pack)
 	float b = (f32)((*pack >> 16) & 0xFF) / 255.0f;
 	float g = (f32)((*pack >> 8) & 0xFF) / 255.0f;
 	float r = (f32)((*pack >> 0) & 0xFF) / 255.0f;
-
+   
 	return V4(a, r, g, b);
 }
 
@@ -461,7 +461,7 @@ static v4 Unpack4x8(u32 pack)
 	float b = (f32)((pack >> 16) & 0xFF) / 255.0f;
 	float g = (f32)((pack >> 8) & 0xFF) / 255.0f;
 	float r = (f32)((pack >> 0) & 0xFF) / 255.0f;
-
+   
 	return V4(a, r, g, b);
 }
 
@@ -471,12 +471,12 @@ static u32 Pack4x8(v4 pack)
 	float r = (pack.r * 255.0f);
 	float g = (pack.g * 255.0f);
 	float b = (pack.b * 255.0f);
-
+   
 	return (((u32)(a + 0.5f) << 24) |
-		((u32)(b + 0.5f) << 16) |
-		((u32)(g + 0.5f) << 8) |
-		((u32)(r + 0.5f) << 0));
-
+           ((u32)(b + 0.5f) << 16) |
+           ((u32)(g + 0.5f) << 8) |
+           ((u32)(r + 0.5f) << 0));
+   
 }
 
 
@@ -604,13 +604,13 @@ static Quaternion Slerp(Quaternion a, f32 t, Quaternion b)
 	Quaternion ret;
 	// Calculate angle between them.
 	f32 cosHalfTheta = a.w * b.w + a.x * b.x + a.y * b.y + a.z * b.z;
-
+   
 	// if a=b or a=-b then theta = 0 and we can return a
 	if (Abs(cosHalfTheta) >= 1.0) {
 		ret.w = a.w; ret.x = a.x; ret.y = a.y; ret.z = a.z;
 		return ret;
 	}
-
+   
 	// Calculate temporary values.
 	double halfTheta = acos(cosHalfTheta);
 	double sinHalfTheta = sqrt(1.0 - cosHalfTheta*cosHalfTheta);
@@ -623,7 +623,7 @@ static Quaternion Slerp(Quaternion a, f32 t, Quaternion b)
 		ret.z = (a.z * 0.5f + b.z * 0.5f);
 		return ret;
 	}
-
+   
 	double ratioA = sin((1 - t) * halfTheta) / sinHalfTheta;
 	double ratioB = sin(t * halfTheta) / sinHalfTheta;
 	//calculate Quaternion.
@@ -632,7 +632,7 @@ static Quaternion Slerp(Quaternion a, f32 t, Quaternion b)
 	ret.y = (f32)(a.y * ratioA + b.y * ratioB);
 	ret.z = (f32)(a.z * ratioA + b.z * ratioB);
 	return ret;
-
+   
 }
 
 static Quaternion NOID(Quaternion q)
@@ -669,9 +669,9 @@ static Quaternion NLerp(Quaternion a, f32 t, Quaternion b)
 {
 	Quaternion lerp = Lerp(a, t, b);
 	f32 norm = Norm(lerp);
-
+   
 	Assert(norm); // this might be zero, but then we kinda really fucked up.
-
+   
 	return lerp / norm;
 }
 
@@ -684,13 +684,13 @@ struct m3x3
 static m3x3 Invert(m3x3 m)
 {
 	double det =	m.a[0][0] * (m.a[1][1] * m.a[2][2] - m.a[2][1] * m.a[1][2]) -
-					m.a[0][1] * (m.a[1][0] * m.a[2][2] - m.a[1][2] * m.a[2][0]) +
-					m.a[0][2] * (m.a[1][0] * m.a[2][1] - m.a[1][1] * m.a[2][0]);
-
+      m.a[0][1] * (m.a[1][0] * m.a[2][2] - m.a[1][2] * m.a[2][0]) +
+      m.a[0][2] * (m.a[1][0] * m.a[2][1] - m.a[1][1] * m.a[2][0]);
+   
 	if (det == 0.0) return {};
-
+   
 	double invdet = 1.0 / det;
-
+   
 	m3x3 minv;
 	minv.a[0][0] = (f32)((m.a[1][1] * m.a[2][2] - m.a[2][1] * m.a[1][2]) * invdet);
 	minv.a[0][1] = (f32)((m.a[0][2] * m.a[2][1] - m.a[0][1] * m.a[2][2]) * invdet);
@@ -701,7 +701,7 @@ static m3x3 Invert(m3x3 m)
 	minv.a[2][0] = (f32)((m.a[1][0] * m.a[2][1] - m.a[2][0] * m.a[1][1]) * invdet);
 	minv.a[2][1] = (f32)((m.a[2][0] * m.a[0][1] - m.a[0][0] * m.a[2][1]) * invdet);
 	minv.a[2][2] = (f32)((m.a[0][0] * m.a[1][1] - m.a[1][0] * m.a[0][1]) * invdet);
-
+   
 	return minv;
 }
 
@@ -716,7 +716,7 @@ static m3x3 Rows3x3(v3 X, v3 Y, v3 Z) // zeilen
 			{ Z.x, Z.y, Z.z},
 		}
 	};
-
+   
 	return(R);
 }
 
@@ -730,7 +730,7 @@ static m3x3 Columns3x3(v3 X, v3 Y, v3 Z) // spalten
 			{ X.z, Y.z, Z.z },
 		}
 	};
-
+   
 	return(R);
 }
 
@@ -742,7 +742,7 @@ static v3 operator*(m3x3 a, v3 p)
 	r.x = p.x*a.a[0][0] + p.y*a.a[0][1] + p.z*a.a[0][2];
 	r.y = p.x*a.a[1][0] + p.y*a.a[1][1] + p.z*a.a[1][2];
 	r.z = p.x*a.a[2][0] + p.y*a.a[2][1] + p.z*a.a[2][2];
-
+   
 	return r;
 }
 
@@ -750,7 +750,7 @@ static v3 operator*(m3x3 a, v3 p)
 static m3x3 operator*(m3x3 A, m3x3 B)
 {
 	m3x3 R = {};
-
+   
 	for (int r = 0; r < 3; ++r)
 	{
 		for (int c = 0; c < 3; ++c)
@@ -769,7 +769,7 @@ static m3x3 XRotation3x3(float Angle)
 {
 	float c = cosf(Angle);
 	float s = sinf(Angle);
-
+   
 	m3x3 R =
 	{
 		{ 
@@ -778,7 +778,7 @@ static m3x3 XRotation3x3(float Angle)
 			{ 0, s, c},
 		},
 	};
-
+   
 	return(R);
 }
 
@@ -786,7 +786,7 @@ static m3x3 YRotation3x3(float Angle)
 {
 	float c = cosf(Angle);
 	float s = sinf(Angle);
-
+   
 	m3x3 R =
 	{
 		{ 
@@ -795,7 +795,7 @@ static m3x3 YRotation3x3(float Angle)
 			{ -s, 0, c },
 		},
 	};
-
+   
 	return(R);
 }
 
@@ -803,7 +803,7 @@ static m3x3 ZRotation3x3(float Angle)
 {
 	float c = cosf(Angle);
 	float s = sinf(Angle);
-
+   
 	m3x3 R =
 	{
 		{
@@ -812,7 +812,7 @@ static m3x3 ZRotation3x3(float Angle)
 			{ 0, 0, 1 },
 		},
 	};
-
+   
 	return(R);
 }
 
@@ -826,7 +826,7 @@ struct m4x4
 static m4x4 operator*(m4x4 A, m4x4 B)
 {
 	m4x4 R = {};
-
+   
 	for (int r = 0; r <= 3; ++r)
 	{
 		for (int c = 0; c <= 3; ++c)
@@ -844,7 +844,7 @@ static m4x4 operator*(m4x4 A, m4x4 B)
 static m4x4 operator*(f32 f, m4x4 B)
 {
 	m4x4 R = {};
-
+   
 	for (int r = 0; r <= 3; ++r)
 	{
 		for (int c = 0; c <= 3; ++c)
@@ -861,20 +861,20 @@ static m4x4 operator*(f32 f, m4x4 B)
 static v4 operator*(m4x4 A, v4 P)
 {
 	v4 r;
-
+   
 	r.x = P.x*A.a[0][0] + P.y*A.a[0][1] + P.z*A.a[0][2] + P.w*A.a[0][3];
 	r.y = P.x*A.a[1][0] + P.y*A.a[1][1] + P.z*A.a[1][2] + P.w*A.a[1][3];
 	r.z = P.x*A.a[2][0] + P.y*A.a[2][1] + P.z*A.a[2][2] + P.w*A.a[2][3];
 	r.w = P.x*A.a[3][0] + P.y*A.a[3][1] + P.z*A.a[3][2] + P.w*A.a[3][3];
-
+   
 	return r;
 }
 
 static v3 operator*(m4x4 A, v3 P)
 {
 	v4 R = A * V4(P, 1.0f);
-
-
+   
+   
 	return (R.xyz / R.w);
 }
 
@@ -882,7 +882,7 @@ static v3 operator*(m4x4 A, v3 P)
 static v3 TransformDirection(m4x4 a, v3 d)
 {
 	v4 R = a * V4(d, 0.0f);
-
+   
 	return (R.xyz);
 }
 
@@ -891,11 +891,11 @@ static m4x4 Identity(void)
 	m4x4 R =
 	{
 		{ { 1, 0, 0, 0 },
-		{ 0, 1, 0, 0 },
-		{ 0, 0, 1, 0 },
-		{ 0, 0, 0, 1 } },
+         { 0, 1, 0, 0 },
+         { 0, 0, 1, 0 },
+         { 0, 0, 0, 1 } },
 	};
-
+   
 	return(R);
 }
 
@@ -905,11 +905,11 @@ static m4x4 Translation(v3 a)
 	m4x4 R =
 	{
 		{ { 1, 0, 0, a.x },
-		{ 0, 1, 0, a.y },
-		{ 0, 0, 1, a.z },
-		{ 0, 0, 0, 1 } },
+         { 0, 1, 0, a.y },
+         { 0, 0, 1, a.z },
+         { 0, 0, 0, 1 } },
 	};
-
+   
 	return(R);
 }
 
@@ -917,15 +917,15 @@ static m4x4 XRotation(float Angle)
 {
 	float c = cosf(Angle);
 	float s = sinf(Angle);
-
+   
 	m4x4 R =
 	{
 		{ { 1, 0, 0, 0 },
-		{ 0, c,-s, 0 },
-		{ 0, s, c, 0 },
-		{ 0, 0, 0, 1 } },
+         { 0, c,-s, 0 },
+         { 0, s, c, 0 },
+         { 0, 0, 0, 1 } },
 	};
-
+   
 	return(R);
 }
 
@@ -933,15 +933,15 @@ static m4x4 YRotation(float Angle)
 {
 	float c = cosf(Angle);
 	float s = sinf(Angle);
-
+   
 	m4x4 R =
 	{
 		{ { c, 0, s, 0 },
-		{ 0, 1, 0, 0 },
-		{ -s, 0, c, 0 },
-		{ 0, 0, 0, 1 } },
+         { 0, 1, 0, 0 },
+         { -s, 0, c, 0 },
+         { 0, 0, 0, 1 } },
 	};
-
+   
 	return(R);
 }
 
@@ -949,7 +949,7 @@ static m4x4 ZRotation(float Angle)
 {
 	float c = cosf(Angle);
 	float s = sinf(Angle);
-
+   
 	m4x4 R =
 	{
 		{
@@ -959,14 +959,14 @@ static m4x4 ZRotation(float Angle)
 			{ 0, 0, 0, 1 }
 		},
 	};
-
+   
 	return(R);
 }
 
 static m4x4 Transpose(m4x4 A)
 {
 	m4x4 R;
-
+   
 	for (int j = 0; j <= 3; ++j)
 	{
 		for (int i = 0; i <= 3; ++i)
@@ -974,7 +974,7 @@ static m4x4 Transpose(m4x4 A)
 			R.a[j][i] = A.a[i][j];
 		}
 	}
-
+   
 	return(R);
 }
 
@@ -983,13 +983,13 @@ static m4x4 Projection(float aspectWidthOverHeight, float focalLength)
 	float a = 1.0f;
 	float b = aspectWidthOverHeight;
 	float c = focalLength;
-
+   
 	float nearClipPlaneDist = 0.1f;
 	float farClipPlaneDist = 100.0f;
-
+   
 	float d = 2.0f / (nearClipPlaneDist - farClipPlaneDist);
 	float e = (nearClipPlaneDist + farClipPlaneDist) / (nearClipPlaneDist - farClipPlaneDist);
-
+   
 	m4x4 R =
 	{
 		{
@@ -999,7 +999,7 @@ static m4x4 Projection(float aspectWidthOverHeight, float focalLength)
 			{ 0,		0,			1.0f,		0 }
 		}
 	};
-
+   
 	return(R);
 }
 
@@ -1008,11 +1008,11 @@ static m4x4 Columns4x4(v3 X, v3 Y, v3 Z)
 	m4x4 R =
 	{
 		{ { X.x, Y.x, Z.x, 0 },
-		{ X.y, Y.y, Z.y, 0 },
-		{ X.z, Y.z, Z.z, 0 },
-		{ 0,   0,   0, 1 } }
+         { X.y, Y.y, Z.y, 0 },
+         { X.z, Y.z, Z.z, 0 },
+         { 0,   0,   0, 1 } }
 	};
-
+   
 	return(R);
 }
 
@@ -1021,24 +1021,24 @@ static m4x4 Rows4x4(v3 X, v3 Y, v3 Z)
 	m4x4 R =
 	{
 		{ 
-		{ X.x, X.y, X.z, 0 },
-		{ Y.x, Y.y, Y.z, 0 },
-		{ Z.x, Z.y, Z.z, 0 },
-		{ 0,   0,   0,	 1 } 
+         { X.x, X.y, X.z, 0 },
+         { Y.x, Y.y, Y.z, 0 },
+         { Z.x, Z.y, Z.z, 0 },
+         { 0,   0,   0,	 1 } 
 		}
 	};
-
+   
 	return(R);
 }
 
 static m4x4 Translate(m4x4 A, v3 T)
 {
 	m4x4 R = A;
-
+   
 	R.a[0][3] += T.x;
 	R.a[1][3] += T.y;
 	R.a[2][3] += T.z;
-
+   
 	return(R);
 }
 
@@ -1072,141 +1072,141 @@ static m4x4 Orthogonal(float width, float height)
 			{ 0.0f,					0.0f,			0.0f, 1.0f }
 		}
 	};
-
+   
 	return(R);
 }
 
 static m4x4 InvOrId(m4x4 mat)
 {
-
+   
 	f32 *m = &mat.a[0][0];
-
+   
 	f32 inv[16], det;
-
+   
 	inv[0] = m[5] * m[10] * m[15] -
 		m[5] * m[11] * m[14] -
 		m[9] * m[6] * m[15] +
 		m[9] * m[7] * m[14] +
 		m[13] * m[6] * m[11] -
 		m[13] * m[7] * m[10];
-
+   
 	inv[4] = -m[4] * m[10] * m[15] +
 		m[4] * m[11] * m[14] +
 		m[8] * m[6] * m[15] -
 		m[8] * m[7] * m[14] -
 		m[12] * m[6] * m[11] +
 		m[12] * m[7] * m[10];
-
+   
 	inv[8] = m[4] * m[9] * m[15] -
 		m[4] * m[11] * m[13] -
 		m[8] * m[5] * m[15] +
 		m[8] * m[7] * m[13] +
 		m[12] * m[5] * m[11] -
 		m[12] * m[7] * m[9];
-
+   
 	inv[12] = -m[4] * m[9] * m[14] +
 		m[4] * m[10] * m[13] +
 		m[8] * m[5] * m[14] -
 		m[8] * m[6] * m[13] -
 		m[12] * m[5] * m[10] +
 		m[12] * m[6] * m[9];
-
+   
 	inv[1] = -m[1] * m[10] * m[15] +
 		m[1] * m[11] * m[14] +
 		m[9] * m[2] * m[15] -
 		m[9] * m[3] * m[14] -
 		m[13] * m[2] * m[11] +
 		m[13] * m[3] * m[10];
-
+   
 	inv[5] = m[0] * m[10] * m[15] -
 		m[0] * m[11] * m[14] -
 		m[8] * m[2] * m[15] +
 		m[8] * m[3] * m[14] +
 		m[12] * m[2] * m[11] -
 		m[12] * m[3] * m[10];
-
+   
 	inv[9] = -m[0] * m[9] * m[15] +
 		m[0] * m[11] * m[13] +
 		m[8] * m[1] * m[15] -
 		m[8] * m[3] * m[13] -
 		m[12] * m[1] * m[11] +
 		m[12] * m[3] * m[9];
-
+   
 	inv[13] = m[0] * m[9] * m[14] -
 		m[0] * m[10] * m[13] -
 		m[8] * m[1] * m[14] +
 		m[8] * m[2] * m[13] +
 		m[12] * m[1] * m[10] -
 		m[12] * m[2] * m[9];
-
+   
 	inv[2] = m[1] * m[6] * m[15] -
 		m[1] * m[7] * m[14] -
 		m[5] * m[2] * m[15] +
 		m[5] * m[3] * m[14] +
 		m[13] * m[2] * m[7] -
 		m[13] * m[3] * m[6];
-
+   
 	inv[6] = -m[0] * m[6] * m[15] +
 		m[0] * m[7] * m[14] +
 		m[4] * m[2] * m[15] -
 		m[4] * m[3] * m[14] -
 		m[12] * m[2] * m[7] +
 		m[12] * m[3] * m[6];
-
+   
 	inv[10] = m[0] * m[5] * m[15] -
 		m[0] * m[7] * m[13] -
 		m[4] * m[1] * m[15] +
 		m[4] * m[3] * m[13] +
 		m[12] * m[1] * m[7] -
 		m[12] * m[3] * m[5];
-
+   
 	inv[14] = -m[0] * m[5] * m[14] +
 		m[0] * m[6] * m[13] +
 		m[4] * m[1] * m[14] -
 		m[4] * m[2] * m[13] -
 		m[12] * m[1] * m[6] +
 		m[12] * m[2] * m[5];
-
+   
 	inv[3] = -m[1] * m[6] * m[11] +
 		m[1] * m[7] * m[10] +
 		m[5] * m[2] * m[11] -
 		m[5] * m[3] * m[10] -
 		m[9] * m[2] * m[7] +
 		m[9] * m[3] * m[6];
-
+   
 	inv[7] = m[0] * m[6] * m[11] -
 		m[0] * m[7] * m[10] -
 		m[4] * m[2] * m[11] +
 		m[4] * m[3] * m[10] +
 		m[8] * m[2] * m[7] -
 		m[8] * m[3] * m[6];
-
+   
 	inv[11] = -m[0] * m[5] * m[11] +
 		m[0] * m[7] * m[9] +
 		m[4] * m[1] * m[11] -
 		m[4] * m[3] * m[9] -
 		m[8] * m[1] * m[7] +
 		m[8] * m[3] * m[5];
-
+   
 	inv[15] = m[0] * m[5] * m[10] -
 		m[0] * m[6] * m[9] -
 		m[4] * m[1] * m[10] +
 		m[4] * m[2] * m[9] +
 		m[8] * m[1] * m[6] -
 		m[8] * m[2] * m[5];
-
+   
 	det = m[0] * inv[0] + m[1] * inv[4] + m[2] * inv[8] + m[3] * inv[12];
-
+   
 	if (det == 0)
 	{
 		return Identity();
 	}
-
-
+   
+   
 	f32 invDet = 1.0f / det;
-
+   
 	m4x4 ret;
-
+   
 	for (u32 i = 0; i < 4; i++)
 	{
 		for (u32 j = 0; j < 4; j++)
@@ -1214,10 +1214,10 @@ static m4x4 InvOrId(m4x4 mat)
 			ret.a[i][j] = inv[4 * i + j] * invDet;
 		}
 	}
-
-
+   
+   
 	return ret;
-
+   
 }
 
 static m4x4 ScaleMatrix(f32 f)
@@ -1236,14 +1236,14 @@ static v3 SolveLinearSystem(v3 column1, v3 column2, v3 column3, v3 c)
 	m3x3 m = Columns3x3(column1, column2, column3);
 	m3x3 inv = Invert(m);
 	m3x3 id = m * inv;
-
+   
 	return inv * c;
 }
 
 static u32 GCD(u32 a, u32 b)
 {
 	if (b == 0 || a == 0) return 0;
-
+   
 	u32 ret = b;
 	u32 r = a % b;
 	
@@ -1253,7 +1253,7 @@ static u32 GCD(u32 a, u32 b)
 		r = ret % r;
 		ret = temp;
 	}
-
+   
 	return ret;
 }
 
@@ -1264,7 +1264,7 @@ static u32 LCM(u32 a, u32 b)
 
 static m4x4 QuaternionToMatrix(Quaternion a)
 {
-
+   
 	f32 a2 = a.w * a.w, b2 = a.x * a.x, c2 = a.y * a.y, d2 = a.z * a.z;
 	f32 ab = a.w * a.x, ac = a.w * a.y, ad = a.w * a.z;
 	f32 bc = a.x * a.y, bd = a.x * a.z;
@@ -1273,15 +1273,15 @@ static m4x4 QuaternionToMatrix(Quaternion a)
 	f32 a11 = a2 + b2 - c2 - d2;
 	f32 a12 = 2 * (bc - ad);
 	f32 a13 = 2 * (bd + ac);
-
+   
 	f32 a21 = 2 * (bc + ad);
 	f32 a22 = a2 - b2 + c2 - d2;
 	f32 a23 = 2 * (cd - ab);
-
+   
 	f32 a31 = 2 * (bd - ac);
 	f32 a32 = 2 * (cd + ab);
 	f32 a33 = a2 - b2 - c2 + d2;
-
+   
 	//f32 a11 = a.x * a.x + a.y * a.y + a.w * a.w + a.z * a.z;
 	//f32 a12 = 2.0f * (a.x * a.y - a.w * a.z);
 	//f32 a13 = 2.0f * (a.w * a.y - a.x * a.z);
@@ -1293,7 +1293,7 @@ static m4x4 QuaternionToMatrix(Quaternion a)
 	//f32 a31 = 2.0f * (-a.w * a.y + a.x * a.z);
 	//f32 a32 = 2.0f * (a.w * a.y + a.x * a.z);
 	//f32 a33 = a.w * a.w - a.x * a.x - a.y * a.y + a.z * a.z;
-
+   
 	m4x4 ret = 
 	{
 		{
@@ -1303,7 +1303,7 @@ static m4x4 QuaternionToMatrix(Quaternion a)
 			{ 0.0f, 0.0f, 0.0f, 1.0f },
 		}
 	};
-
+   
 	return ret;
 }
 

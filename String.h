@@ -1,7 +1,6 @@
 #ifndef RR_STRING
 #define RR_STRING
 
-
 typedef unsigned char Char;
 
 static void memcpy(void *dest, void *source, u64 amount)
@@ -14,7 +13,6 @@ static void memcpy(void *dest, void *source, u64 amount)
    }
 }
 
-
 static void memset(void *dest, u8 val, u64 amount)
 {
    u8 *it = (u8*)dest;
@@ -23,8 +21,6 @@ static void memset(void *dest, u8 val, u64 amount)
       *it++ = val;
    }
 }
-
-
 
 struct String
 {
@@ -907,6 +903,7 @@ static f32 StoF(String string, b32 *success) // todo, gawd this is slow and tras
 	return ret;
 }
 
+// todo speed these two seem like they could be joined the other way around
 static f32 Eatf32(String *s, b32 *success)
 {
 	String a = *s;

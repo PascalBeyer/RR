@@ -139,14 +139,19 @@ Animation:
 Loading and saving skeletons // done ? 
 Loading and saving animations // done?
 make animations assets. // done?
+OpenGL stuff, i.e rendering it on the hardware // done?
+how to handle setup.projection, it seems it will _always_ be the same, but either orthogonal or projective...  // done?
 Animation player (save in skeleton?, save in world?)
-OpenGL stuff, i.e rendering it on the hardware
-
 
 animationInfo in assethandler
-how to handle setup.projection, it seems it will _always_ be the same, but either orthogonal or projective... 
+
 figure out how to let buffers of differant multisample counts interact.
 
 figure out a way to detect changes to the render setup, so we can reduce API calls.
 
 ctime
+
+make levels assets, do weight averageing in the loading.
+I feel like skeletons and meshes should be parralel. And so should bones and bone names
+
+check that convertNewAssets is not leaking

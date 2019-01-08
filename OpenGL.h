@@ -536,7 +536,7 @@ static void RegisterTriangleMesh(TriangleMesh *mesh)
          v->p  = mesh->positions[i];
          v->uv = mesh->uvs[i];
          v->n  = mesh->normals[i];
-         //v->c  = mesh->colors[i];
+         v->c  = mesh->colors[i];
          
          u32 unflattendIndex = mesh->skeleton.vertexMap[i];
          WeightDataArray weights = mesh->skeleton.vertexToWeightsMap[unflattendIndex];
@@ -574,11 +574,9 @@ static void RegisterTriangleMesh(TriangleMesh *mesh)
             Assert(SumV4(v->bw) == 1.0f);
          }
          
-         v->c = Pack3x8(v->bw.x * colors[v->bi.x] /*+ v->bw.y * colors[v->bi.y] + v->bw.z * colors[v->bi.z] +v->bw.w * colors[v->bi.w]*/);
       }
       
       data = packedData;
-      mesh->dumbDebugPointer = packedData;
    }
    else
    {

@@ -1,6 +1,40 @@
 #ifndef RR_RENDERER
 #define RR_RENDERER
 
+struct VertexFormatPC
+{
+	v3  p;
+	u32 c;
+};
+
+struct VertexFormatPCU
+{
+	v3  p;
+	u32 c;
+   v2  uv;
+};
+DefineArray(VertexFormatPC);
+
+struct VertexFormatPCUN
+{
+	v3  p;
+   u32 c;
+	v2  uv;
+	v3  n;
+};
+DefineArray(VertexFormatPCUN);
+
+struct VertexFormatPCUNBD
+{
+   v3  p;
+   u32 c;
+   v2  uv;
+   v3  n;
+   v4i bi;
+   v4  bw;
+};
+
+
 enum RenderGroupEntryType
 {
 	RenderGroup_EntryTexturedQuads,
@@ -394,7 +428,7 @@ static void PushAnimatedMeshImmidiet(RenderGroup *rg, TriangleMesh *mesh, Quater
 {
    Skeleton *skeleton = &mesh->skeleton;
    
-#if 0
+#if 1
 	v3Array out = PushArray(frameArena, v3, mesh->positions.amount);
    
 	for (u32 i = 0; i < mesh->positions.amount; i++)
@@ -411,7 +445,19 @@ static void PushAnimatedMeshImmidiet(RenderGroup *rg, TriangleMesh *mesh, Quater
 			out[i] += it->weight * (boneStates[it->boneIndex] * v).xyz;
 		}
 	}
-#endif
+   
+   for(u32 i = 0; i < mesh->positions.amount; i++)
+   {
+      u32 i0 = mesh->indices[i + 0];
+      u32 i1 = mesh->indices[i + 1];
+      u32 i2 = mesh->indices[i + 2];
+      
+      PushTriangle(rg, out[i0], out[i1], out[i2]);
+   }
+   
+   
+   
+#else
    
 	for (u32 i = 0; i < mesh->indices.amount; i += 3)
 	{
@@ -458,7 +504,9 @@ static void PushAnimatedMeshImmidiet(RenderGroup *rg, TriangleMesh *mesh, Quater
       }
       
 		PushTriangle(rg, p1, p2, p3, scaleColor);
-	}
+   }
+#endif
+   
 }
 
 static void PushLine(RenderGroup *rg, v3 p1, v3 p2, u32 color = 0xFFFFFFFF)

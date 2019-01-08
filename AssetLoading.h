@@ -9,8 +9,6 @@ struct UVList
 typedef UVList * UVListPtr;
 DefineArray(UVListPtr);
 
-
-// look at 1:50 in vertex vbo
 static MaterialDynamicArray LoadMTL(String path, String fileName, Arena *arena)
 {
 	MaterialDynamicArray ret = MaterialCreateDynamicArray();
@@ -67,7 +65,7 @@ static MaterialDynamicArray LoadMTL(String path, String fileName, Arena *arena)
 			head = EatToNextSpaceReturnHead(&line);
 			f32 a3 = StoF(head, &success);
          
-			cur.ambientColor = V3(a1, a2, a3);
+			cur.ka = V3(a1, a2, a3);
 		}
       
 		line = ConsumeNextLineSanitize(&string);
@@ -89,7 +87,7 @@ static MaterialDynamicArray LoadMTL(String path, String fileName, Arena *arena)
 			head = EatToNextSpaceReturnHead(&line);
 			f32 a3 = StoF(head, &success);
          
-			cur.diffuseColor = V3(a1, a2, a3);
+			cur.kd = V3(a1, a2, a3);
 		}
       
 		line = ConsumeNextLineSanitize(&string);
@@ -111,7 +109,7 @@ static MaterialDynamicArray LoadMTL(String path, String fileName, Arena *arena)
 			head = EatToNextSpaceReturnHead(&line);
 			f32 a3 = StoF(head, &success);
          
-			cur.specularColor = V3(a1, a2, a3);
+			cur.ks = V3(a1, a2, a3);
 		}
       
 		line = ConsumeNextLineSanitize(&string);
@@ -222,23 +220,33 @@ static String GetDirectioryFromFilePath(String fileName)
 	return ret;
 }
 
-static TriangleMesh ReadObj(char *fileName, Arena *arena, Arena *workingArena)
+struct ReadOBJIndex
 {
-   
+   u16 posIndex;
+   u16 uvIndex;
+   u16 normalIndex;
+};
+
+DefineArray(ReadOBJIndex)
+
+struct ReadOBJIterator
+{
+   Material mat;
+   v3Array p;
+   v2Array uv;
+   v3Array n;
+   ReadOBJIndexArray indices;
+};
+
+DefineDFArray(ReadOBJIterator);
+
+static TriangleMesh ReadObj(char *fileName, Arena *arena)
+{
 	String filename = CreateString(fileName);
 	String path = GetDirectioryFromFilePath(filename);
-	TriangleMesh ret = {};
-#if 0 // todo nuked for now, not debugging everything at once, and this needs work anyways.
-   {
-      String name = filename;
-      name = EatToCharFromBackReturnTail(&name, '/');
-      name = EatToCharReturnHead(&name, '.');
-      ret.name = name;
-   }
    
-	//ret.skeleton = {}; not neccesary, as ret has {}
-	u8 *frameArenaReset = frameArena->current;
-	defer(frameArena->current = frameArenaReset);
+   
+   //DeferReset(frameArena); caller should do that if he wants, so he could also call with arena == frameArena.
    
 	File file = LoadFile(fileName, frameArena);
 	if (!file.fileSize) return {};
@@ -256,24 +264,18 @@ static TriangleMesh ReadObj(char *fileName, Arena *arena, Arena *workingArena)
 	// todo make sure that multiples get handled, i.e make this assets.
    
 	b32 success = true;
-	u32 amountOfVertsBefore = 1;
-	u32 amountOfNormalsBefore = 1;
-	u32 amountOfUVsBefore = 1;
-	u32 amountOfIndeciesBefore = 0;
+   
 	String line = ConsumeNextLineSanitize(&string);
    
-	u16PtrDynamicArray indexPointerArray = u16PtrCreateDynamicArray();
-	IndexSetDynamicArray indexSets = IndexSetCreateDynamicArray();
+   ReadOBJIteratorDFArray stuff = ReadOBJIteratorCreateDFArray();
    
-	// begin on vertex daisy chain
-	ret.vertices.data = (VertexFormatPCUN *)arena->current;
+	//u16PtrDynamicArray indexPointerArray = u16PtrCreateDynamicArray();
    
 	while (string.length)
 	{
-		IndexSet cur;
+		ReadOBJIterator cur;
       
 		while (string.length && line.length == 0 || line[0] == '#') { line = ConsumeNextLineSanitize(&string); }
-		if (!string.length) break;
       
 		// o
 		{
@@ -285,79 +287,64 @@ static TriangleMesh ReadObj(char *fileName, Arena *arena, Arena *workingArena)
       
 		line = ConsumeNextLineSanitize(&string);
 		while (string.length && line.length == 0 || line[0] == '#') { line = ConsumeNextLineSanitize(&string); }
-		if (!string.length) break;
       
-		// todo  speed, here we first load and then copy later when we read in the triangles, not sure if we could make this better...
-      
-		BeginArray(frameArena, v3, tempVertexArray); // could silent fill and the push, which is not as "save".
-		while (line[0] == 'v' && line[1] == ' ')
+      // todo how broken of a file do we not crash on? We could just crash if the file ends in something we do not expect.
+		BeginArray(frameArena, v3, tempVertexArray);
+		while (string.length && line[0] == 'v' && line[1] == ' ')
 		{
 			Eat1(&line);
 			EatSpaces(&line);
-			String f1 = EatToNextSpaceReturnHead(&line);
+         f32 f1 = Eatf32(&line, &success);
 			EatSpaces(&line);
-			String f2 = EatToNextSpaceReturnHead(&line);
+         f32 f2 = Eatf32(&line, &success);
 			EatSpaces(&line);
-			String f3 = EatToNextSpaceReturnHead(&line);
+         f32 f3 = Eatf32(&line, &success);
          
-			f32 s1 = StoF(f1, &success);
-			f32 s2 = StoF(f2, &success);
-			f32 s3 = StoF(f3, &success);
-			v3 *val = PushStruct(frameArena, v3);
-			*val = V3(s1, s2, s3);
-         
+			*PushStruct(frameArena, v3) = V3(f1, f2, f3);
+			
 			line = ConsumeNextLineSanitize(&string);
 		}
 		EndArray(frameArena, v3, tempVertexArray);
       
 		while (string.length && line.length == 0 || line[0] == '#') { line = ConsumeNextLineSanitize(&string); }
-		if (!string.length) break;
-      
-		BeginArray(frameArena, v2, textrueCoordinates);
-		while (line[0] == 'v' && line[1] == 't')
+		
+		BeginArray(frameArena, v2, textureCoordinates);
+		while (string.length && line[0] == 'v' && line[1] == 't')
 		{
 			Eat1(&line);
 			Eat1(&line);
 			EatSpaces(&line);
-			String f1 = EatToNextSpaceReturnHead(&line);
+         f32 f1 = Eatf32(&line, &success);
 			EatSpaces(&line);
-			String f2 = EatToNextSpaceReturnHead(&line);
+         f32 f2 = Eatf32(&line, &success);
          
-			f32 s1 = StoF(f1, &success);
-			f32 s2 = StoF(f2, &success);
-			v2 *val = PushStruct(frameArena, v2);
-			*val = V2(s1, s2);
+			*PushStruct(frameArena, v2) = V2(f1, f2);
          
 			line = ConsumeNextLineSanitize(&string);
 		}
-		EndArray(frameArena, v2, textrueCoordinates);
+		EndArray(frameArena, v2, textureCoordinates);
       
 		while (string.length && line.length == 0 || line[0] == '#') { line = ConsumeNextLineSanitize(&string); }
-		if (!string.length) break;
+		
 		BeginArray(frameArena, v3, normals);
-		while (line[0] == 'v' && line[1] == 'n')
+		while (string.length && line[0] == 'v' && line[1] == 'n')
 		{
 			Eat1(&line);
 			Eat1(&line);
 			EatSpaces(&line);
-			String f1 = EatToNextSpaceReturnHead(&line);
+         f32 f1 = Eatf32(&line, &success);
 			EatSpaces(&line);
-			String f2 = EatToNextSpaceReturnHead(&line);
+         f32 f2 = Eatf32(&line, &success);
 			EatSpaces(&line);
-			String f3 = EatToNextSpaceReturnHead(&line);
+         f32 f3 = Eatf32(&line, &success);
          
-			f32 s1 = StoF(f1, &success);
-			f32 s2 = StoF(f2, &success);
-			f32 s3 = StoF(f3, &success);
-			v3 *val = PushStruct(frameArena, v3);
-			*val = V3(s1, s2, s3);
-         
+			*PushStruct(frameArena, v3) = V3(f1, f2, f3);;
+			
 			line = ConsumeNextLineSanitize(&string);
 		}
 		EndArray(frameArena, v3, normals);
       
 		while (string.length && line.length == 0 || line[0] == '#') { line = ConsumeNextLineSanitize(&string); }
-		if (!string.length) break;
       
 		// usemtl
 		{
@@ -377,7 +364,6 @@ static TriangleMesh ReadObj(char *fileName, Arena *arena, Arena *workingArena)
       
 		line = ConsumeNextLineSanitize(&string);
 		while (string.length && line.length == 0 || line[0] == '#') { line = ConsumeNextLineSanitize(&string); }
-		if (!string.length) break;
       
 		// s -smoothening, what ever that means
 		{
@@ -390,18 +376,11 @@ static TriangleMesh ReadObj(char *fileName, Arena *arena, Arena *workingArena)
       
 		line = ConsumeNextLineSanitize(&string);
 		while (string.length && line.length == 0 || line[0] == '#') { line = ConsumeNextLineSanitize(&string); }
-		if (!string.length) break;
       
+      u32 vertexArrayLength = 0;
       
-		Clear(workingArena);
-		UVListPtrArray flatten = PushZeroArray(workingArena, UVListPtr, tempVertexArray.amount);
-		u32 vertexArrayLength = 0;
-      
-		cur.offset = amountOfIndeciesBefore;
-      
-		BeginArray(frameArena, u16, indecies);
-		ArrayAdd(&indexPointerArray, indecies.data);
-		while (line[0] == 'f')
+		BeginArray(frameArena, ReadOBJIndex, indices);
+		while (string.length && line[0] == 'f')
 		{
 			Eat1(&line);
          
@@ -410,112 +389,189 @@ static TriangleMesh ReadObj(char *fileName, Arena *arena, Arena *workingArena)
 			for (u32 parseIndex = 0; parseIndex < 3; parseIndex++)
 			{
 				EatSpaces(&line);
-				String s1 = EatToCharReturnHead(&line, '/', ' ');
+				String s1 = EatToCharReturnHead(&line, '/');
 				Eat1(&line);
-				String s2 = EatToCharReturnHead(&line, '/', ' ');
+				String s2 = EatToCharReturnHead(&line, '/');
 				Eat1(&line);
 				String s3 = EatToCharReturnHead(&line, ' ');
             
+#if 1
+            // these come in "absolute".
+				u32 pIndex  = StoU(s1, &success);
+				u32 uvIndex = StoU(s2, &success);
+				u32 nIndex  = StoU(s3, &success);
+#else
             
-				u32 u1 = StoU(s1, &success) - amountOfVertsBefore;		// this has to be relative to be an index, but also saved absolute wrt the flattend array
+				u32 u1 = StoU(s1, &success) - amountOfVertsBefore;	// this has to be relative to be an index, but also saved absolute wrt the flattend array
 				u32 u2 = StoU(s2, &success) - amountOfUVsBefore;		// this is relative as we just need it to build our array
 				u32 u3 = StoU(s3, &success) - amountOfNormalsBefore;	// this is also relative 
-            
-            //todo no handling for meshes, that have more then 0xFFFE verticies
-            
-            // we are flattening trough an array of vertex positions
-				u16 flattenedIndex = 0xFFFF;
-				for (UVListPtr it = flatten[u1]; it; it = it->next)
-				{
-					if (it->uvIndex == u2 && it->normalIndex == u3)
-					{
-						flattenedIndex = it->flattendIndex;
-						break;
-					}
-				}
-            
-				if (flattenedIndex == 0xFFFF)
-				{
-					UVList *append = PushStruct(workingArena, UVList);
-					append->flattendIndex = (u16)vertexArrayLength++;
-					append->next = flatten[u1];
-					append->uvIndex = (u16)u2;
-					append->normalIndex = (u16)u3;
-					flatten[u1] = append;
-               
-					flattenedIndex = append->flattendIndex;
-				}
-            
-            u32 indexToWrite = flattenedIndex + ret.vertices.amount;
-            Assert(indexToWrite < 0xFFFF);
-            
-				*PushStruct(frameArena, u16) = (u16)(indexToWrite);
+#endif
+            ReadOBJIndex *fill =  PushStruct(frameArena, ReadOBJIndex);
+            fill->normalIndex = (u16)nIndex;
+            fill->uvIndex     = (u16)uvIndex;
+            fill->posIndex    = (u16)pIndex;
 			}
          
 			line = ConsumeNextLineSanitize(&string);
 		}
-		EndArray(frameArena, u16, indecies);
-		cur.amount = indecies.amount;
       
-		ArrayAdd(&indexSets, cur);
+		EndArray(frameArena, ReadOBJIndex, indices);
       
+      cur.p = tempVertexArray;
+      cur.n = normals;
+      cur.uv = textureCoordinates;
+      cur.indices = indices;
+      
+      ArrayAdd(&stuff, cur);
+      
+#if 0
 		amountOfIndeciesBefore += indecies.amount;
-		amountOfVertsBefore += tempVertexArray.amount;
 		amountOfNormalsBefore += normals.amount;
 		amountOfUVsBefore += textrueCoordinates.amount;
-		ret.vertices.amount += vertexArrayLength;
+      amountOfVertsBefore += tempVertexArray.amount;
+#endif
       
-		// vertexArrayLength allready incrented by flattening
-		VertexFormatPCUNArray save = PushArray(arena, VertexFormatPCUN, vertexArrayLength);
-		//
-		// WARNING, we are daisy chaining here into constantArena and into frameArena
-		//
-		For(flatten)
-		{
-			u32 it_index = (u32)(it - &flatten[0]);
-			for (UVListPtr i = *it; i; i = i->next)
-			{
-				save[i->flattendIndex].p = tempVertexArray[it_index];
-				save[i->flattendIndex].uv = textrueCoordinates[i->uvIndex];
-				save[i->flattendIndex].n = normals[i->normalIndex];
-				save[i->flattendIndex].c = 0xFFFFFFFF;
-			}
-		}
 	}
    
-	ret.indices.data = (u16 *)arena->current;
-	Assert(indexPointerArray.amount == indexSets.amount);
-	for (u32 i = 0; i < indexPointerArray.amount; i++)
-	{
-		IndexSet set = indexSets[i];
-		u16 *source = indexPointerArray[i];
-		u16 *dest = PushData(arena, u16, set.amount);
-		memcpy(dest, source, set.amount * sizeof(u16));
-	}
-	ret.indices.amount = (u32)((u16 *)arena->current - ret.indices.data);
+   // we cant do this in the loop, as arena might be frameArena
    
-	ret.indexSets = PushArray(arena, IndexSet, indexSets.amount);
-	memcpy(ret.indexSets.data, indexSets.data, indexSets.amount * sizeof(IndexSet));
+   BeginArray(arena, IndexSet, indexSets);
+   u32 amountOfVerts = 0;
+   u32 amountOfIndices = 0;
+   For(stuff)
+   {
+      IndexSet *indexSet = PushStruct(arena, IndexSet);
+      indexSet->offset = amountOfIndices;
+      indexSet->amount = it->indices.amount;
+      indexSet->mat = it->mat;
+      amountOfVerts   += it->p.amount;
+      amountOfIndices += it->indices.amount;
+   }
+   EndArray(arena, IndexSet, indexSets);
    
-	ret.type = TriangleMeshType_List;
+   
+   u16Array    indices = PushArray(arena, u16, amountOfIndices);
+   UVListPtrArray flatten = PushArray(frameArena, UVListPtr, amountOfVerts);
+   u32 flattener = 0;
+   u32 iterator = 0;
+   
+   For(s, stuff)
+   {
+      For(base, s->indices)
+      {
+         u16 pI  = base->posIndex - 1;
+         u16 nI  = base->normalIndex - 1;
+         u16 uvI = base->uvIndex - 1;
+         
+         b32 found = false;
+         u16 index = 0;
+         
+         for (UVList *it = flatten[pI]; it; it = it->next)
+         {
+            if (it->normalIndex == nI && it->uvIndex == uvI)
+            {
+               found = true;
+               index = it->flattendIndex;
+               break;
+            }
+         }
+         
+         if (!found)
+         {
+            UVList *append = PushStruct(frameArena, UVList);
+            append->flattendIndex = (u16)flattener++;
+            append->next = flatten[pI];
+            append->normalIndex = (u16)nI;
+            append->uvIndex = (u16)uvI;
+            
+            flatten[pI] = append;
+            
+            index = append->flattendIndex;
+         }
+         
+         indices[iterator++] = index;
+      }
+   }
+   
+   Assert(flattener < 0xFFFF);
+   u32 amountOfFlattendVertices = flattener;
+   //Assert(flattener == (u32)((UVList *)frameArena->current - (UVList *)flatten.data));
+   
+   v3Array positions = PushArray(arena, v3,  amountOfFlattendVertices);
+   v3Array normals   = PushArray(arena, v3,  amountOfFlattendVertices);
+   v2Array uvs       = PushArray(arena, v2,  amountOfFlattendVertices);
+   u32Array colors   = PushArray(arena, u32, amountOfFlattendVertices);
+   
+   For(base, flatten)
+   {
+      u32 base_it_index = (u32)(base - flatten.data);
+      
+      for(UVList *list = *base; list; list = list->next)
+      {
+         u32 i = list->flattendIndex;
+         
+         ReadOBJIterator *s = NULL;
+         
+         u32 pSub = 0;
+         u32 nSub = 0;
+         u32 uvSub = 0;
+         
+         For(stuff)
+         {
+            if(base_it_index - pSub < it->p.amount)
+            {
+               s = it;
+               break;
+            }
+            else
+            {
+               pSub += it->p.amount;
+               nSub += it->n.amount;
+               uvSub += it->uv.amount;
+            }
+         }
+         
+         positions[i] = s->p[base_it_index - pSub];
+         normals  [i] = s->n[list->normalIndex - nSub];
+         uvs      [i] = s->uv[list->uvIndex - uvSub];
+         colors   [i] = 0xFFFFFFFF;
+      }
+      
+   }
    
 	AABB aabb = InvertedInfinityAABB();
    
-	For(ret.vertices)
+	For(positions)
 	{
-		aabb.maxDim.x = Max(it->p.x, aabb.maxDim.x);
-		aabb.maxDim.y = Max(it->p.y, aabb.maxDim.y);
-		aabb.maxDim.z = Max(it->p.z, aabb.maxDim.z);
+		aabb.maxDim.x = Max(it->x, aabb.maxDim.x);
+		aabb.maxDim.y = Max(it->y, aabb.maxDim.y);
+		aabb.maxDim.z = Max(it->z, aabb.maxDim.z);
       
-		aabb.minDim.x = Min(it->p.x, aabb.minDim.x);
-		aabb.minDim.y = Min(it->p.y, aabb.minDim.y);
-		aabb.minDim.z = Min(it->p.z, aabb.minDim.z);
+		aabb.minDim.x = Min(it->x, aabb.minDim.x);
+		aabb.minDim.y = Min(it->y, aabb.minDim.y);
+		aabb.minDim.z = Min(it->z, aabb.minDim.z);
 	}
    
+   TriangleMesh ret;
+	ret.skeleton = {}; //not neccesary, as ret has {}
+   ret.indexSets = indexSets;
+   ret.positions = positions;
+   ret.normals = normals;
+   ret.uvs = uvs;
+   ret.colors = colors;
+   ret.indices = indices;
+	ret.type = TriangleMeshType_List;
 	ret.aabb = aabb;
    
+   {
+      String name = filename;
+      name = EatToCharFromBackReturnTail(&name, '/');
+      name = EatToCharReturnHead(&name, '.');
+      ret.name = name;
+   }
+   
 	Assert(success);
-#endif
+   
 	return ret;
 }
 

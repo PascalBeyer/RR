@@ -221,7 +221,7 @@ static void ConvertHelper(StringArray args)
 	else if(type == "obj")
 	{
 		char *nameToSave = FormatCString("mesh/%smesh", name);
-		TriangleMesh mesh = ReadObj(nameToLoad, gameState.currentStateArena, gameState.workingArena);
+		TriangleMesh mesh = ReadObj(nameToLoad, frameArena);
 		if (!mesh.positions.amount)
 		{
 			ConsoleOutputError("Probably file name wrong. Might have loaded a mesh w/0 vertices.");
