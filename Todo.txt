@@ -155,3 +155,5 @@ make levels assets, do weight averageing in the loading.
 I feel like skeletons and meshes should be parralel. And so should bones and bone names
 
 check that convertNewAssets is not leaking
+maybe rendersetup should have the shader...., because I have to repeat myself alot right now in opengl
+make a DynamicFlags entry in the Entity flags enum, which is just all of them or ed together

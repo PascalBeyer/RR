@@ -305,5 +305,13 @@ static void SaveCameraHelper(StringArray args)
 }
 
 
+static void SetLightHelper(StringArray args)
+{
+	gameState.world.lightSource.orientation = gameState.world.camera.orientation;
+   gameState.world.lightSource.pos = gameState.world.camera.pos;
+}
+
+
+
 #endif // ! RR_CONSOLECOMMANDS
 

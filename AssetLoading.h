@@ -43,7 +43,7 @@ static MaterialDynamicArray LoadMTL(String path, String fileName, Arena *arena)
 			String ident = EatToNextSpaceReturnHead(&line);
 			Assert(ident == "Ns");
 			EatSpaces(&line);
-			cur.spectularExponent = StoF(line, &success);
+			cur.specularExponent = StoF(line, &success);
 		}
       
 		line = ConsumeNextLineSanitize(&string);
@@ -145,7 +145,7 @@ static MaterialDynamicArray LoadMTL(String path, String fileName, Arena *arena)
 			String head = EatToNextSpaceReturnHead(&line);
 			f32 a1 = StoF(head, &success);
          
-			cur.indexOfReflection = a1;
+			cur.indexOfRefraction = a1;
 		}
       
 		line = ConsumeNextLineSanitize(&string);
@@ -821,6 +821,7 @@ struct DAEdata
 	DAEVisualSceneDFArray scenes;
 	DAEControllerDFArray controllers;
 	DAEMeshDFArray meshes;
+   MaterialDFArray materials;
 };
 
 static DAENode *DAEParseNode(String *line, String *remaining)
@@ -1233,7 +1234,7 @@ static DAEReturn ReadDAE(Arena *constantArena, char *fileName)
 		String effects_lib = ConsumeNextLineSanitizeEatSpaces(&remaining);
 		Assert(effects_lib == "<library_effects>");
 		// todo: this does the material, we ignore this for now
-      
+      MaterialDFArray materials = MaterialCreateDFArray(1);
       
 		while (remaining.length)
 		{
@@ -1243,752 +1244,845 @@ static DAEReturn ReadDAE(Arena *constantArena, char *fileName)
 				break;
 			}
          
-		}
-      
-		String materials_lib = ConsumeNextLineSanitizeEatSpaces(&remaining);
-		Assert(materials_lib == "<library_materials>");
-      
-		while (remaining.length)
-      
-		{
-			String line = ConsumeNextLineSanitizeEatSpaces(&remaining);
-			if (line == "</library_materials>")
-			{
-				break;
-			}
-			// todo: we do not have _real_ materials right now, so no sense in parsing this.
-		}
-	}
-   
-   
-	{ // meshes
-		String geometries_lib = ConsumeNextLineSanitizeEatSpaces(&remaining);
-		Assert(geometries_lib == "<library_geometries>");
-      
-		DAEMeshDFArray meshes = DAEMeshCreateDFArray(4);
-      
-		while (remaining.length)
-		{
-			String line = ConsumeNextLineSanitizeEatSpaces(&remaining);
-			if (line == "</library_geometries>")
-			{
-				break;
-			}
-         
-			if (BeginsWithEat(&line, "<geometry"))
-			{
-				DAEMesh mesh = {};
-            
-				{
-					mesh.id = DAEEatAttAndReturnIt(&line, "id");
-					mesh.name = DAEEatAttAndReturnIt(&line, "name");
-				}
-            
-				line = ConsumeNextLineSanitizeEatSpaces(&remaining);
-				Assert(line == "<mesh>");
-            
-            
-            
-				b32 hadVertsAllready = false;
-            
-				while (remaining.length)
-				{
-					line = ConsumeNextLineSanitizeEatSpaces(&remaining);
+         if(BeginsWith(line, "<technique"))
+         {
+            while (remaining.length)
+            {
+               line = ConsumeNextLineSanitizeEatSpaces(&remaining);
+               if (line == "</technique>")
+               {
+                  break;
+               }
                
-					if (line == "</mesh>")
-					{
-						break;
-					}
+               if(line == "<phong>")
+               {
+                  Material mat = {};
+                  while (remaining.length)
+                  {
+                     line = ConsumeNextLineSanitizeEatSpaces(&remaining);
+                     if (line == "</phong>")
+                     {
+                        break;
+                     }
+                     
+                     if(line == "<emission>")
+                     {
+                        line = ConsumeNextLineSanitizeEatSpaces(&remaining);
+                        Assert(BeginsWithEat(&line, "<color sid=\"emission\">"));
+                        f32 r = Eatf32(&line, &success);
+                        EatSpaces(&line);
+                        f32 g = Eatf32(&line, &success);
+                        EatSpaces(&line);
+                        f32 b = Eatf32(&line, &success);
+                        EatSpaces(&line);
+                        f32 a = Eatf32(&line, &success);
+                        
+                        mat.ke = V3(r, g, b);
+                        line = ConsumeNextLineSanitizeEatSpaces(&remaining);
+                     }
+                     else if(line == "<ambient>")
+                     {
+                        line = ConsumeNextLineSanitizeEatSpaces(&remaining);
+                        Assert(BeginsWithEat(&line, "<color sid=\"ambient\">"));
+                        f32 r = Eatf32(&line, &success);
+                        EatSpaces(&line);
+                        f32 g = Eatf32(&line, &success);
+                        EatSpaces(&line);
+                        f32 b = Eatf32(&line, &success);
+                        EatSpaces(&line);
+                        f32 a = Eatf32(&line, &success);
+                        
+                        mat.ka = V3(r, g, b);
+                        line = ConsumeNextLineSanitizeEatSpaces(&remaining);
+                     }
+                     else if(line == "<diffuse>")
+                     {
+                        // todo...
+                        mat.kd = V3(1, 1, 1); //not sure
+                     }
+                     else if(line == "<specular>")
+                     {
+                        line = ConsumeNextLineSanitizeEatSpaces(&remaining);
+                        Assert(BeginsWithEat(&line, "<color sid=\"specular\">"));
+                        f32 r = Eatf32(&line, &success);
+                        EatSpaces(&line);
+                        f32 g = Eatf32(&line, &success);
+                        EatSpaces(&line);
+                        f32 b = Eatf32(&line, &success);
+                        EatSpaces(&line);
+                        f32 a = Eatf32(&line, &success);
+                        
+                        mat.ks = V3(r, g, b);
+                        line = ConsumeNextLineSanitizeEatSpaces(&remaining);
+                     }
+                     else if(line == "<shininess>")
+                     {
+                        line = ConsumeNextLineSanitizeEatSpaces(&remaining);
+                        Assert(BeginsWithEat(&line, "<float sid=\"shininess\">"));
+                        f32 s = Eatf32(&line, &success);
+                        mat.specularExponent = s;
+                     }
+                     else if(line == "<index_of_refraction>")
+                     {
+                        line = ConsumeNextLineSanitizeEatSpaces(&remaining);
+                        Assert(BeginsWithEat(&line, "<float sid=\"index_of_refraction\">"));
+                        f32 s = Eatf32(&line, &success);
+                        mat.indexOfRefraction = s;
+                        line = ConsumeNextLineSanitizeEatSpaces(&remaining);
+                     }
+                  }
+                  ArrayAdd(&materials, mat);
+               }
+            }
+         }
+         
+         gatheredData.materials = materials;
+      }
+      
+      String materials_lib = ConsumeNextLineSanitizeEatSpaces(&remaining);
+      Assert(materials_lib == "<library_materials>");
+      
+      while (remaining.length)
+      
+      {
+         String line = ConsumeNextLineSanitizeEatSpaces(&remaining);
+         if (line == "</library_materials>")
+         {
+            break;
+         }
+         // todo: we do not have _real_ materials right now, so no sense in parsing this.
+      }
+   }
+   
+   
+   { // meshes
+      String geometries_lib = ConsumeNextLineSanitizeEatSpaces(&remaining);
+      Assert(geometries_lib == "<library_geometries>");
+      
+      DAEMeshDFArray meshes = DAEMeshCreateDFArray(4);
+      
+      while (remaining.length)
+      {
+         String line = ConsumeNextLineSanitizeEatSpaces(&remaining);
+         if (line == "</library_geometries>")
+         {
+            break;
+         }
+         
+         if (BeginsWithEat(&line, "<geometry"))
+         {
+            DAEMesh mesh = {};
+            
+            {
+               mesh.id = DAEEatAttAndReturnIt(&line, "id");
+               mesh.name = DAEEatAttAndReturnIt(&line, "name");
+            }
+            
+            line = ConsumeNextLineSanitizeEatSpaces(&remaining);
+            Assert(line == "<mesh>");
+            
+            
+            
+            b32 hadVertsAllready = false;
+            
+            while (remaining.length)
+            {
+               line = ConsumeNextLineSanitizeEatSpaces(&remaining);
                
-					if (BeginsWithEat(&line, "<source ")) // todo we ignore techinique_common right now
-					{
-						ArrayAdd(&mesh.sources, DAEParseSource(line, &remaining));
-					}
-					else if (BeginsWithEat(&line, "<vertices")) // why does it do this?
-					{
-						if (hadVertsAllready) { Die;  return {}; };
-                  
-						mesh.verts.id = DAEEatAttAndReturnIt(&line, "id");
-						line = ConsumeNextLineSanitizeEatSpaces(&remaining);
-                  
-						mesh.verts.inputs = DAEParseUnsharedInputs(&line, &remaining);
-						Assert(line == "</vertices>");
-					}
-					else if (BeginsWithEat(&line, "<triangles"))
-					{
-                  
-						mesh.triangles.material = DAEEatAttAndReturnIt(&line, "material");
-						String countS = DAEEatAttAndReturnIt(&line, "count");
-                  
-						mesh.triangles.count = StoU(countS, &success);
-						Assert(success);
-						line = ConsumeNextLineSanitizeEatSpaces(&remaining);
-						mesh.triangles.inputs = DAEParseSharedInputs(&line, &remaining);
-                  
-						if (!BeginsWithEat(&line, "<p>")) { Die; return {}; };
-                  
-						mesh.triangles.indexArray = EatToCharReturnHead(&line, '<'); // warning we assume that the indecies are all in one line.
-                  
-						line = ConsumeNextLineSanitizeEatSpaces(&remaining);
-						Assert(line == "</triangles>");
-                  
-					}
-					else Die;
-				}
-            
-				ArrayAdd(&meshes, mesh);
-			}
-			//else if
-		}
-		gatheredData.meshes = meshes;
-	}
-   
-	// these are the keyframes
-	{
-		String animations_lib = ConsumeNextLineSanitizeEatSpaces(&remaining);
-		Assert(animations_lib == "<library_animations>");
-      
-		DAEAnimationDFArray animations = DAEAnimationCreateDFArray(30);
-      
-		while (remaining.length)
-		{
-			String line = ConsumeNextLineSanitizeEatSpaces(&remaining);
-			if (line == "</library_animations>")
-			{
-				break;
-			}
-         
-			if (!BeginsWithEat(&line, "<animation")) { Die; return {}; }; // todo  maybe do not assume that they always look the same?
-         
-			DAEAnimation animation;
-         
-			animation.id = DAEEatAttAndReturnIt(&line, "id");
-			animation.sources = DAESourceCreateDFArray(4);
-         
-			b32 hadSampler = false;
-			b32 hadChannel = false;
-         
-			while (remaining.length)
-			{
-				line = ConsumeNextLineSanitizeEatSpaces(&remaining);
-				if (line == "</animation>")
-				{
-					break;
-				}
-            
-				if (BeginsWithEat(&line, "<source"))
-				{
-					ArrayAdd(&animation.sources, DAEParseSource(line, &remaining));
-				}
-				else if (BeginsWithEat(&line, "<sampler"))
-				{
-					Assert(!hadSampler); hadSampler = true;
-					animation.sampler.id = DAEEatAttAndReturnIt(&line, "id");
-					line = ConsumeNextLineSanitizeEatSpaces(&remaining);
-					animation.sampler.inputs = DAEParseUnsharedInputs(&line, &remaining);
-					Assert(line == "</sampler>");
-				}
-				else if (BeginsWithEat(&line, "<channel"))
-				{
-					Assert(!hadChannel); hadChannel = true;
-					animation.channel.source = DAEEatAttAndReturnIt(&line, "source");
-					animation.channel.target = DAEEatAttAndReturnIt(&line, "target");
-				}
-				else Die;
-            
-			}
-			ArrayAdd(&animations, animation);
-		}
-		gatheredData.animations = animations;
-	}
-   
-   
-	{	// this specifies the bones/joints, and tells you how the skin is attatched to them
-		String controllers_lib = ConsumeNextLineSanitizeEatSpaces(&remaining);
-		Assert(controllers_lib == "<library_controllers>");
-      
-		DAEControllerDFArray controllers = DAEControllerCreateDFArray();
-      
-		while (remaining.amount)
-		{
-			String line = ConsumeNextLineSanitizeEatSpaces(&remaining);
-			if (line == "</library_controllers>")
-			{
-				break;
-			}
-         
-			if (!BeginsWithEat(&line, "<controller")) { Die; return {}; }
-         
-			DAEController controller = {};
-         
-			controller.id = DAEEatAttAndReturnIt(&line, "id");
-			controller.name = DAEEatAttAndReturnIt(&line, "name");
-         
-			// skin
-			line = ConsumeNextLineSanitizeEatSpaces(&remaining);
-			if (!BeginsWithEat(&line, "<skin")) { Die; return {}; }
-         
-			controller.skin.skinSource = DAEEatAttAndReturnIt(&line, "source");
-         
-			while (remaining.length)
-			{
-				line = ConsumeNextLineSanitizeEatSpaces(&remaining);
-            
-				if (line == "</skin>")
-				{
-					break;
-				}
-            
-				if (BeginsWithEat(&line, "<bind_shape_matrix>"))
-				{
-					controller.skin.bind_shape_matrix = EatToCharReturnHead(&line, '<');
-				}
-				else if (BeginsWithEat(&line, "<source"))
-				{
-					ArrayAdd(&controller.skin.sources, DAEParseSource(line, &remaining));
-				}
-				else if (line == "<joints>")
-				{
-					line = ConsumeNextLineSanitizeEatSpaces(&remaining);
-					controller.skin.joints.inputs = DAEParseUnsharedInputs(&line, &remaining);
-					Assert(line == "</joints>");
-				}
-				else if (BeginsWithEat(&line, "<vertex_weights"))
-				{
-					String countS = DAEEatAttAndReturnIt(&line, "count");
-					controller.skin.vertex_weights.count = StoU(countS, &success);
-					Assert(success);
-					line = ConsumeNextLineSanitizeEatSpaces(&remaining);
-					controller.skin.vertex_weights.inputs = DAEParseSharedInputs(&line, &remaining);
-					if (!BeginsWithEat(&line, "<vcount>")) { Die; return {}; }
-					controller.skin.vertex_weights.vcount = EatToCharReturnHead(&line, '<');
-					line = ConsumeNextLineSanitizeEatSpaces(&remaining);
-					if (!BeginsWithEat(&line, "<v>")) { Die; return {}; }
-					controller.skin.vertex_weights.v = EatToCharReturnHead(&line, '<');
+               if (line == "</mesh>")
+               {
+                  break;
+               }
                
-					line = ConsumeNextLineSanitizeEatSpaces(&remaining);
-					Assert(line == "</vertex_weights>");
+               if (BeginsWithEat(&line, "<source ")) // todo we ignore techinique_common right now
+               {
+                  ArrayAdd(&mesh.sources, DAEParseSource(line, &remaining));
+               }
+               else if (BeginsWithEat(&line, "<vertices")) // why does it do this?
+               {
+                  if (hadVertsAllready) { Die;  return {}; };
+                  
+                  mesh.verts.id = DAEEatAttAndReturnIt(&line, "id");
+                  line = ConsumeNextLineSanitizeEatSpaces(&remaining);
+                  
+                  mesh.verts.inputs = DAEParseUnsharedInputs(&line, &remaining);
+                  Assert(line == "</vertices>");
+               }
+               else if (BeginsWithEat(&line, "<triangles"))
+               {
+                  
+                  mesh.triangles.material = DAEEatAttAndReturnIt(&line, "material");
+                  String countS = DAEEatAttAndReturnIt(&line, "count");
+                  
+                  mesh.triangles.count = StoU(countS, &success);
+                  Assert(success);
+                  line = ConsumeNextLineSanitizeEatSpaces(&remaining);
+                  mesh.triangles.inputs = DAEParseSharedInputs(&line, &remaining);
+                  
+                  if (!BeginsWithEat(&line, "<p>")) { Die; return {}; };
+                  
+                  mesh.triangles.indexArray = EatToCharReturnHead(&line, '<'); // warning we assume that the indecies are all in one line.
+                  
+                  line = ConsumeNextLineSanitizeEatSpaces(&remaining);
+                  Assert(line == "</triangles>");
+                  
+               }
+               else Die;
+            }
+            
+            ArrayAdd(&meshes, mesh);
+         }
+         //else if
+      }
+      gatheredData.meshes = meshes;
+   }
+   
+   // these are the keyframes
+   {
+      String animations_lib = ConsumeNextLineSanitizeEatSpaces(&remaining);
+      Assert(animations_lib == "<library_animations>");
+      
+      DAEAnimationDFArray animations = DAEAnimationCreateDFArray(30);
+      
+      while (remaining.length)
+      {
+         String line = ConsumeNextLineSanitizeEatSpaces(&remaining);
+         if (line == "</library_animations>")
+         {
+            break;
+         }
+         
+         if (!BeginsWithEat(&line, "<animation")) { Die; return {}; }; // todo  maybe do not assume that they always look the same?
+         
+         DAEAnimation animation;
+         
+         animation.id = DAEEatAttAndReturnIt(&line, "id");
+         animation.sources = DAESourceCreateDFArray(4);
+         
+         b32 hadSampler = false;
+         b32 hadChannel = false;
+         
+         while (remaining.length)
+         {
+            line = ConsumeNextLineSanitizeEatSpaces(&remaining);
+            if (line == "</animation>")
+            {
+               break;
+            }
+            
+            if (BeginsWithEat(&line, "<source"))
+            {
+               ArrayAdd(&animation.sources, DAEParseSource(line, &remaining));
+            }
+            else if (BeginsWithEat(&line, "<sampler"))
+            {
+               Assert(!hadSampler); hadSampler = true;
+               animation.sampler.id = DAEEatAttAndReturnIt(&line, "id");
+               line = ConsumeNextLineSanitizeEatSpaces(&remaining);
+               animation.sampler.inputs = DAEParseUnsharedInputs(&line, &remaining);
+               Assert(line == "</sampler>");
+            }
+            else if (BeginsWithEat(&line, "<channel"))
+            {
+               Assert(!hadChannel); hadChannel = true;
+               animation.channel.source = DAEEatAttAndReturnIt(&line, "source");
+               animation.channel.target = DAEEatAttAndReturnIt(&line, "target");
+            }
+            else Die;
+            
+         }
+         ArrayAdd(&animations, animation);
+      }
+      gatheredData.animations = animations;
+   }
+   
+   
+   {	// this specifies the bones/joints, and tells you how the skin is attatched to them
+      String controllers_lib = ConsumeNextLineSanitizeEatSpaces(&remaining);
+      Assert(controllers_lib == "<library_controllers>");
+      
+      DAEControllerDFArray controllers = DAEControllerCreateDFArray();
+      
+      while (remaining.amount)
+      {
+         String line = ConsumeNextLineSanitizeEatSpaces(&remaining);
+         if (line == "</library_controllers>")
+         {
+            break;
+         }
+         
+         if (!BeginsWithEat(&line, "<controller")) { Die; return {}; }
+         
+         DAEController controller = {};
+         
+         controller.id = DAEEatAttAndReturnIt(&line, "id");
+         controller.name = DAEEatAttAndReturnIt(&line, "name");
+         
+         // skin
+         line = ConsumeNextLineSanitizeEatSpaces(&remaining);
+         if (!BeginsWithEat(&line, "<skin")) { Die; return {}; }
+         
+         controller.skin.skinSource = DAEEatAttAndReturnIt(&line, "source");
+         
+         while (remaining.length)
+         {
+            line = ConsumeNextLineSanitizeEatSpaces(&remaining);
+            
+            if (line == "</skin>")
+            {
+               break;
+            }
+            
+            if (BeginsWithEat(&line, "<bind_shape_matrix>"))
+            {
+               controller.skin.bind_shape_matrix = EatToCharReturnHead(&line, '<');
+            }
+            else if (BeginsWithEat(&line, "<source"))
+            {
+               ArrayAdd(&controller.skin.sources, DAEParseSource(line, &remaining));
+            }
+            else if (line == "<joints>")
+            {
+               line = ConsumeNextLineSanitizeEatSpaces(&remaining);
+               controller.skin.joints.inputs = DAEParseUnsharedInputs(&line, &remaining);
+               Assert(line == "</joints>");
+            }
+            else if (BeginsWithEat(&line, "<vertex_weights"))
+            {
+               String countS = DAEEatAttAndReturnIt(&line, "count");
+               controller.skin.vertex_weights.count = StoU(countS, &success);
+               Assert(success);
+               line = ConsumeNextLineSanitizeEatSpaces(&remaining);
+               controller.skin.vertex_weights.inputs = DAEParseSharedInputs(&line, &remaining);
+               if (!BeginsWithEat(&line, "<vcount>")) { Die; return {}; }
+               controller.skin.vertex_weights.vcount = EatToCharReturnHead(&line, '<');
+               line = ConsumeNextLineSanitizeEatSpaces(&remaining);
+               if (!BeginsWithEat(&line, "<v>")) { Die; return {}; }
+               controller.skin.vertex_weights.v = EatToCharReturnHead(&line, '<');
                
-				}
-				else Die;
-			}
-			line = ConsumeNextLineSanitizeEatSpaces(&remaining);
-			Assert(line == "</controller>");
+               line = ConsumeNextLineSanitizeEatSpaces(&remaining);
+               Assert(line == "</vertex_weights>");
+               
+            }
+            else Die;
+         }
+         line = ConsumeNextLineSanitizeEatSpaces(&remaining);
+         Assert(line == "</controller>");
          
-			ArrayAdd(&controllers, controller);
-		}
-		gatheredData.controllers = controllers;
-	}
+         ArrayAdd(&controllers, controller);
+      }
+      gatheredData.controllers = controllers;
+   }
    
-	{// this build the skelleton hirachy
-		String visual_scenes_lib = ConsumeNextLineSanitizeEatSpaces(&remaining);
-		Assert(visual_scenes_lib == "<library_visual_scenes>");
-		DAEVisualSceneDFArray scenes = DAEVisualSceneCreateDFArray(2);
+   {// this build the skelleton hirachy
+      String visual_scenes_lib = ConsumeNextLineSanitizeEatSpaces(&remaining);
+      Assert(visual_scenes_lib == "<library_visual_scenes>");
+      DAEVisualSceneDFArray scenes = DAEVisualSceneCreateDFArray(2);
       
-		while (remaining.amount)
-		{
+      while (remaining.amount)
+      {
          
-			String line = ConsumeNextLineSanitizeEatSpaces(&remaining);
-			if (line == "</library_visual_scenes>")
-			{
-				break;
-			}
+         String line = ConsumeNextLineSanitizeEatSpaces(&remaining);
+         if (line == "</library_visual_scenes>")
+         {
+            break;
+         }
          
-			DAEVisualScene scene = {};
+         DAEVisualScene scene = {};
          
-			if (!BeginsWithEat(&line, "<visual_scene")) { Die; return {}; }
-			{
-				scene.id = DAEEatAttAndReturnIt(&line, "id");
-				scene.name = DAEEatAttAndReturnIt(&line, "name");
-			}
-			line = ConsumeNextLineSanitizeEatSpaces(&remaining);
-			while (BeginsWith(line, "<node"))
-			{
-				ArrayAdd(&scene.nodes, DAEParseNode(&line, &remaining));
-			}
+         if (!BeginsWithEat(&line, "<visual_scene")) { Die; return {}; }
+         {
+            scene.id = DAEEatAttAndReturnIt(&line, "id");
+            scene.name = DAEEatAttAndReturnIt(&line, "name");
+         }
+         line = ConsumeNextLineSanitizeEatSpaces(&remaining);
+         while (BeginsWith(line, "<node"))
+         {
+            ArrayAdd(&scene.nodes, DAEParseNode(&line, &remaining));
+         }
          
-			ArrayAdd(&scenes, scene);
-		}
-		gatheredData.scenes = scenes;
-	}
+         ArrayAdd(&scenes, scene);
+      }
+      gatheredData.scenes = scenes;
+   }
    
-	Assert(gatheredData.meshes.amount == 1);
+   Assert(gatheredData.meshes.amount == 1);
    
-	DAEMesh *daeMesh = gatheredData.meshes + 0;
+   DAEMesh *daeMesh = gatheredData.meshes + 0;
    
-	v3Array positions = {};
-	u32 pOffset = 0;
-	v3Array normals;
-	u32 nOffset = 0;
-	v2Array uvs;
-	u32 uvOffset = 0;
+   v3Array positions = {};
+   u32 pOffset = 0;
+   v3Array normals;
+   u32 nOffset = 0;
+   v2Array uvs;
+   u32 uvOffset = 0;
    
-	For(daeMesh->triangles.inputs)
-	{
-		if (it->semantic == "VERTEX")
-		{
-			DAESource *source = NULL;
-			For(s, daeMesh->sources)
-			{
-				if (s->id == daeMesh->verts.inputs[0].source) // this for some reason goes through the vertices thing so hack todo
-				{
-					source = s;
-					break;
-				}
-			}
+   For(daeMesh->triangles.inputs)
+   {
+      if (it->semantic == "VERTEX")
+      {
+         DAESource *source = NULL;
+         For(s, daeMesh->sources)
+         {
+            if (s->id == daeMesh->verts.inputs[0].source) // this for some reason goes through the vertices thing so hack todo
+            {
+               source = s;
+               break;
+            }
+         }
          
-			pOffset = it->offset;
+         pOffset = it->offset;
          
-			String vertIt = source->arr;
+         String vertIt = source->arr;
          
-			positions = PushArray(constantArena, v3, source->technique.count);
-			
-			For(p, positions)
-			{
-				p->x = Eatf32(&vertIt, &success);
-				EatSpaces(&vertIt);
-				p->y = Eatf32(&vertIt, &success);
-				EatSpaces(&vertIt);
-				p->z = Eatf32(&vertIt, &success);
-				EatSpaces(&vertIt);
-			}
+         positions = PushArray(constantArena, v3, source->technique.count);
          
-			Assert(success);
+         For(p, positions)
+         {
+            p->x = Eatf32(&vertIt, &success);
+            EatSpaces(&vertIt);
+            p->y = Eatf32(&vertIt, &success);
+            EatSpaces(&vertIt);
+            p->z = Eatf32(&vertIt, &success);
+            EatSpaces(&vertIt);
+         }
          
-		}
-		else if (it->semantic == "NORMAL")
-		{
-			DAESource *source = NULL;
-			For(s, daeMesh->sources)
-			{
-				if (s->id == it->source)
-				{
-					source = s;
-					break;
-				}
-			}
+         Assert(success);
          
-			nOffset = it->offset;
+      }
+      else if (it->semantic == "NORMAL")
+      {
+         DAESource *source = NULL;
+         For(s, daeMesh->sources)
+         {
+            if (s->id == it->source)
+            {
+               source = s;
+               break;
+            }
+         }
          
-			String vertIt = source->arr;
+         nOffset = it->offset;
          
-			normals = PushArray(frameArena, v3, 0);
-			
-			for (u32 i = 0; i < source->technique.count; i++)
-			{
-				v3 *p = PushStruct(frameArena, v3);
+         String vertIt = source->arr;
+         
+         normals = PushArray(frameArena, v3, 0);
+         
+         for (u32 i = 0; i < source->technique.count; i++)
+         {
+            v3 *p = PushStruct(frameArena, v3);
             
-				p->x = Eatf32(&vertIt, &success);
-				EatSpaces(&vertIt);
-				p->y = Eatf32(&vertIt, &success);
-				EatSpaces(&vertIt);
-				p->z = Eatf32(&vertIt, &success);
-				EatSpaces(&vertIt);
-			}
+            p->x = Eatf32(&vertIt, &success);
+            EatSpaces(&vertIt);
+            p->y = Eatf32(&vertIt, &success);
+            EatSpaces(&vertIt);
+            p->z = Eatf32(&vertIt, &success);
+            EatSpaces(&vertIt);
+         }
          
-			normals.amount = (u32)((v3*)frameArena->current - normals.data);
+         normals.amount = (u32)((v3*)frameArena->current - normals.data);
          
-			Assert(success);
-		}
-		else if (it->semantic == "TEXCOORD")
-		{
-			DAESource *source = NULL;
-			For(s, daeMesh->sources)
-			{
-				if (s->id == it->source)
-				{
-					source = s;
-					break;
-				}
-			}
+         Assert(success);
+      }
+      else if (it->semantic == "TEXCOORD")
+      {
+         DAESource *source = NULL;
+         For(s, daeMesh->sources)
+         {
+            if (s->id == it->source)
+            {
+               source = s;
+               break;
+            }
+         }
          
-			uvOffset = it->offset;
+         uvOffset = it->offset;
          
-			String vertIt = source->arr;
+         String vertIt = source->arr;
          
-			uvs = PushArray(frameArena, v2, 0);
-			
-			for (u32 i = 0; i < source->technique.count; i++)
-			{
-				v2 *p = PushStruct(frameArena, v2);
+         uvs = PushArray(frameArena, v2, 0);
+         
+         for (u32 i = 0; i < source->technique.count; i++)
+         {
+            v2 *p = PushStruct(frameArena, v2);
             
-				p->u = Eatf32(&vertIt, &success);
-				EatSpaces(&vertIt);
-				p->v = Eatf32(&vertIt, &success);
-				EatSpaces(&vertIt);
-			}
+            p->u = Eatf32(&vertIt, &success);
+            EatSpaces(&vertIt);
+            p->v = Eatf32(&vertIt, &success);
+            EatSpaces(&vertIt);
+         }
          
-			uvs.amount = (u32)((v2*)frameArena->current - uvs.data);
+         uvs.amount = (u32)((v2*)frameArena->current - uvs.data);
          
-			Assert(success);
-		}
-		else Die;
-	}
+         Assert(success);
+      }
+      else Die;
+   }
    
-	u32 flattener = 0;
+   u32 flattener = 0;
    
-	UVListPtrArray flatten = PushZeroArray(frameArena, UVListPtr, positions.amount);
-	DAETriangles *daeTs = &daeMesh->triangles;
-	String indIt = daeTs->indexArray;
-	u16Array indices = PushArray(constantArena, u16, daeTs->count * 3u);
+   UVListPtrArray flatten = PushZeroArray(frameArena, UVListPtr, positions.amount);
+   DAETriangles *daeTs = &daeMesh->triangles;
+   String indIt = daeTs->indexArray;
+   u16Array indices = PushArray(constantArena, u16, daeTs->count * 3u);
    
-	for (u32 i = 0; i < daeTs->count * 3u; i++) // todo: assuming 3 inputs : p, n, uv
-	{
-		u32 pI = Eatu32(&indIt, &success);
-		EatSpaces(&indIt);
-		u32 nI = Eatu32(&indIt, &success);
-		EatSpaces(&indIt);
-		u32 uvI = Eatu32(&indIt, &success);
-		EatSpaces(&indIt);
+   for (u32 i = 0; i < daeTs->count * 3u; i++) // todo: assuming 3 inputs : p, n, uv
+   {
+      u32 pI = Eatu32(&indIt, &success);
+      EatSpaces(&indIt);
+      u32 nI = Eatu32(&indIt, &success);
+      EatSpaces(&indIt);
+      u32 uvI = Eatu32(&indIt, &success);
+      EatSpaces(&indIt);
       
-		b32 found = false;
-		u16 index = 0;
+      b32 found = false;
+      u16 index = 0;
       
-		for (UVList *it = flatten[pI]; it; it = it->next)
-		{
-			if (it->normalIndex == nI && it->uvIndex == uvI)
-			{
-				found = true;
-				index = it->flattendIndex;
-				break;
-			}
-		}
+      for (UVList *it = flatten[pI]; it; it = it->next)
+      {
+         if (it->normalIndex == nI && it->uvIndex == uvI)
+         {
+            found = true;
+            index = it->flattendIndex;
+            break;
+         }
+      }
       
-		if (!found)
-		{
-			UVList *append = PushStruct(frameArena, UVList);
+      if (!found)
+      {
+         UVList *append = PushStruct(frameArena, UVList);
          Assert(flattener < 0xFFFF);
-			append->flattendIndex = (u16)flattener++;
-			append->next = flatten[pI];
-			append->normalIndex = (u16)nI;
-			append->uvIndex = (u16)uvI;
+         append->flattendIndex = (u16)flattener++;
+         append->next = flatten[pI];
+         append->normalIndex = (u16)nI;
+         append->uvIndex = (u16)uvI;
          
-			flatten[pI] = append;
+         flatten[pI] = append;
          
-			index = append->flattendIndex;
-		}
+         index = append->flattendIndex;
+      }
       
-		indices[i] = index;
-	}
+      indices[i] = index;
+   }
    
-	u16Array skeletonVertexMap = PushArray(constantArena, u16, flattener);
+   u16Array skeletonVertexMap = PushArray(constantArena, u16, flattener);
    v3Array  flatPositions = PushArray(constantArena, v3,  flattener);
    v3Array  flatNormals   = PushArray(constantArena, v3,  flattener);
    v2Array  flatUvs       = PushArray(constantArena, v2,  flattener);
    u32Array flatColors    = PushArray(constantArena, u32, flattener);
    
-	For(flatten)
-	{
-		u16 it_index = (u16)(it - flatten.data);
-		for (UVList *c = *it; c; c = c->next)
-		{
+   For(flatten)
+   {
+      u16 it_index = (u16)(it - flatten.data);
+      for (UVList *c = *it; c; c = c->next)
+      {
          u32 i = c->flattendIndex;
          flatColors[i]    = 0xFFFFFFFF;
          flatPositions[i] = positions[it_index];
-			flatNormals[i]   = normals[c->normalIndex];
+         flatNormals[i]   = normals[c->normalIndex];
          flatUvs[i]       = uvs[c->uvIndex];
          
-			skeletonVertexMap[i] = it_index;
-		}
-	}
+         skeletonVertexMap[i] = it_index;
+      }
+   }
    
-	Assert(gatheredData.controllers.amount == 1);
+   Assert(gatheredData.controllers.amount == 1);
    
-	DAESkin *daeSkin = &gatheredData.controllers[0].skin;
+   DAESkin *daeSkin = &gatheredData.controllers[0].skin;
    
    // todo  is there a  good way to make him shut up about these having to be initialized?
-	StringArray boneNames = {};
-	m4x4Array inverseBindShapeMatrixArray = {};
+   StringArray boneNames = {};
+   m4x4Array inverseBindShapeMatrixArray = {};
    
-	For(i, daeSkin->joints.inputs)
-	{
-		if (i->semantic == "JOINT")
-		{
-			DAESource *source = NULL;
-			For(s, daeSkin->sources)
-			{
-				if (i->source == s->id)
-				{
-					source = s;
-					break;
-				}
-			}
+   For(i, daeSkin->joints.inputs)
+   {
+      if (i->semantic == "JOINT")
+      {
+         DAESource *source = NULL;
+         For(s, daeSkin->sources)
+         {
+            if (i->source == s->id)
+            {
+               source = s;
+               break;
+            }
+         }
          
-			String nameIt = source->arr;
-			boneNames = PushArray(frameArena, String, source->technique.count); // arena? // /source->technique.stride
+         String nameIt = source->arr;
+         boneNames = PushArray(frameArena, String, source->technique.count); // arena? // /source->technique.stride
          
-			For(boneNames)
-			{
-				*it = EatToNextSpaceReturnHead(&nameIt);
-				EatSpaces(&nameIt);
-			}
-			Assert(!nameIt.amount);
-		}
-		else if (i->semantic == "INV_BIND_MATRIX")
-		{
-			DAESource *source = NULL;
-			For(s, daeSkin->sources)
-			{
-				if (i->source == s->id)
-				{
-					source = s;
-					break;
-				}
-			}
+         For(boneNames)
+         {
+            *it = EatToNextSpaceReturnHead(&nameIt);
+            EatSpaces(&nameIt);
+         }
+         Assert(!nameIt.amount);
+      }
+      else if (i->semantic == "INV_BIND_MATRIX")
+      {
+         DAESource *source = NULL;
+         For(s, daeSkin->sources)
+         {
+            if (i->source == s->id)
+            {
+               source = s;
+               break;
+            }
+         }
          
-			String nameIt = source->arr;
-			//u32 amount = source->elementCount / source->technique.stride;
+         String nameIt = source->arr;
+         //u32 amount = source->elementCount / source->technique.stride;
          
-			inverseBindShapeMatrixArray = PushArray(frameArena, m4x4, source->technique.count); // arena?
+         inverseBindShapeMatrixArray = PushArray(frameArena, m4x4, source->technique.count); // arena?
          
-			For(inverseBindShapeMatrixArray)
-			{
-				*it = Eatm4x4(&nameIt, &success);
-			}
-			Assert(success);
-			Assert(!nameIt.amount);
-		}
-	}
+         For(inverseBindShapeMatrixArray)
+         {
+            *it = Eatm4x4(&nameIt, &success);
+         }
+         Assert(success);
+         Assert(!nameIt.amount);
+      }
+   }
    
-	Assert(inverseBindShapeMatrixArray.amount == boneNames.amount);
-	u32 amountOfBones = boneNames.amount;
+   Assert(inverseBindShapeMatrixArray.amount == boneNames.amount);
+   u32 amountOfBones = boneNames.amount;
    
    
-	// <vcount>, <v> describes a map,  position <-> vcount  and then the corresponding vcount entries in <v> give the weight data.
-	// position is not linearized
-	Assert(daeSkin->vertex_weights.count == positions.amount);
+   // <vcount>, <v> describes a map,  position <-> vcount  and then the corresponding vcount entries in <v> give the weight data.
+   // position is not linearized
+   Assert(daeSkin->vertex_weights.count == positions.amount);
    
-	f32Array weights;
-	StringArray jointNames;
+   f32Array weights;
+   StringArray jointNames;
    
-	For(i, daeSkin->vertex_weights.inputs)
-	{
-		if (i->semantic == "WEIGHT")
-		{
-			DAESource *source = NULL;
-			For(s, daeSkin->sources)
-			{
-				if (s->id == i->source)
-				{
-					source = s;
-					break;
-				}
-			}
+   For(i, daeSkin->vertex_weights.inputs)
+   {
+      if (i->semantic == "WEIGHT")
+      {
+         DAESource *source = NULL;
+         For(s, daeSkin->sources)
+         {
+            if (s->id == i->source)
+            {
+               source = s;
+               break;
+            }
+         }
          
-			String weightIt = source->arr;
-			weights = PushArray(frameArena, f32, source->technique.count); //arena?
+         String weightIt = source->arr;
+         weights = PushArray(frameArena, f32, source->technique.count); //arena?
          
-			For(weights)
-			{
-				*it = Eatf32(&weightIt, &success);
-				EatSpaces(&weightIt);
-			}
-			Assert(success);
-		}
-		else if (i->semantic == "JOINT")
-		{
-			DAESource *source = NULL;
-			For(s, daeSkin->sources)
-			{
-				if (s->id == i->source)
-				{
-					source = s;
-					break;
-				}
-			}
+         For(weights)
+         {
+            *it = Eatf32(&weightIt, &success);
+            EatSpaces(&weightIt);
+         }
+         Assert(success);
+      }
+      else if (i->semantic == "JOINT")
+      {
+         DAESource *source = NULL;
+         For(s, daeSkin->sources)
+         {
+            if (s->id == i->source)
+            {
+               source = s;
+               break;
+            }
+         }
          
-			String jointIt = source->arr;
-			jointNames = PushArray(frameArena, String, source->technique.count); //arena?
+         String jointIt = source->arr;
+         jointNames = PushArray(frameArena, String, source->technique.count); //arena?
          
-			For(jointNames)
-			{
-				*it = EatToNextSpaceReturnHead(&jointIt);
-				EatSpaces(&jointIt);
-			}
-			Assert(success);
-		}
-	}
+         For(jointNames)
+         {
+            *it = EatToNextSpaceReturnHead(&jointIt);
+            EatSpaces(&jointIt);
+         }
+         Assert(success);
+      }
+   }
    
    // collect weights
-	WeightDataArrayArray vertexToWeightsMap = PushArray(constantArena, WeightDataArray, positions.amount);
+   WeightDataArrayArray vertexToWeightsMap = PushArray(constantArena, WeightDataArray, positions.amount);
    
-	String vCountIt = daeSkin->vertex_weights.vcount;
-	String vIt = daeSkin->vertex_weights.v;
+   String vCountIt = daeSkin->vertex_weights.vcount;
+   String vIt = daeSkin->vertex_weights.v;
    
-	For(weightArray, vertexToWeightsMap)
-	{
-		u32 amountOfWeights = Eatu32(&vCountIt, &success);
-		*weightArray = PushArray(constantArena, WeightData, amountOfWeights);
-		EatSpaces(&vCountIt);
-		For(*weightArray)
-		{
-			it->boneIndex = Eatu32(&vIt, &success);
-			EatSpaces(&vIt);
-			u32 weightIndex = Eatu32(&vIt, &success);
-			it->weight = weights[weightIndex];
-			EatSpaces(&vIt);
-		}
+   For(weightArray, vertexToWeightsMap)
+   {
+      u32 amountOfWeights = Eatu32(&vCountIt, &success);
+      *weightArray = PushArray(constantArena, WeightData, amountOfWeights);
+      EatSpaces(&vCountIt);
+      For(*weightArray)
+      {
+         it->boneIndex = Eatu32(&vIt, &success);
+         EatSpaces(&vIt);
+         u32 weightIndex = Eatu32(&vIt, &success);
+         it->weight = weights[weightIndex];
+         EatSpaces(&vIt);
+      }
       
       SortByWeight(*weightArray);
-	}
-	Assert(success);
+   }
+   Assert(success);
    
    //collect animation
-	m4x4ArrayArray matrixArrayPerBone = PushArray(frameArena, m4x4Array, amountOfBones);
-	f32ArrayArray timeArrayPerBone = PushArray(frameArena, f32Array, amountOfBones);
+   m4x4ArrayArray matrixArrayPerBone = PushArray(frameArena, m4x4Array, amountOfBones);
+   f32ArrayArray timeArrayPerBone = PushArray(frameArena, f32Array, amountOfBones);
    
-	Assert(gatheredData.animations.amount == amountOfBones);
+   Assert(gatheredData.animations.amount == amountOfBones);
    
-	For(a, gatheredData.animations)
-	{
-		u32 it_index = (u32)(a - gatheredData.animations.data);
-		For(i, a->sampler.inputs)
-		{
-			if (i->semantic == "INPUT")
-			{
-				DAESource *source = NULL;
-				For(s, a->sources)
-				{
-					if (s->id == i->source)
-					{
-						source = s;
-						break;
-					}
-				}
+   For(a, gatheredData.animations)
+   {
+      u32 it_index = (u32)(a - gatheredData.animations.data);
+      For(i, a->sampler.inputs)
+      {
+         if (i->semantic == "INPUT")
+         {
+            DAESource *source = NULL;
+            For(s, a->sources)
+            {
+               if (s->id == i->source)
+               {
+                  source = s;
+                  break;
+               }
+            }
             
-				String timeIt = source->arr;
+            String timeIt = source->arr;
             
-				timeArrayPerBone[it_index] = PushArray(frameArena, f32, source->technique.count);
-				For(timeArrayPerBone[it_index])
-				{
-					*it = Eatf32(&timeIt, &success);
-					EatSpaces(&timeIt);
-				}
-				Assert(success);
+            timeArrayPerBone[it_index] = PushArray(frameArena, f32, source->technique.count);
+            For(timeArrayPerBone[it_index])
+            {
+               *it = Eatf32(&timeIt, &success);
+               EatSpaces(&timeIt);
+            }
+            Assert(success);
             
-			}
-			else if (i->semantic == "OUTPUT")
-			{
-				DAESource *source = NULL;
-				For(s, a->sources)
-				{
-					if (s->id == i->source)
-					{
-						source = s;
-						break;
-					}
-				}
+         }
+         else if (i->semantic == "OUTPUT")
+         {
+            DAESource *source = NULL;
+            For(s, a->sources)
+            {
+               if (s->id == i->source)
+               {
+                  source = s;
+                  break;
+               }
+            }
             
-				String matIt = source->arr;
+            String matIt = source->arr;
             
-				matrixArrayPerBone[it_index] = PushArray(frameArena, m4x4, source->technique.count);
-				For(matrixArrayPerBone[it_index])
-				{
-					*it = Eatm4x4(&matIt, &success);
-					EatSpaces(&matIt);
-				}
-				Assert(success);
-			}
-		}
-	}
+            matrixArrayPerBone[it_index] = PushArray(frameArena, m4x4, source->technique.count);
+            For(matrixArrayPerBone[it_index])
+            {
+               *it = Eatm4x4(&matIt, &success);
+               EatSpaces(&matIt);
+            }
+            Assert(success);
+         }
+      }
+   }
    
-	u32 amountOfKeyFrames = timeArrayPerBone[0].amount;
-	for (u32 i = 0; i < amountOfBones; i++)
-	{
-		Assert(timeArrayPerBone[i].amount == amountOfKeyFrames);
-		Assert(matrixArrayPerBone[i].amount == amountOfKeyFrames);
-	}
+   u32 amountOfKeyFrames = timeArrayPerBone[0].amount;
+   for (u32 i = 0; i < amountOfBones; i++)
+   {
+      Assert(timeArrayPerBone[i].amount == amountOfKeyFrames);
+      Assert(matrixArrayPerBone[i].amount == amountOfKeyFrames);
+   }
    
-	for (u32 j = 0; j < amountOfKeyFrames; j++)
-	{
-		f32 time = timeArrayPerBone[0][j];
+   for (u32 j = 0; j < amountOfKeyFrames; j++)
+   {
+      f32 time = timeArrayPerBone[0][j];
       
-		for (u32 i = 0; i < amountOfBones; i++)
-		{
-			Assert(time == timeArrayPerBone[i][j]);
-		}
-	}
+      for (u32 i = 0; i < amountOfBones; i++)
+      {
+         Assert(time == timeArrayPerBone[i][j]);
+      }
+   }
    
-	KeyFrameArray keyFrames = PushArray(constantArena, KeyFrame, amountOfKeyFrames);
+   KeyFrameArray keyFrames = PushArray(constantArena, KeyFrame, amountOfKeyFrames);
    
-	For(keyFrames)
-	{
-		u32 it_index = (u32)(it - keyFrames.data);
-		it->boneStates = PushArray(constantArena, InterpolationData, amountOfBones);
+   For(keyFrames)
+   {
+      u32 it_index = (u32)(it - keyFrames.data);
+      it->boneStates = PushArray(constantArena, InterpolationData, amountOfBones);
       
-		for (u32 i = 0; i < amountOfBones; i++)
-		{
-			it->boneStates[i] = MatrixToInterpolationData(matrixArrayPerBone[i][it_index]);
-		}
+      for (u32 i = 0; i < amountOfBones; i++)
+      {
+         it->boneStates[i] = MatrixToInterpolationData(matrixArrayPerBone[i][it_index]);
+      }
       
-		it->t = timeArrayPerBone[0][it_index]; // as they are all the same
-	}
+      it->t = timeArrayPerBone[0][it_index]; // as they are all the same
+   }
    
 #if 0
-	skeleton.boneNames = jointNames; // right now these break // todo todo todo
-	skeleton.boneTransformes = boneTransformes;
+   skeleton.boneNames = jointNames; // right now these break // todo todo todo
+   skeleton.boneTransformes = boneTransformes;
 #endif
    
-	BoneArray bones = PushArray(constantArena, Bone, amountOfBones);
-	Assert(gatheredData.scenes.amount == 1);
+   BoneArray bones = PushArray(constantArena, Bone, amountOfBones);
+   Assert(gatheredData.scenes.amount == 1);
    
-	m4x4 bindShapeMatrix = Eatm4x4(&gatheredData.controllers[0].skin.bind_shape_matrix, &success);
-	Assert(success);
+   m4x4 bindShapeMatrix = Eatm4x4(&gatheredData.controllers[0].skin.bind_shape_matrix, &success);
+   Assert(success);
    
-	BuildBoneArray(bones, gatheredData.scenes[0].nodes[0], boneNames, inverseBindShapeMatrixArray, 0xFFFFFFFF, constantArena, bindShapeMatrix);
+   BuildBoneArray(bones, gatheredData.scenes[0].nodes[0], boneNames, inverseBindShapeMatrixArray, 0xFFFFFFFF, constantArena, bindShapeMatrix);
    
-	Skeleton skeleton;
-	skeleton.vertices = positions;
-	skeleton.vertexMap = skeletonVertexMap;
-	skeleton.vertexToWeightsMap = vertexToWeightsMap;
-	skeleton.bones = bones;
+   Skeleton skeleton;
+   skeleton.vertices = positions;
+   skeleton.vertexMap = skeletonVertexMap;
+   skeleton.vertexToWeightsMap = vertexToWeightsMap;
+   skeleton.bones = bones;
    
-	TriangleMesh triangleMesh;
-	triangleMesh.type      = TriangleMeshType_List;
-	triangleMesh.indices   = indices;
-	triangleMesh.positions = flatPositions;
+   TriangleMesh triangleMesh;
+   triangleMesh.type      = TriangleMeshType_List;
+   triangleMesh.indices   = indices;
+   triangleMesh.positions = flatPositions;
    triangleMesh.uvs       = flatUvs;
    triangleMesh.normals   = flatNormals;
    triangleMesh.colors    = flatColors;
    
-	triangleMesh.indexSets = PushArray(constantArena, IndexSet, 1);
-	triangleMesh.indexSets[0].mat = {};
-	triangleMesh.indexSets[0].offset = 0;
-	triangleMesh.indexSets[0].amount = indices.amount;
-	triangleMesh.name = CopyString(gatheredData.scenes[0].nodes[1]->name, constantArena);
-	triangleMesh.skeleton = skeleton;
+   triangleMesh.indexSets = PushArray(constantArena, IndexSet, 1);
+   triangleMesh.indexSets[0].mat = gatheredData.materials[0];
+   triangleMesh.indexSets[0].offset = 0;
+   triangleMesh.indexSets[0].amount = indices.amount;
+   triangleMesh.name = CopyString(gatheredData.scenes[0].nodes[1]->name, constantArena);
+   triangleMesh.skeleton = skeleton;
    
-	AABB aabb = InvertedInfinityAABB();
+   AABB aabb = InvertedInfinityAABB();
    
-	For(triangleMesh.positions)
-	{
-		aabb.maxDim.x = Max(it->x, aabb.maxDim.x);
-		aabb.maxDim.y = Max(it->y, aabb.maxDim.y);
-		aabb.maxDim.z = Max(it->z, aabb.maxDim.z);
+   For(triangleMesh.positions)
+   {
+      aabb.maxDim.x = Max(it->x, aabb.maxDim.x);
+      aabb.maxDim.y = Max(it->y, aabb.maxDim.y);
+      aabb.maxDim.z = Max(it->z, aabb.maxDim.z);
       
-		aabb.minDim.x = Min(it->x, aabb.minDim.x);
-		aabb.minDim.y = Min(it->y, aabb.minDim.y);
-		aabb.minDim.z = Min(it->z, aabb.minDim.z);
-	}
+      aabb.minDim.x = Min(it->x, aabb.minDim.x);
+      aabb.minDim.y = Min(it->y, aabb.minDim.y);
+      aabb.minDim.z = Min(it->z, aabb.minDim.z);
+   }
    
-	triangleMesh.aabb = aabb;
+   triangleMesh.aabb = aabb;
    
-	KeyFramedAnimation animation;
-	animation.keyFrames = keyFrames;
-	animation.length = keyFrames[amountOfKeyFrames - 1].t;
-	String name = S(fileName);
-	name = EatToCharFromBackReturnTail(&name, '/');
-	name = EatToCharReturnHead(&name, '.');
-	animation.animationName = CopyString(name, constantArena);
-	animation.meshName = triangleMesh.name;
+   KeyFramedAnimation animation;
+   animation.keyFrames = keyFrames;
+   animation.length = keyFrames[amountOfKeyFrames - 1].t;
+   String name = S(fileName);
+   name = EatToCharFromBackReturnTail(&name, '/');
+   name = EatToCharReturnHead(&name, '.');
+   animation.animationName = CopyString(name, constantArena);
+   animation.meshName = triangleMesh.name;
    
-	DAEReturn ret;
-	ret.animation = animation;
-	ret.mesh = triangleMesh;
-	ret.success = success;
+   DAEReturn ret;
+   ret.animation = animation;
+   ret.mesh = triangleMesh;
+   ret.success = success;
    
    
-	return ret;
+   return ret;
 }
 
 
@@ -2001,267 +2095,267 @@ at += (arr).amount * sizeof(type);
 
 static void UnloadMesh(AssetInfo *info)
 {
-	Assert(info->currentlyLoaded);
-	Assert(info->type == Asset_Mesh);
+   Assert(info->currentlyLoaded);
+   Assert(info->type == Asset_Mesh);
    
-	DynamicFree(info->meshInfo->fileLocation);
+   DynamicFree(info->meshInfo->fileLocation);
 }
 
 static TriangleMesh LoadMesh(AssetHandler *assetHandler, char *fileName, void **filePtr)
 {
-	//return {};
-	TriangleMesh ret;
+   //return {};
+   TriangleMesh ret;
    
-	File file = LoadFile(fileName);
-	if (!file.fileSize) return {};
-	*filePtr = file.data;
-	u8 *at = (u8 *)file.memory;
+   File file = LoadFile(fileName);
+   if (!file.fileSize) return {};
+   *filePtr = file.data;
+   u8 *at = (u8 *)file.memory;
    
-	u32 version = PullOff(u32);
+   u32 version = PullOff(u32);
    
-	Assert(version == 1);
+   Assert(version == 1);
    
-	PullOffArray(Char, ret.name);
+   PullOffArray(Char, ret.name);
    
-	ret.type = PullOff(u32);
+   ret.type = PullOff(u32);
    
    PullOffArray(v3,  ret.positions);
    PullOffArray(u32, ret.colors);
    PullOffArray(v2,  ret.uvs);
    PullOffArray(v3,  ret.normals);
-	
-	PullOffArray(u16, ret.indices);
-	PullOffArray(IndexSet, ret.indexSets);
    
-	For(ret.indexSets)
-	{
-		it->mat.name.length = PullOff(u32);
-		it->mat.name.data = (Char *)at;
-		at += it->mat.name.length * sizeof(Char);
-		at++; // to get it zero Terminated
-      
-		it->mat.texturePath.length = PullOff(u32);
-		it->mat.texturePath.data = (Char *)at;
-		at += it->mat.texturePath.length * sizeof(Char);
-		at++; // to get it zero Terminated
-      
-		it->mat.bitmapID = RegisterAsset(assetHandler, Asset_Texture, (char *)it->mat.texturePath.data);
-	}
+   PullOffArray(u16, ret.indices);
+   PullOffArray(IndexSet, ret.indexSets);
    
-	ret.aabb = PullOff(AABB);
+   For(ret.indexSets)
+   {
+      it->mat.name.length = PullOff(u32);
+      it->mat.name.data = (Char *)at;
+      at += it->mat.name.length * sizeof(Char);
+      at++; // to get it zero Terminated
+      
+      it->mat.texturePath.length = PullOff(u32);
+      it->mat.texturePath.data = (Char *)at;
+      at += it->mat.texturePath.length * sizeof(Char);
+      at++; // to get it zero Terminated
+      
+      it->mat.bitmapID = RegisterAsset(assetHandler, Asset_Texture, (char *)it->mat.texturePath.data);
+   }
+   
+   ret.aabb = PullOff(AABB);
    
 #if 0
    
-	{ // vertex to weight map
-		*PushStruct(frameArena, u32) = skeleton->vertexToWeightsMap.amount;
-		For(skeleton->vertexToWeightsMap)
-		{
-			*PushStruct(frameArena, u32) = it->amount;
-			WeightDataArray dest = PushArray(frameArena, WeightData, it->amount);
-			memcpy(dest.data, it->data, it->amount * sizeof(WeightData));
-		}
-	}
+   { // vertex to weight map
+      *PushStruct(frameArena, u32) = skeleton->vertexToWeightsMap.amount;
+      For(skeleton->vertexToWeightsMap)
+      {
+         *PushStruct(frameArena, u32) = it->amount;
+         WeightDataArray dest = PushArray(frameArena, WeightData, it->amount);
+         memcpy(dest.data, it->data, it->amount * sizeof(WeightData));
+      }
+   }
    
 #endif
-	PullOffArray(v3, ret.skeleton.vertices);
-	PullOffArray(u16, ret.skeleton.vertexMap);
+   PullOffArray(v3, ret.skeleton.vertices);
+   PullOffArray(u16, ret.skeleton.vertexMap);
    
-	PullOffArray(WeightDataArray, ret.skeleton.vertexToWeightsMap);
-	For(ret.skeleton.vertexToWeightsMap)
-	{
-		PullOffArray(WeightData, *it);
-	}
+   PullOffArray(WeightDataArray, ret.skeleton.vertexToWeightsMap);
+   For(ret.skeleton.vertexToWeightsMap)
+   {
+      PullOffArray(WeightData, *it);
+   }
    
-	PullOffArray(Bone, ret.skeleton.bones);
-	// todo update mesh!
-	RegisterTriangleMesh(&ret);
+   PullOffArray(Bone, ret.skeleton.bones);
+   // todo update mesh!
+   RegisterTriangleMesh(&ret);
    
-	return ret;
+   return ret;
 }
 
 #define PushOn(type, val) *PushStruct(arena, type) = val
 
 #define PushOnArray(type, arr)								\
 {															\
-	*PushStruct(arena, u32) = (arr).amount;						\
-	type##Array dest = PushArray(arena, type, (arr).amount);	\
-	memcpy(dest.data, (arr).data, (arr).amount * sizeof(type)); \
+   *PushStruct(arena, u32) = (arr).amount;						\
+   type##Array dest = PushArray(arena, type, (arr).amount);	\
+   memcpy(dest.data, (arr).data, (arr).amount * sizeof(type)); \
 }
 // todo PushOn, PushOnArray
 static void WriteTriangleMesh(TriangleMesh mesh, char *fileName) // todo : when we feel bored, we can make this a bit mor efficient
 {
-	File file;
-	// begin of daisy chain
-	file.memory = PushData(frameArena, u8, 0);
+   File file;
+   // begin of daisy chain
+   file.memory = PushData(frameArena, u8, 0);
    
-	Arena *arena = frameArena;
+   Arena *arena = frameArena;
    
-	PushOn(u32, 1);// version Number
+   PushOn(u32, 1);// version Number
    
-	PushOnArray(u8, mesh.name);
+   PushOnArray(u8, mesh.name);
    
-	PushOn(u32, mesh.type);
+   PushOn(u32, mesh.type);
    
    PushOnArray(v3,  mesh.positions);
    PushOnArray(u32, mesh.colors);
    PushOnArray(v2,  mesh.uvs);
    PushOnArray(v3,  mesh.normals);
    
-	PushOnArray(u16, mesh.indices);
-	PushOnArray(IndexSet, mesh.indexSets);
+   PushOnArray(u16, mesh.indices);
+   PushOnArray(IndexSet, mesh.indexSets);
    
-	For(mesh.indexSets)
-	{
-		Material mat = it->mat;
+   For(mesh.indexSets)
+   {
+      Material mat = it->mat;
       
-		*PushStruct(frameArena, u32) = mat.name.length;
-		Char *dest1 = PushData(frameArena, Char, mat.name.length);
-		memcpy(dest1, mat.name.data, mat.name.length * sizeof(Char));
-		PushZeroStruct(frameArena, Char); // to get it zero Terminated
+      *PushStruct(frameArena, u32) = mat.name.length;
+      Char *dest1 = PushData(frameArena, Char, mat.name.length);
+      memcpy(dest1, mat.name.data, mat.name.length * sizeof(Char));
+      PushZeroStruct(frameArena, Char); // to get it zero Terminated
       
-		*PushStruct(frameArena, u32) = mat.texturePath.length;
-		Char *dest2 = PushData(frameArena, Char, mat.texturePath.length);
-		memcpy(dest2, mat.texturePath.data, mat.texturePath.length * sizeof(Char));
-		PushZeroStruct(frameArena, Char); // to get it zero Terminated
-	}
+      *PushStruct(frameArena, u32) = mat.texturePath.length;
+      Char *dest2 = PushData(frameArena, Char, mat.texturePath.length);
+      memcpy(dest2, mat.texturePath.data, mat.texturePath.length * sizeof(Char));
+      PushZeroStruct(frameArena, Char); // to get it zero Terminated
+   }
    
-	*PushStruct(frameArena, AABB) = mesh.aabb;
+   *PushStruct(frameArena, AABB) = mesh.aabb;
    
-	// skeleton // untested
-	Skeleton *skeleton = &mesh.skeleton;
+   // skeleton // untested
+   Skeleton *skeleton = &mesh.skeleton;
    
-	{ // vertices
-		PushOnArray(v3, skeleton->vertices);
-	}
+   { // vertices
+      PushOnArray(v3, skeleton->vertices);
+   }
    
    
-	{ // vertex Map
-		PushOnArray(u16, skeleton->vertexMap);
-	}
+   { // vertex Map
+      PushOnArray(u16, skeleton->vertexMap);
+   }
    
-	{ // vertex to weight map
-		PushOnArray(WeightDataArray, skeleton->vertexToWeightsMap);
+   { // vertex to weight map
+      PushOnArray(WeightDataArray, skeleton->vertexToWeightsMap);
       
-		For(skeleton->vertexToWeightsMap)
-		{
-			PushOnArray(WeightData, *it);
-		}
-	}
+      For(skeleton->vertexToWeightsMap)
+      {
+         PushOnArray(WeightData, *it);
+      }
+   }
    
-	{ // bones
-		PushOnArray(Bone, skeleton->bones);
-	}
+   { // bones
+      PushOnArray(Bone, skeleton->bones);
+   }
    
-	file.fileSize = (u32)(frameArena->current - (u8 *)file.memory);
+   file.fileSize = (u32)(frameArena->current - (u8 *)file.memory);
    
-	WriteEntireFile(fileName, file);
+   WriteEntireFile(fileName, file);
 }
 
 static bool WriteAnimation(char *fileName, KeyFramedAnimation animation) // untested
 {
-	File file = PushArray(frameArena, u8, 0);
+   File file = PushArray(frameArena, u8, 0);
    
-	Arena *arena = frameArena;
+   Arena *arena = frameArena;
    
-	PushOn(u32, 0); // version Number
-	PushOnArray(u8, animation.animationName);
-	PushOnArray(u8, animation.meshName);
-	PushOnArray(KeyFrame, animation.keyFrames);
-	For(animation.keyFrames)
-	{
-		PushOnArray(InterpolationData, it->boneStates);
-	}
+   PushOn(u32, 0); // version Number
+   PushOnArray(u8, animation.animationName);
+   PushOnArray(u8, animation.meshName);
+   PushOnArray(KeyFrame, animation.keyFrames);
+   For(animation.keyFrames)
+   {
+      PushOnArray(InterpolationData, it->boneStates);
+   }
    
-	EndArray(frameArena, u8, file);
-	return WriteEntireFile(fileName, file);
+   EndArray(frameArena, u8, file);
+   return WriteEntireFile(fileName, file);
 }
 
 static KeyFramedAnimation LoadAnimation(char *fileName) // untested
 {
-	File file = LoadFile(fileName);
-	if (!file.fileSize) return {};
+   File file = LoadFile(fileName);
+   if (!file.fileSize) return {};
    
-	u8 *at = file.memory;
+   u8 *at = file.memory;
    
-	KeyFramedAnimation ret;
-	u32 version = PullOff(u32);
-	Assert(version == 0);
-	PullOffArray(Char, ret.animationName);
-	PullOffArray(Char, ret.meshName);
-	PullOffArray(KeyFrame, ret.keyFrames);
-	For(ret.keyFrames)
-	{
-		PullOffArray(InterpolationData, it->boneStates);
-	}
+   KeyFramedAnimation ret;
+   u32 version = PullOff(u32);
+   Assert(version == 0);
+   PullOffArray(Char, ret.animationName);
+   PullOffArray(Char, ret.meshName);
+   PullOffArray(KeyFrame, ret.keyFrames);
+   For(ret.keyFrames)
+   {
+      PullOffArray(InterpolationData, it->boneStates);
+   }
    
-	// we assume there are more then zero keyFrames...
-	ret.length = ret.keyFrames[ret.keyFrames.amount - 1].t;
+   // we assume there are more then zero keyFrames...
+   ret.length = ret.keyFrames[ret.keyFrames.amount - 1].t;
    
-	return ret;
+   return ret;
 }
 
 static Bitmap DownSampleTexture(Bitmap bitmap)
 {
-	u32 bitmapWidth = (bitmap.width >> 1);
-	u32 bitmapHeight = (bitmap.height >> 1);
+   u32 bitmapWidth = (bitmap.width >> 1);
+   u32 bitmapHeight = (bitmap.height >> 1);
    
-	u32* data = PushData(frameArena, u32, bitmapWidth * bitmapHeight);
+   u32* data = PushData(frameArena, u32, bitmapWidth * bitmapHeight);
    
-	for (u32 h = 0; h < bitmapHeight; h++)
-	{
-		for (u32 w = 0; w < bitmapWidth; w++)
-		{
-			v4 ul = Unpack4x8(*GetPixel(bitmap, 2 * w, 2 * h));
-			v4 ur = Unpack4x8(*GetPixel(bitmap, 2 * w + 1, 2 * h));
-			v4 ll = Unpack4x8(*GetPixel(bitmap, 2 * w, 2 * h + 1));
-			v4 lr = Unpack4x8(*GetPixel(bitmap, 2 * w + 1, 2 * h + 1));
-			data[h * bitmapWidth + w] = Pack4x8(0.25f * (ul + ur + ll + lr));
-		}
-	}
-	return CreateBitmap(data, bitmapWidth, bitmapHeight);
+   for (u32 h = 0; h < bitmapHeight; h++)
+   {
+      for (u32 w = 0; w < bitmapWidth; w++)
+      {
+         v4 ul = Unpack4x8(*GetPixel(bitmap, 2 * w, 2 * h));
+         v4 ur = Unpack4x8(*GetPixel(bitmap, 2 * w + 1, 2 * h));
+         v4 ll = Unpack4x8(*GetPixel(bitmap, 2 * w, 2 * h + 1));
+         v4 lr = Unpack4x8(*GetPixel(bitmap, 2 * w + 1, 2 * h + 1));
+         data[h * bitmapWidth + w] = Pack4x8(0.25f * (ul + ur + ll + lr));
+      }
+   }
+   return CreateBitmap(data, bitmapWidth, bitmapHeight);
 }
 static bool LoadBitmapIntoBitmap(char *filefile, Bitmap *texture)
 {
-	File file = LoadFile(filefile);
-	defer(FreeFile(file));
-	if (!file.fileSize) return false;
-	u8 *at = (u8 *)file.memory;
-	u32 version = *(u32 *)at;
-	Assert(version == 1);
-	at += sizeof(u32);
-	u32 width = *(u32 *)at;
-	at += sizeof(u32);
-	u32 height = *(u32 *)at;
-	at += sizeof(u32);
+   File file = LoadFile(filefile);
+   defer(FreeFile(file));
+   if (!file.fileSize) return false;
+   u8 *at = (u8 *)file.memory;
+   u32 version = *(u32 *)at;
+   Assert(version == 1);
+   at += sizeof(u32);
+   u32 width = *(u32 *)at;
+   at += sizeof(u32);
+   u32 height = *(u32 *)at;
+   at += sizeof(u32);
    
-	memcpy(texture->pixels, at, width * height * sizeof(u32));
+   memcpy(texture->pixels, at, width * height * sizeof(u32));
    
-	texture->height = height;
-	texture->width = width;
-	return true;
+   texture->height = height;
+   texture->width = width;
+   return true;
 }
 
 
 static void WriteTexture(char *fileName, Bitmap bitmap)
 {
-	DeferRestore(frameArena);
+   DeferRestore(frameArena);
    
-	Assert(bitmap.height == Asset_Bitmap_Size);
-	Assert(bitmap.width == Asset_Bitmap_Size);
-	Assert(bitmap.pixels);
+   Assert(bitmap.height == Asset_Bitmap_Size);
+   Assert(bitmap.width == Asset_Bitmap_Size);
+   Assert(bitmap.pixels);
    
-	u8 *data = PushData(frameArena, u8, 0);
+   u8 *data = PushData(frameArena, u8, 0);
    
-	*PushStruct(frameArena, u32) = 1; // version
-	*PushStruct(frameArena, u32) = bitmap.width;
-	*PushStruct(frameArena, u32) = bitmap.height;
-	u32 *pixels = PushData(frameArena, u32, bitmap.width * bitmap.height);
-	memcpy(pixels, bitmap.pixels, bitmap.width * bitmap.height * sizeof(u32));
+   *PushStruct(frameArena, u32) = 1; // version
+   *PushStruct(frameArena, u32) = bitmap.width;
+   *PushStruct(frameArena, u32) = bitmap.height;
+   u32 *pixels = PushData(frameArena, u32, bitmap.width * bitmap.height);
+   memcpy(pixels, bitmap.pixels, bitmap.width * bitmap.height * sizeof(u32));
    
-	u32 fileSize = (u32)(frameArena->current - data);
+   u32 fileSize = (u32)(frameArena->current - data);
    
-	File file = CreateFile(data, fileSize);
-	WriteEntireFile(fileName, file);
+   File file = CreateFile(data, fileSize);
+   WriteEntireFile(fileName, file);
 }
 
 #undef PullOff

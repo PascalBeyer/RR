@@ -33,14 +33,14 @@
 
 #include "AssetHandler.h"
 
+
+#include "Entity.h"
 #include "Generation.h"
 
 #include "KdTree.h"
 
 #include "SoundMixer.h"
 #include "Renderer.h"
-
-#include "Entity.h"
 
 #include "PathCreator.h"
 
@@ -161,15 +161,12 @@ static GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHa
    
 	ret.currentStateArena = InitArena(PushData(constantArena, u8, constantArenaRestCapacity), constantArenaRestCapacity);
    
+   // todo load this together with level
 	ret.world = InitWorld(ret.currentStateArena, &ret.assetHandler, (u32)screenWidth, (u32)screenHeight);
 	ret.executeData = InitExecute();
    
 	ChangeExecuteState(&ret.world, &ret.executeData, Execute_PathCreator);
    
-   
-	f32 pifac = 6.0f * 0.25f * pi32;
-	Quaternion standartRotation = QuaternionFromAngleAxis(pifac, V3(1, 0, 0));
-	
 #if 0
 	For(ret.assetHandler.textureCatalog)
 	{
@@ -185,7 +182,7 @@ static GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHa
 	}
 #endif
 	
-	LoadLevel(CreateString("OneDude"), &ret.world, ret.currentStateArena, &ret.assetHandler, &ret.editor);
+	LoadLevel(CreateString("bridge"), &ret.world, ret.currentStateArena, &ret.assetHandler, &ret.editor);
    
 	SwitchGameMode(&ret, Game_Editor);
 	
@@ -207,7 +204,6 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
    
 	Camera *cam = debugCam ? &world->debugCamera : &world->camera;
    
-	Tweekable(v3, lightPos);
 	f32 aspectRatio = world->camera.aspectRatio;
 	f32 focalLength = world->camera.focalLength;
    
@@ -289,7 +285,7 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
       }break;
       case Game_Editor:
       {
-         UpdateEditor(editor, world, input);
+         UpdateEditor(editor, world, cam, input);
          
       }break;
 	}
@@ -298,7 +294,7 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
 	RenderGroup *rg = &renderGroup;
 	ClearPushBuffer(rg);
    
-	PushRenderSetup(rg, *cam, lightPos, (Setup_Projective | Setup_ShadowMapping));
+	PushRenderSetup(rg, *cam, world->lightSource, (Setup_Projective | Setup_ShadowMapping));
 	PushClear(rg, V4(1.0f, 0.1f, 0.1f, 0.1f));
    
 	Tweekable(b32, DrawMeshOutlines);
@@ -313,7 +309,7 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
 			transformedAABB.minDim *= it->scale;
 			transformedAABB.maxDim *= it->scale;
          
-			m4x4 mat = Translate(QuaternionToMatrix(it->orientation), GetRenderPos(*it, world->t));
+			m4x4 mat = Translate(QuaternionToMatrix4(it->orientation), GetRenderPos(*it, world->t));
          
          
 			v3 d1 = V3(transformedAABB.maxDim.x - transformedAABB.minDim.x, 0, 0);
@@ -356,7 +352,7 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
 		}
 	}
    
-	PushDebugPointCuboid(rg, lightPos);
+	PushDebugPointCuboid(rg, world->lightSource.pos);
    
 	v4 allColorsOfTheRainbow[] =
 	{
@@ -379,27 +375,26 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
       
 	};
    
-	cam = &world->camera;
-   
-	v3 camV1 = cam->basis.d1;
-	v3 camV2 = cam->basis.d2;
-	v3 camV3 = cam->basis.d3;
-   
 	Tweekable(b32, drawCamera);
    
 	if (drawCamera)
 	{
+      
+      Camera *camera = &world->camera;
+      
+      m3x3 camM = QuaternionToMatrix3(camera->orientation);
+      
 		float camBoxSize = 0.4f;
       
-		v3 camPos = cam->pos;
+		v3 camPos = camera->pos;
       
 		PushDebugPointCuboid(rg, camPos);
       
-		PushLine(rg, cam->pos, cam->pos + camV1, 0xFFFF0000);
-		PushLine(rg, cam->pos, cam->pos + camV2, 0xFF00FF00);
-		PushLine(rg, cam->pos, cam->pos + camV3, 0xFF0000FF);
+		PushLine(rg, camera->pos, camera->pos + camM * V3(1, 0, 0), 0xFFFF0000);
+		PushLine(rg, camera->pos, camera->pos + camM * V3(0, 1, 0), 0xFF00FF00);
+		PushLine(rg, camera->pos, camera->pos + camM * V3(0, 0, 1), 0xFF0000FF);
       
-		m4x4 proj = Projection(aspectRatio, focalLength) * CameraTransform(camV1, camV2, camV3, camPos);
+		m4x4 proj = Projection(aspectRatio, focalLength) * CameraTransform(camera->orientation, camera->pos);
 		m4x4 inv = InvOrId(proj);
 		m4x4 id = proj * inv;
 		v3 p1 = inv * V3(-1, -1, -1);
@@ -408,10 +403,10 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
 		v3 p4 = inv * V3(1, 1, -1);
 		PushQuadrilateral(rg, p1, p2, p3, p4, V4(0.5f, 1.0f, 0.0f, 0.0f));
       
-		v3 pp1 = i12(ScreenZeroToOneToInGame(*cam, V2(0.0f, 0.0f)));
-		v3 pp2 = i12(ScreenZeroToOneToInGame(*cam, V2(1.0f, 0.0f)));
-		v3 pp3 = i12(ScreenZeroToOneToInGame(*cam, V2(0.0f, 1.0f)));
-		v3 pp4 = i12(ScreenZeroToOneToInGame(*cam, V2(1.0f, 1.0f)));
+		v3 pp1 = i12(ScreenZeroToOneToInGame(*camera, V2(0.0f, 0.0f)));
+		v3 pp2 = i12(ScreenZeroToOneToInGame(*camera, V2(1.0f, 0.0f)));
+		v3 pp3 = i12(ScreenZeroToOneToInGame(*camera, V2(0.0f, 1.0f)));
+		v3 pp4 = i12(ScreenZeroToOneToInGame(*camera, V2(1.0f, 1.0f)));
 		PushQuadrilateral(rg, pp1, pp2, pp3, pp4, V4(0.5f, 0.0f, 1.0f, 0.0f));
 	}
    
@@ -446,7 +441,7 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
       t += dt;
       m4x4Array boneStates = CalculateBoneTransforms(&mesh->skeleton, animation, t);
       //PushAnimatedMeshImmidiet(rg, mesh, {1, 0, 0, 0}, V3(), 1.0f, V4(0.1f, 0.1f, 0.1f, 0.1f), boneStates);
-      PushAnimatedMesh(rg, mesh, {1, 0, 0, 0}, V3(0, 0, 0), 1.0f, V4(1.0f, 1.0f, 1.0f, 1.0f), boneStates);
+      PushAnimatedMesh(rg, mesh, QuaternionId(), V3(0, 0, 0), 1.0f, V4(1.0f, 1.0f, 1.0f, 1.0f), boneStates);
    }
 	//AnimationTestStuff(rg, &ret, dt);
 	

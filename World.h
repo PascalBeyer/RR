@@ -4,30 +4,20 @@
 
 //Righthanded coordinates, +Z going into the screen, +Y is "down" ? , +X is to the right
 //todo just store the projection matrix instead of aspectratio and focal length?
-struct Camera // todo quaternion
+struct Camera
 {
 	v3 pos;
 	f32 aspectRatio;
 	f32 focalLength;
    
-	union
-	{
-		Vector3Basis basis;
-      
-		struct 
-		{
-			v3 b1;
-			v3 b2;
-			v3 b3;
-		};
-	};
+	Quaternion orientation;
 };
 
 
 static v2 ScreenZeroToOneToInGame(Camera cam, v2 point)
 {
    
-	m4x4 proj = Projection(cam.aspectRatio, cam.focalLength) * CameraTransform(cam.basis.d1, cam.basis.d2, cam.basis.d3, cam.pos);
+	m4x4 proj = Projection(cam.aspectRatio, cam.focalLength) * CameraTransform(cam.orientation, cam.pos);
 	m4x4 inv = InvOrId(proj);
    
 	v3 p1 = inv * V3(-1, -1, -1);
@@ -48,7 +38,7 @@ static v2 ScreenZeroToOneToInGame(Camera cam, v2 point)
 static v3 ScreenZeroToOneToZ(Camera cam, v2 point, i32 z)
 {
    
-	m4x4 proj = Projection(cam.aspectRatio, cam.focalLength) * CameraTransform(cam.basis.d1, cam.basis.d2, cam.basis.d3, cam.pos);
+	m4x4 proj = Projection(cam.aspectRatio, cam.focalLength) * CameraTransform(cam.orientation, cam.pos);
 	m4x4 inv = InvOrId(proj);
    
 	v3 p1 = inv * V3(-1, -1, -1);
@@ -69,7 +59,7 @@ static v3 ScreenZeroToOneToZ(Camera cam, v2 point, i32 z)
 static v3 ScreenZeroToOneToScreenInGame(Camera cam, v2 point)
 {
    
-	m4x4 proj = Projection(cam.aspectRatio, cam.focalLength) * CameraTransform(cam.basis.d1, cam.basis.d2, cam.basis.d3, cam.pos);
+	m4x4 proj = Projection(cam.aspectRatio, cam.focalLength) * CameraTransform(cam.orientation, cam.pos);
 	m4x4 inv = InvOrId(proj);
    
 	v3 p1 = inv * V3(-1, -1, -1);
@@ -88,7 +78,7 @@ static v3 ScreenZeroToOneToScreenInGame(Camera cam, v2 point)
 
 static v3 ScreenZeroToOneToDirecion(Camera cam, v2 point)
 {
-	m4x4 proj = Projection(cam.aspectRatio, cam.focalLength) * CameraTransform(cam.basis.d1, cam.basis.d2, cam.basis.d3, cam.pos);
+	m4x4 proj = Projection(cam.aspectRatio, cam.focalLength) * CameraTransform(cam.orientation, cam.pos);
 	m4x4 inv = InvOrId(proj);
    
 	v3 p1 = inv * V3(-1, -1, -1);
@@ -327,6 +317,7 @@ static void UpdateCamGame(Input *input, Camera *camera)
    
 }
 
+#if 0
 static void UpdateCamFocus(Input *input, Camera *camera, DEBUGKeyTracker *tracker)
 {
 	v3 focusPoint = V3(ScreenZeroToOneToInGame(*camera, V2(0.5f, 0.5f)), 0.0f);
@@ -406,6 +397,7 @@ static void UpdateCamGodMode(Input *input, Camera *cam, DEBUGKeyTracker tracker)
    
 	
 }
+#endif
 
 #endif 
 

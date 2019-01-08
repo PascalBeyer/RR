@@ -1,3 +1,4 @@
+
 #ifndef RR_MATH
 #define RR_MATH
 
@@ -498,7 +499,17 @@ struct Quaternion
 	};
 };
 
-static Quaternion QuaternionFromAngleAxis(f32 angle, v3 rotationAxis)
+static Quaternion QuaternionId()
+{
+   Quaternion ret;
+   ret.w = 1;
+   ret.x = 0;
+   ret.y = 0;
+   ret.z = 0;
+   return ret;
+}
+
+static Quaternion AxisAngleToQuaternion(f32 angle, v3 rotationAxis)
 {
 	v3 normalized = Normalize(rotationAxis);
 	Quaternion ret;
@@ -735,7 +746,7 @@ static m3x3 Columns3x3(v3 X, v3 Y, v3 Z) // spalten
 }
 
 
-static v3 operator*(m3x3 a, v3 p)
+static v3 operator*(m3x3 a, v3 p) // tested, don't fall for this a third time.
 {
 	v3 r;
 	// second one is row 
@@ -1061,6 +1072,7 @@ static m4x4 CameraTransform(v3 X, v3 Y, v3 Z, v3 P)
 	return(R);
 }
 
+
 static m4x4 Orthogonal(float width, float height)
 {
 	m4x4 R =
@@ -1262,7 +1274,7 @@ static u32 LCM(u32 a, u32 b)
 	return (a * b) / GCD(a, b);
 }
 
-static m4x4 QuaternionToMatrix(Quaternion a)
+static m4x4 QuaternionToMatrix4(Quaternion a)
 {
    
 	f32 a2 = a.w * a.w, b2 = a.x * a.x, c2 = a.y * a.y, d2 = a.z * a.z;
@@ -1306,6 +1318,111 @@ static m4x4 QuaternionToMatrix(Quaternion a)
    
 	return ret;
 }
+
+static v3 B1(Quaternion a)
+{
+   f32 a2 = a.w * a.w; 
+   f32 b2 = a.x * a.x;
+   f32 c2 = a.y * a.y;
+   f32 d2 = a.z * a.z;
+	f32 ad = a.w * a.z;
+	f32 bc = a.x * a.y;
+   f32 ac = a.w * a.y;
+   f32 bd = a.x * a.z;
+   
+   f32 a11 = a2 + b2 - c2 - d2;
+   f32 a21 = 2 * (bc + ad);
+   f32 a31 = 2 * (bd - ac);
+   
+   return V3(a11, a21, a31);
+}
+
+static v3 B3(Quaternion a)
+{
+   f32 a2 = a.w * a.w; 
+   f32 b2 = a.x * a.x;
+   f32 c2 = a.y * a.y;
+   f32 d2 = a.z * a.z;
+   
+   f32 ac = a.w * a.y;
+   f32 bd = a.x * a.z;
+   f32 ab = a.w * a.x;
+   f32 cd = a.y * a.z;
+   
+   f32 a13 = 2 * (bd + ac);
+   f32 a23 = 2 * (cd - ab);
+   f32 a33 = a2 - b2 - c2 + d2;
+   
+   return V3(a13, a23, a33);
+}
+
+static v3 B2(Quaternion a)
+{
+   f32 a2 = a.w * a.w; 
+   f32 b2 = a.x * a.x;
+   f32 c2 = a.y * a.y;
+   f32 d2 = a.z * a.z;
+   
+	f32 ad = a.w * a.z;
+	f32 bc = a.x * a.y;
+   f32 ab = a.w * a.x;
+   f32 cd = a.y * a.z;
+   
+   f32 a12 = 2 * (bc - ad);
+   f32 a22 = a2 - b2 + c2 - d2;
+   f32 a32 = 2 * (cd + ab);
+   
+   return V3(a12, a22, a32);
+}
+
+static m3x3 QuaternionToMatrix3(Quaternion a)
+{
+   
+	f32 a2 = a.w * a.w; 
+   f32 b2 = a.x * a.x;
+   f32 c2 = a.y * a.y;
+   f32 d2 = a.z * a.z;
+	f32 ab = a.w * a.x;
+   f32 ac = a.w * a.y;
+   f32 ad = a.w * a.z;
+	f32 bc = a.x * a.y;
+   f32 bd = a.x * a.z;
+	f32 cd = a.y * a.z;
+	
+	f32 a11 = a2 + b2 - c2 - d2;
+	f32 a12 = 2 * (bc - ad);
+	f32 a13 = 2 * (bd + ac);
+   
+	f32 a21 = 2 * (bc + ad);
+	f32 a22 = a2 - b2 + c2 - d2;
+	f32 a23 = 2 * (cd - ab);
+   
+	f32 a31 = 2 * (bd - ac);
+	f32 a32 = 2 * (cd + ab);
+	f32 a33 = a2 - b2 - c2 + d2;
+   
+	m3x3 ret = 
+	{
+		{
+			{a11, a12, a13},
+			{a21, a22, a23},
+			{a31, a32, a33},
+			
+		}
+	};
+   
+	return ret;
+}
+
+
+static m4x4 CameraTransform(Quaternion q, v3 P)
+{
+	m4x4 R = QuaternionToMatrix4(q);
+	R = Translate(R, -(R*P));
+	return(R);
+}
+
+
 
 #endif
 

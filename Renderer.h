@@ -63,7 +63,7 @@ struct RenderSetup
 {
 	m4x4 projection;
 	m4x4 cameraTransform;
-	v3 lightPos;
+   LightSource lightSource;
 	v3 cameraPos; 
 	u32 flag;
 };
@@ -191,7 +191,7 @@ static void ClearPushBuffer(RenderGroup *rg)
 	rg->commands->pushBufferSize = 0;
 }
 
-static void PushRenderSetup(RenderGroup *rg, Camera camera, v3 lightPos, u32 flag)
+static void PushRenderSetup(RenderGroup *rg, Camera camera, LightSource lightSource, u32 flag)
 {
 	TimedBlock;
    
@@ -207,7 +207,7 @@ static void PushRenderSetup(RenderGroup *rg, Camera camera, v3 lightPos, u32 fla
       case Setup_Projective:
       {
          m4x4 proj = Projection(commands->aspectRatio, camera.focalLength);
-         m4x4 cameraTransform = CameraTransform(camera.basis.d1, camera.basis.d2, camera.basis.d3, camera.pos);
+         m4x4 cameraTransform = CameraTransform(camera.orientation, camera.pos);
          setup->projection = proj;
          setup->cameraTransform = cameraTransform;
          
@@ -238,7 +238,7 @@ static void PushRenderSetup(RenderGroup *rg, Camera camera, v3 lightPos, u32 fla
 	rg->currentQuads = NULL;
 	
 	setup->cameraPos = camera.pos;
-	setup->lightPos = lightPos;
+	setup->lightSource = lightSource;
 	setup->flag = flag;
    
 	rg->setup = *setup;

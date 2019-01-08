@@ -46,11 +46,8 @@ in vec3 vertP;
 in vec4 vertC;
 
 #ifdef Textured
-in vec2 vertUV;
-#endif
-
-#ifdef Textured
-smooth out vec2 fragCoord;
+in v2 vertUV;
+smooth out v2 fragCoord;
 #endif
 
 #ifdef ShadowMapping
@@ -59,9 +56,14 @@ smooth out vec4 shadowCoord;
 
 #ifdef Phong
 in vec3 vertN;
-uniform float specularExponent;
-smooth out float cosinAttenuation;
-smooth out float specular;
+uniform f32 specularExponent;
+uniform v3 ka;
+uniform v3 kd;
+uniform v3 ks;
+
+smooth out v3 ambient;
+smooth out v3 diffuse;
+smooth out v3 specular;
 #endif
 
 #ifdef Animated
@@ -80,6 +82,10 @@ void main(void)
    
    v4 inputVertex = vec4(vertP, 1);
    
+#ifdef Textured
+   fragCoord = vertUV;
+#endif
+   
 #ifdef Animated
    v3 animatedVertex = V3(0, 0, 0);
    
@@ -95,10 +101,6 @@ void main(void)
    vec4 vertexInCameraSpace = cameraTransform * inputVertex;
    gl_Position = projection * vertexInCameraSpace;
    
-#ifdef Textured
-   fragCoord = vertUV; // not neccesary if I call them the same? inout is a thing
-#endif
-   
 #ifdef ShadowMapping
 #ifdef Animated // hack
    inputVertex = boneWeights[0] * boneStates[boneIndices[0]] * inputVertex;
@@ -111,7 +113,7 @@ void main(void)
    // but the camera transform should be an isometry so whatevs
    
    // simple ambient light ka
-   //v3 ambient = 0.1 * V3(1, 1, 1);
+   ambient = ka;
    
    // simple diffuse light
    vec3 point = vertexInCameraSpace.xyz;
@@ -119,17 +121,15 @@ void main(void)
    vec3 normal = normalize(transformedNormal.xyz);
    
    vec3 lightDirection = normalize(lightPos - point);
-   cosinAttenuation = max(dot(lightDirection, normal), 0);
    
-   //v3 diffuse = cosinusAttenuation * 0.5 * V3(1, 1, 1);
+   diffuse = max(dot(lightDirection, normal), 0) * kd;
    
    // simple specular light
    vec3 incomingLightDir = -lightDirection;
    vec3 reflected = reflect(incomingLightDir, normal); //incomingLightDir - 2.0 * dot(incomingLightDir, normal) * normal;
    vec3 viewing = normalize(-point);
    float specularBase = max(dot(viewing, reflected),0);
-   specular = pow(specularBase, specularExponent);
-   specular = 0;
+   specular = pow(specularBase, specularExponent) * ks;
 #endif
    
 }
@@ -140,8 +140,9 @@ void main(void)
 smooth in vec4 fragColor;
 
 #ifdef Phong
-smooth in float cosinAttenuation;
-smooth in float specular;
+smooth in v3 ambient;
+smooth in v3 specular;
+smooth in v3 diffuse;
 #endif
 
 #ifdef ShadowMapping
@@ -172,11 +173,6 @@ void main(void)
    colorFactor *= visibility;
    
 #endif
-   
-#ifdef Phong
-   colorFactor *= cosinAttenuation;
-#endif
-   
    resultColor =  vec4(colorFactor * fragColor.rgb, fragColor.a);
    
 #ifdef Textured
@@ -184,7 +180,7 @@ void main(void)
 #endif
    
 #ifdef Phong
-   resultColor += vec4(specular);
+   resultColor = V4(diffuse, 1.0f) * resultColor + 0.1 * V4(ambient, 0.0f) + V4(specular, 0.0f);
 #endif
    
 }

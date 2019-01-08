@@ -1,42 +1,14 @@
 
-static World InitWorld(Arena *currentStateArena, AssetHandler *assetHandler, u32 screenWidth, u32 screenHeight)
-{
-	World ret = {};
-   
-	ret.lightSource = V3(20, 0, -20);
-	ret.camera.pos = V3(0, 0, -5);
-	ret.camera.basis = v3StdBasis;
-	ret.camera.aspectRatio = (f32)screenWidth / (f32)screenHeight;
-	ret.camera.focalLength = 1.0f;
-   
-	ret.debugCamera = ret.camera;
-	ret.loadedLevel = EmptyLevel();
-	ret.entityTree = InitOctTree(currentStateArena, 100);
-	ret.entities = EntityCreateDynamicArray();
-	ret.entitySerializer = 0;
-	ret.entitySerialMap = u32CreateDynamicArray();
-	ret.t = 0.0f;
-   
-	b32 success = true;
-	ret.blockMeshId = RegisterAsset(assetHandler, Asset_Mesh, "block.mesh", &success);
-	ret.dudeMeshId = RegisterAsset(assetHandler, Asset_Mesh, "dude.mesh", &success);
-	//Assert(success);
-   
-	return ret;
-}
-
 static bool WriteLevel(char *fileName, World world, AssetHandler *assetHandler)
 {
 	u8 *mem = PushData(frameArena, u8, 0);
    
-	*PushStruct(frameArena, u32) = 4; // Version number, do not remove
+	*PushStruct(frameArena, u32) = 5; // Version number, do not remove
    
-	*PushStruct(frameArena, v3) = world.lightSource;
+	*PushStruct(frameArena, LightSource) = world.lightSource;
    
-	*PushStruct(frameArena, v3)	 = world.loadedLevel.camera.pos;
-	*PushStruct(frameArena, v3)	 = world.loadedLevel.camera.b1;
-	*PushStruct(frameArena, v3)	 = world.loadedLevel.camera.b2;
-	*PushStruct(frameArena, v3)	 = world.loadedLevel.camera.b3;
+	*PushStruct(frameArena, v3) = world.loadedLevel.camera.pos;
+	*PushStruct(frameArena, Quaternion) = world.loadedLevel.camera.orientation;
 	*PushStruct(frameArena, f32) = world.loadedLevel.camera.aspectRatio;
 	*PushStruct(frameArena, f32) = world.loadedLevel.camera.focalLength;
    
@@ -87,9 +59,10 @@ static bool LoadLevelV3(u8 *at, World *world, AssetHandler *assetHandler, Editor
 	level->lightSource = PullOff(v3);
    
 	level->camera.pos = PullOff(v3);
-	level->camera.b1 = PullOff(v3);
-	level->camera.b2 = PullOff(v3);
-	level->camera.b3 = PullOff(v3);
+   PullOff(v3);
+   PullOff(v3);
+   PullOff(v3);
+	level->camera.orientation = QuaternionId();
 	level->camera.aspectRatio = PullOff(f32);
 	level->camera.focalLength = PullOff(f32);
    
@@ -136,9 +109,10 @@ static bool LoadLevelV4(u8 *at, World *world, AssetHandler *assetHandler, Editor
 	level->lightSource = PullOff(v3);
    
 	level->camera.pos = PullOff(v3);
-	level->camera.b1 = PullOff(v3);
-	level->camera.b2 = PullOff(v3);
-	level->camera.b3 = PullOff(v3);
+   PullOff(v3);
+   PullOff(v3);
+   PullOff(v3);
+   level->camera.orientation = QuaternionId();
 	level->camera.aspectRatio = PullOff(f32);
 	level->camera.focalLength = PullOff(f32);
    

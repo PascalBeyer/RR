@@ -336,7 +336,7 @@ static Tweeker ExtractTweekerFromFile(String toFind)
       
 		if (!(name == toFind)) { lineNumber++; continue; }
       
-		if (head[head.length - 1] == '\n') head.length--;
+		EatNewLinesFromEnd(&head);
       
 		EatSpaces(&head);
       

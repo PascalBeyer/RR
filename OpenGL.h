@@ -234,6 +234,9 @@ struct OpenGLProgram
 	GLuint lightP;
 	GLuint scaleColor;
    GLuint boneStates;
+   GLuint ka;
+   GLuint kd;
+   GLuint ks;
    
 	//GLuint cameraPos;
 	GLuint specularExponent;
@@ -472,8 +475,13 @@ static OpenGLProgram OpenGLMakeProgram(char *shaderCode, u32 flags)
 	ret.textureSampler = glGetUniformLocation(ret.program, "texture");
 	ret.shadowTransform = glGetUniformLocation(ret.program, "shadowTransform");
 	ret.lightP = glGetUniformLocation(ret.program, "lightPos");
-	//ret.cameraPos = glGetUniformLocation(ret.program, "cameraPos");
+	
 	ret.specularExponent = glGetUniformLocation(ret.program, "specularExponent");
+   ret.ka = glGetUniformLocation(ret.program, "ka");
+   ret.kd = glGetUniformLocation(ret.program, "kd");
+   ret.ks = glGetUniformLocation(ret.program, "ks");
+   
+   
 	ret.scaleColor = glGetUniformLocation(ret.program, "scaleColor");
    ret.boneStates = glGetUniformLocation(ret.program, "boneStates");
    
@@ -654,7 +662,7 @@ static void BeginUseProgram(OpenGLContext *context, OpenGLProgram prog, RenderSe
    if (prog.flags & ShaderFlags_ShadowMapping)
    {
       // todo not sure whats the best for this transformation feels hacky anywhere
-      v3 lightP = (setup.cameraTransform * V4(setup.lightPos, 1.0f)).xyz;
+      v3 lightP = (setup.cameraTransform * V4(setup.lightSource.pos, 1.0f)).xyz;
       glUniform3f(prog.lightP, lightP.x, lightP.y, lightP.z);
       
       m4x4 shadowMat = uniforms.shadowMat * uniforms.objectTransform;
@@ -1038,7 +1046,7 @@ static void RenderIntoShadowMap(RenderCommands *rg, OpenGLContext *context)
          {
             EntryChangeRenderSetup *setupHeader = (EntryChangeRenderSetup *)header;
             currentSetup = setupHeader->setup;
-            currentSetup.cameraTransform = CameraTransform(V3(1, 0, 0), V3(0, 1, 0), V3(0, 0, 1), currentSetup.lightPos);
+            currentSetup.cameraTransform = CameraTransform(currentSetup.lightSource.orientation, currentSetup.lightSource.pos);
             
             pBufferIt += sizeof(*setupHeader);
          }break;
@@ -1053,7 +1061,7 @@ static void RenderIntoShadowMap(RenderCommands *rg, OpenGLContext *context)
             f32 scale    = meshHeader->scale;
             v3 pos       = meshHeader->pos;
             
-            m4x4 objectTransform = Translate(QuaternionToMatrix(q) * ScaleMatrix(scale), pos);
+            m4x4 objectTransform = Translate(QuaternionToMatrix4(q) * ScaleMatrix(scale), pos);
             
             OpenGLUniformInfo uniforms;
             uniforms.objectTransform = objectTransform;
@@ -1150,8 +1158,8 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
          {
             EntryChangeRenderSetup *setupHeader = (EntryChangeRenderSetup *)header;
             currentSetup = setupHeader->setup;
-            shadowMat = biasMatrix * currentSetup.projection * CameraTransform(V3(1, 0, 0), V3(0, 1, 0), V3(0, 0, 1), currentSetup.lightPos);
-            
+            shadowMat = biasMatrix * currentSetup.projection * CameraTransform(currentSetup.lightSource.orientation, currentSetup.lightSource.pos);
+            // todo do this in the setup, so we do not have to do it for every pass.
             pBufferIt += sizeof(*setupHeader);
          }break;
          case RenderGroup_EntryTexturedQuads:
@@ -1212,9 +1220,9 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             Quaternion q = meshHeader->orientation;
             
             // todo slow
-            m4x4 objectTransform = Translate(QuaternionToMatrix(q) * ScaleMatrix(scale), pos);
+            m4x4 objectTransform = Translate(QuaternionToMatrix4(q) * ScaleMatrix(scale), pos);
             
-            v4 lightP = currentSetup.cameraTransform * V4(currentSetup.lightPos, 1.0f);
+            v4 lightP = currentSetup.cameraTransform * V4(currentSetup.lightSource.pos, 1.0f);
             
             TriangleMesh mesh = meshHeader->mesh;
             
@@ -1240,7 +1248,10 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             {
                auto it = &mesh.indexSets[i];
                
-               glUniform1f(context->basicMesh.specularExponent, it->mat.spectularExponent);
+               glUniform1f(context->basicMesh.specularExponent, it->mat.specularExponent);
+               glUniform3f(context->basicMesh.ka, it->mat.ka.x, it->mat.ka.y, it->mat.ka.z);
+               glUniform3f(context->basicMesh.kd, it->mat.kd.x, it->mat.kd.y, it->mat.kd.z);
+               glUniform3f(context->basicMesh.ks, it->mat.ks.x, it->mat.ks.y, it->mat.ks.z);
                glBindTexture(GL_TEXTURE_2D, meshHeader->textureIDs[i]);
                
                switch (mesh.type)
@@ -1276,7 +1287,7 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             // todo slow
             m4x4 objectTransform = Identity(); //Translate(QuaternionToMatrix(q) * ScaleMatrix(scale), pos);
             
-            v4 lightP = currentSetup.cameraTransform * V4(currentSetup.lightPos, 1.0f);
+            v4 lightP = currentSetup.cameraTransform * V4(currentSetup.lightSource.pos, 1.0f);
             
             TriangleMesh mesh = meshHeader->mesh;
             
@@ -1296,9 +1307,12 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             {
                auto it = &mesh.indexSets[i];
                
-               glUniform1f(context->basicMesh.specularExponent, it->mat.spectularExponent);
-               glBindTexture(GL_TEXTURE_2D, meshHeader->textureIDs[i]);
+               glUniform1f(context->animated.specularExponent, it->mat.specularExponent);
+               glUniform3f(context->animated.ka, it->mat.ka.x, it->mat.ka.y, it->mat.ka.z);
+               glUniform3f(context->animated.kd, it->mat.kd.x, it->mat.kd.y, it->mat.kd.z);
+               glUniform3f(context->animated.ks, it->mat.ks.x, it->mat.ks.y, it->mat.ks.z);
                
+               glBindTexture(GL_TEXTURE_2D, meshHeader->textureIDs[i]);
                switch (mesh.type)
                {
                   case TriangleMeshType_List:

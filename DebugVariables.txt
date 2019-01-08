@@ -1,4 +1,3 @@
- 
 
 
 debugCam false
@@ -20,7 +19,6 @@ sliderSlider 0.00999
 pickerFontSize 0.01299
 pickerFontXIncrease 6.00000 
 consoleSelectionColor (1.00000,0.03315,0.03315,0.57870)
-lightPos (4.00000,2.00000,-10.00000) 
 cameraMoveSpeed 0.10000
 DrawMeshOutlines false
 cameraStartingPos (3.00000,3.00000,-4.00000)
@@ -45,3 +43,4 @@ pathCreatorUnitPosColor (1.00000,1.00000,1.00000,0.40000)
 renderCycleThreshhold 1000
 debugDisplayBarSize 0.02999
 drawEntityTree false
+

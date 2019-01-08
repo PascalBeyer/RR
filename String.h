@@ -1013,6 +1013,14 @@ String ConsumeNextLineSanitize(String *inp)
 	return head;
 }
 
+void EatNewLinesFromEnd(String *s)
+{
+	while (s->amount && (s->data[s->amount - 1] == '\n' || s->data[s->amount - 1] == '\r'))
+	{
+		s->amount--;
+	}
+}
+
 void RemoveNewLinesFromBack(String *s)
 {
 	while (s->amount && (s->data[s->amount - 1] == '\n' || s->data[s->amount - 1] == '\r'))

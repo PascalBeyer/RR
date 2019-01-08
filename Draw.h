@@ -642,6 +642,8 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor, Font font)
 
 static void RenderEditor(RenderGroup *rg, AssetHandler *assetHandler, Editor editor, World *world, Input input)
 {
+   PushDebugPointCuboid(rg, editor.focusPoint);
+   
 	For(world->entities)
 	{
 		PushTriangleMesh(rg, it->meshId, it->orientation, GetRenderPos(*it), it->scale, it->color * it->frameColor);
@@ -695,7 +697,7 @@ static void RenderEditor(RenderGroup *rg, AssetHandler *assetHandler, Editor edi
 		transformedAABB.minDim *= e->scale;
 		transformedAABB.maxDim *= e->scale;
       
-		m4x4 mat = Translate(QuaternionToMatrix(e->orientation), GetRenderPos(*e));
+		m4x4 mat = Translate(QuaternionToMatrix4(e->orientation), GetRenderPos(*e));
       
 		v3 d1 = V3(transformedAABB.maxDim.x - transformedAABB.minDim.x, 0, 0);
 		v3 d2 = V3(0, transformedAABB.maxDim.y - transformedAABB.minDim.y, 0);

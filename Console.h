@@ -69,6 +69,8 @@ static void InitConsole(Arena *constantArena)
 	BuildStaticArray(constantArena, console.commands, CreateCommand("newLevel", NewLevelHelper, 0, 0));
 	BuildStaticArray(constantArena, console.commands, CreateCommand("addMesh", AddMeshHelper, 1, 1));
 	BuildStaticArray(constantArena, console.commands, CreateCommand("saveCamera", SaveCameraHelper, 0, 0));
+   BuildStaticArray(constantArena, console.commands, CreateCommand("setLight", SetLightHelper, 0, 0));
+   
 }
 
 static bool ConsoleActive()

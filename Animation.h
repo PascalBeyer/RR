@@ -37,13 +37,13 @@ static b32 PointInAABB(AABB target, v3 point)
 
 struct Material
 {
-	f32 spectularExponent;		// Ns
-	v3 ka;		            	//  ambientColor
+	f32 specularExponent;		// Ns
+	v3 ka;		            	// ambientColor
 	v3 kd;	            		// diffuseColor
 	v3 ks;	            		// specularColor
-	v3 ke;						// not in the spec and always (0,0,0)
+	v3 ke;						// emmissionColor
    
-	f32 indexOfReflection;		// Ni ("optical density")	0.001 - 10
+	f32 indexOfRefraction;		// Ni ("optical density")	0.001 - 10
 	f32 dissolved;				// d						0 - 1	
    //v3 transmissionFilter;	  // Tf						
 	u32 illuminationModel;		// illum					0 - 10
@@ -51,7 +51,7 @@ struct Material
 	String name;
 	String texturePath;
 };
-
+DefineDFArray(Material);
 DefineDynamicArray(Material);
 
 struct IndexSet
@@ -78,7 +78,7 @@ static m4x4 InterpolationDataToMatrix(InterpolationData a)
 {
 	m4x4 ret;
    
-	ret = QuaternionToMatrix(a.orientation);
+	ret = QuaternionToMatrix4(a.orientation);
 	ret = Translate(ret, a.translation);
 	ret.a[0][0] *= a.scale.x;
 	ret.a[0][1] *= a.scale.x;

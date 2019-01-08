@@ -1243,11 +1243,11 @@ ClipCursor(&windowRect);
       float screenWidth = (f32)renderCommands.width;
       float screenHeight = (f32)renderCommands.height;
       
-      PushRenderSetup(rg, {}, V3(), Setup_Orthogonal);
+      PushRenderSetup(rg, {}, {}, Setup_Orthogonal);
       
       PushString(rg, V2(20.1f, 10.1f), s, 20, font);
       
-      PushRenderSetup(rg, {}, V3(), Setup_Orthogonal | Setup_ZeroToOne);
+      PushRenderSetup(rg, {}, {}, Setup_Orthogonal | Setup_ZeroToOne);
       
       DrawDebugRecords(rg, gameState.font, targetSecondsPerFrame, input);
       //DrawTweekers(rg, font);
