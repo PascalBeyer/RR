@@ -1,4 +1,8 @@
 
+struct AssetHandler;
+static AssetInfo GetAssetInfo(AssetHandler *handler, u32 id);
+
+
 struct UVList
 {
 	u16 uvIndex;
@@ -2550,6 +2554,116 @@ static void WriteTexture(char *fileName, Bitmap bitmap)
    
    File file = CreateFile(data, fileSize);
    WriteEntireFile(fileName, file);
+}
+
+static bool WriteLevel(char *fileName, EntityManager entityManager, AssetHandler *assetHandler)
+{
+	u8 *mem = PushData(frameArena, u8, 0);
+   
+	*PushStruct(frameArena, u32) = 5; // Version number, do not remove
+   
+	*PushStruct(frameArena, LightSource) = entityManager.lightSource;
+   
+	*PushStruct(frameArena, v3) = entityManager.loadedLevel.camera.pos;
+	*PushStruct(frameArena, Quaternion) = entityManager.loadedLevel.camera.orientation;
+	*PushStruct(frameArena, f32) = entityManager.loadedLevel.camera.aspectRatio;
+	*PushStruct(frameArena, f32) = entityManager.loadedLevel.camera.focalLength;
+   
+	*PushStruct(frameArena, u32) = entityManager.entities.amount;
+   
+	For(entityManager.entities)
+	{
+		*PushStruct(frameArena, Quaternion) = it->orientation;
+		*PushStruct(frameArena, v3i) = it->physicalPos;
+		*PushStruct(frameArena, v3) = it->offset;
+		*PushStruct(frameArena, v4) = it->color;
+		*PushStruct(frameArena, f32) = it->scale;
+		*PushStruct(frameArena, u32) = it->type;
+		*PushStruct(frameArena, u64) = it->flags;
+		String s = GetAssetInfo(assetHandler, it->meshId).name;
+		*PushStruct(frameArena, u32) = s.length;
+		Char *dest = PushData(frameArena, Char, s.length);
+		memcpy(dest, s.data, s.length * sizeof(Char));
+	}
+   
+	u32 size = (u32)((u8*)frameArena->current - mem);
+	File file = CreateFile(mem, size);
+	return WriteEntireFile(fileName, file);
+}
+
+#define PullOff(type) *(type *)at; at += sizeof(type);
+
+static EntityCopyData EntityToData(Entity e)
+{
+	EntityCopyData ret;
+   
+	ret.color = e.color;
+	ret.flags = e.flags;
+	ret.orientation = e.orientation;
+	ret.meshId = e.meshId;
+	ret.scale = e.scale;
+	ret.type = e.type;
+	ret.physicalPos = e.physicalPos;
+	ret.offset = e.offset;
+	return ret;
+   
+}
+
+static Level LoadLevel(String fileName, Arena *currentStateArena, AssetHandler *assetHandler)
+{
+   File file = LoadFile(FormatCString("level/%s.level", fileName));
+	if (!file.fileSize) return {};
+	defer(FreeFile(file));
+   
+	u8 *at = (u8 *)file.memory;
+	u32 version = PullOff(u32);
+   
+   Level level;
+   
+   level.lightSource = PullOff(LightSource);
+   
+	level.camera.pos = PullOff(v3);
+   
+   if(version < 5)
+   {
+      PullOff(v3);
+      PullOff(v3);
+      PullOff(v3);
+      level.camera.orientation = QuaternionId();
+   }
+   else 
+   {
+      level.camera.orientation = PullOff(Quaternion);
+   }
+   
+	level.camera.aspectRatio = PullOff(f32);
+	level.camera.focalLength = PullOff(f32);
+   
+	u32 meshAmount = PullOff(u32);
+   
+	level.entities = PushArray(currentStateArena, EntityCopyData, meshAmount);
+   
+	For(level.entities)
+	{
+		it->orientation = PullOff(Quaternion);
+		it->physicalPos = PullOff(v3i);
+		it->offset = PullOff(v3);
+		it->color = PullOff(v4);
+		it->scale = PullOff(f32);
+      it->type = (EntityType)PullOff(u32);
+		it->flags = PullOff(u64);
+      
+		u32 nameLength = PullOff(u32);
+		String name = CreateString((Char *)at, nameLength);
+      at += nameLength * sizeof(Char);
+      
+      it->meshId = RegisterAsset(assetHandler, Asset_Mesh, name);
+      
+	}
+   
+	level.blocksNeeded = 10000;
+   
+	return level;
 }
 
 #undef PullOff

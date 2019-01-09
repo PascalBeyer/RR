@@ -152,15 +152,15 @@ static v3 GetRenderPos(Entity e, f32 interpolationT)
 
 struct EntityCopyData
 {
-	u32 meshId;
-	f32 scale;
-	Quaternion orientation;
-	v3i physicalPos;
-	v3 offset;
-	v4 color;
+   Quaternion orientation;
+   v3i physicalPos;
+   v3 offset;
+   v4 color;
+   f32 scale;
+   EntityType type;
+   u64 flags;
    
-	EntityType type;
-	u64 flags;
+	u32 meshId;
 };
 
 static v3 GetRenderPos(EntityCopyData e)
@@ -358,49 +358,15 @@ struct EntityManager
 	u32 dudeMeshId;
 };
 
-// todo remove me.
-static Level EmptyLevel()
-{
-	Level ret;
-	ret.camera.pos = V3(0, 0, -5);
-	ret.camera.orientation = {1, 0, 0, 0};
-	ret.camera.aspectRatio = (f32)16 / (f32)9;
-	ret.camera.focalLength = 1.0f;
-	ret.blocksNeeded = 10000;
-   
-	ret.lightSource.pos = V3(20, 0, -20);
-   ret.lightSource.orientation = QuaternionId();
-	ret.name = {};
-	ret.entities = {};
-   
-	return ret;
-}
-
-static EntityManager InitEntityManager(Arena *currentStateArena, AssetHandler *assetHandler, u32 screenWidth, u32 screenHeight)
+static EntityManager InitEntityManager(Arena *currentStateArena, u32 screenWidth, u32 screenHeight)
 {
 	EntityManager ret = {};
    
-	ret.lightSource.pos = V3(20, 0, -20);
-   ret.lightSource.orientation = QuaternionId();
-   ret.lightSource.color = V3(1, 1, 1);
-	ret.camera.pos = V3(0, 0, -5);
-	ret.camera.orientation = QuaternionId();
-	ret.camera.aspectRatio = (f32)screenWidth / (f32)screenHeight;
-	ret.camera.focalLength = 1.0f;
-   
-	ret.debugCamera = ret.camera;
-	ret.loadedLevel = EmptyLevel();
 	ret.entityTree = InitOctTree(currentStateArena, 100);
 	ret.entities = EntityCreateDynamicArray();
-	ret.entitySerializer = 0;
+	
 	ret.entitySerialMap = u32CreateDynamicArray();
-	ret.t = 0.0f;
-   
-	b32 success = true;
-	ret.blockMeshId = RegisterAsset(assetHandler, Asset_Mesh, "block.mesh", &success);
-	ret.dudeMeshId = RegisterAsset(assetHandler, Asset_Mesh, "dude.mesh", &success);
-	//Assert(success);
-   
+	
 	return ret;
 }
 
@@ -716,9 +682,12 @@ static void RemoveEntity(EntityManager *entityManager, u32 serial)
 
 static void UnloadLevel(EntityManager *entityManager)
 {
-	entityManager->loadedLevel = EmptyLevel();
+	entityManager->loadedLevel = {};
 	entityManager->at = 0;
-	entityManager->camera = entityManager->loadedLevel.camera;
+	entityManager->camera.orientation = QuaternionId();
+   entityManager->camera.pos = V3(0, 0, -5);
+   entityManager->camera.focalLength = 1.0f;
+   entityManager->camera.aspectRatio = 16.0f / 9.0f;
 	entityManager->entities.amount = 0; // this before ResetTree, makes the reset faster
 	ResetTree(entityManager, &entityManager->entityTree);
 	entityManager->entitySerialMap.amount = 0;
@@ -755,84 +724,6 @@ static void ResetEntityManager(EntityManager *entityManager)
 	}
    
 }
-
-static u32 GetHotUnit(EntityManager *entityManager, AssetHandler *assetHandler, v2 mousePosZeroToOne, Camera camera)
-{
-	v3 camP = camera.pos; // todo camera or debugCamera? Maybe we should again unify them
-	v3 camD = ScreenZeroToOneToDirecion(camera, mousePosZeroToOne);
-   
-	For(entityManager->entities)
-	{
-		if (it->type != Entity_Dude) continue;
-		Entity *e = it;
-		m4x4 mat = QuaternionToMatrix4(Inverse(e->orientation));
-		v3 rayP = mat * (camP - GetRenderPos(*e, entityManager->t));
-		v3 rayD = mat * camD;
-      
-		MeshInfo *info = GetMeshInfo(assetHandler, e->meshId);
-		if (!info)continue;
-		AABB aabb = info->aabb;
-		aabb.maxDim *= e->scale; // todo can pre compute this
-		aabb.minDim *= e->scale;
-		f32 curIntersectionMin = MAXF32;
-      
-		f32 x = rayP.x;
-		f32 dx = rayD.x;
-		f32 y = rayP.y;
-		f32 dy = rayD.y;
-		f32 z = rayP.z;
-		f32 dz = rayD.z;
-      
-		f32 aabbMinX = aabb.minDim.x;
-		f32 aabbMaxX = aabb.maxDim.x;
-		f32 aabbMinY = aabb.minDim.y;
-		f32 aabbMaxY = aabb.maxDim.y;
-		f32 aabbMinZ = aabb.minDim.z;
-		f32 aabbMaxZ = aabb.maxDim.z;
-      
-		f32 t1x = (aabbMaxX - x) / dx;
-		if (dx > 0 && t1x <= curIntersectionMin)
-		{
-			curIntersectionMin = t1x;
-		}
-      
-		f32 t2x = (aabbMinX - x) / dx;
-		if (dx < 0 && t2x <= curIntersectionMin)
-		{
-			curIntersectionMin = t2x;
-		}
-      
-		f32 t1y = (aabbMaxY - y) / dy;
-		if (dy > 0 && t1y <= curIntersectionMin)
-		{
-			curIntersectionMin = t1y;
-		}
-      
-		f32 t2y = (aabbMinY - y) / dy;
-		if (dy < 0 && t2y <= curIntersectionMin)
-		{
-			curIntersectionMin = t2y;
-		}
-      
-		f32 t1z = (aabbMaxZ - z) / dz;
-		if (dz > 0 && t1z <= curIntersectionMin)
-		{
-			curIntersectionMin = t1z;
-		}
-      
-		f32 t2z = (aabbMinZ - z) / dz;
-		if (dz < 0 && t2z <= curIntersectionMin)
-		{
-			curIntersectionMin = t2z;
-		}
-		v3 curExit = rayD * curIntersectionMin + rayP;
-      
-		if (PointInAABB(aabb, curExit)) return e->serialNumber;
-	}
-   
-	return 0xFFFFFFFF;
-}
-
 
 static u64 GetStandardFlags(EntityType type)
 {

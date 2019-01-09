@@ -69,11 +69,11 @@ ctime // done ?
 check that convertNewAssets is not leaking // done ?
 make a DynamicFlags entry in the Entity flags enum, which is just all of them or ed together // we have EntityFlag_FrameResetFlag now, so done?
 add lightPos to the level // done?
+we were just making AssetTypes.h continue that. // done
 
 Asset:
 Get PNG loader
 make font into asset, would also make the draw String call way better, also solves the problem where I do not currently know where it is supposed to be stored
-make levels assets, 
 animationInfo in assethandler
 
 
@@ -91,13 +91,13 @@ figure out a way to detect changes to the render setup, so we can reduce API cal
 maybe rendersetup should have the shader...., because I have to repeat myself alot right now in opengl
 make a find shader thing that matches the flags and the returns a shader that fits the job.
 
-
 MISC:
 render strings leftbound
 look at tempoary memory system.
 general data oriented cleanup
 upscale bmps
 string.h memcpy
+todo  make PushRenderSetup have optional lightsource.
 
 DEBUG:
 make debug Ui for amount of memory used.
@@ -128,5 +128,9 @@ Animation player (save in skeleton?, save in world?)
 do weight averageing in the loading.
 I feel like skeletons and meshes should be parralel. And so should bones and bone names
 
+make levels assets, 
+the whole what gameState are we in situation should be way clearer, should be handled in some sort of handler
+like this it feels like it is all over the place.
 
-TODO we were just making AssetTypes.h continue that.
+right now It feels like levels are baked in things, we need to untangle that e.g. remove entityManager from LoadLevel.
+

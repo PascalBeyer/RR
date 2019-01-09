@@ -253,8 +253,6 @@ static EulerAngle QuaternionToEulerAngle(Quaternion q)
 	return ret;
 }
 
-static bool LoadLevel(String fileName, EntityManager *entityManager, Arena *currentStateArena, AssetHandler *assetHandler, Editor *editor);
-
 static Quaternion EulerAngleToQuaternion(EulerAngle angle)
 {
    

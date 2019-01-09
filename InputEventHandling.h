@@ -32,6 +32,82 @@ static void PlacingUnitsHandleEvent(ExecuteData *exe, EntityManager *entityManag
 	}
 }
 
+static u32 GetHotUnit(EntityManager *entityManager, AssetHandler *assetHandler, v2 mousePosZeroToOne, Camera camera)
+{
+	v3 camP = camera.pos; // todo camera or debugCamera? Maybe we should again unify them
+	v3 camD = ScreenZeroToOneToDirecion(camera, mousePosZeroToOne);
+   
+	For(entityManager->entities)
+	{
+		if (it->type != Entity_Dude) continue;
+		Entity *e = it;
+		m4x4 mat = QuaternionToMatrix4(Inverse(e->orientation));
+		v3 rayP = mat * (camP - GetRenderPos(*e, entityManager->t));
+		v3 rayD = mat * camD;
+      
+		MeshInfo *info = GetMeshInfo(assetHandler, e->meshId);
+		if (!info)continue;
+		AABB aabb = info->aabb;
+		aabb.maxDim *= e->scale; // todo can pre compute this
+		aabb.minDim *= e->scale;
+		f32 curIntersectionMin = MAXF32;
+      
+		f32 x = rayP.x;
+		f32 dx = rayD.x;
+		f32 y = rayP.y;
+		f32 dy = rayD.y;
+		f32 z = rayP.z;
+		f32 dz = rayD.z;
+      
+		f32 aabbMinX = aabb.minDim.x;
+		f32 aabbMaxX = aabb.maxDim.x;
+		f32 aabbMinY = aabb.minDim.y;
+		f32 aabbMaxY = aabb.maxDim.y;
+		f32 aabbMinZ = aabb.minDim.z;
+		f32 aabbMaxZ = aabb.maxDim.z;
+      
+		f32 t1x = (aabbMaxX - x) / dx;
+		if (dx > 0 && t1x <= curIntersectionMin)
+		{
+			curIntersectionMin = t1x;
+		}
+      
+		f32 t2x = (aabbMinX - x) / dx;
+		if (dx < 0 && t2x <= curIntersectionMin)
+		{
+			curIntersectionMin = t2x;
+		}
+      
+		f32 t1y = (aabbMaxY - y) / dy;
+		if (dy > 0 && t1y <= curIntersectionMin)
+		{
+			curIntersectionMin = t1y;
+		}
+      
+		f32 t2y = (aabbMinY - y) / dy;
+		if (dy < 0 && t2y <= curIntersectionMin)
+		{
+			curIntersectionMin = t2y;
+		}
+      
+		f32 t1z = (aabbMaxZ - z) / dz;
+		if (dz > 0 && t1z <= curIntersectionMin)
+		{
+			curIntersectionMin = t1z;
+		}
+      
+		f32 t2z = (aabbMinZ - z) / dz;
+		if (dz < 0 && t2z <= curIntersectionMin)
+		{
+			curIntersectionMin = t2z;
+		}
+		v3 curExit = rayD * curIntersectionMin + rayP;
+      
+		if (PointInAABB(aabb, curExit)) return e->serialNumber;
+	}
+   
+	return 0xFFFFFFFF;
+}
 
 static void PathCreatorHandleEvent(EntityManager *entityManager, ExecuteData *exe, AssetHandler *assetHandler, KeyStateMessage message, Input input)
 {

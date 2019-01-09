@@ -246,7 +246,7 @@ static void SaveLevelHelper(StringArray args)
 
 static void LoadLevelHelper(StringArray args)
 {
-	if (LoadLevel(args[0], &gameState.entityManager, gameState.currentStateArena, &gameState.assetHandler, &gameState.editor))
+	if (LoadLevel(args[0], gameState.currentStateArena, &gameState.assetHandler))
 	{
 		SwitchGameMode(&gameState, Game_Editor);
 		ConsoleOutput("Loaded level %s!", args[0]);

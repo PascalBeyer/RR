@@ -31,9 +31,9 @@
 #include "Animation.h"
 #include "Camera.h"
 
+#include "Entity.h"
 #include "AssetHandler.h"
 
-#include "Entity.h"
 #include "Generation.h"
 
 #include "KdTree.h"
@@ -48,8 +48,6 @@
 #include "Lighting.h"
 
 #include "Editor.h"
-
-#include "Level.h"
 
 #include "InputEventHandling.h"
 
@@ -158,7 +156,7 @@ static GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHa
 	ret.currentStateArena = InitArena(PushData(constantArena, u8, constantArenaRestCapacity), constantArenaRestCapacity);
    
    // todo load this together with level
-	ret.entityManager = InitEntityManager(ret.currentStateArena, &ret.assetHandler, (u32)screenWidth, (u32)screenHeight);
+	ret.entityManager = InitEntityManager(ret.currentStateArena, (u32)screenWidth, (u32)screenHeight);
 	ret.executeData = InitExecute();
    
 	ChangeExecuteState(&ret.entityManager, &ret.executeData, Execute_PathCreator);
@@ -178,7 +176,7 @@ static GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHa
 	}
 #endif
 	
-	LoadLevel(CreateString("bridge"), &ret.entityManager, ret.currentStateArena, &ret.assetHandler, &ret.editor);
+	LoadLevel(CreateString("bridge"), ret.currentStateArena, &ret.assetHandler);
    
 	SwitchGameMode(&ret, Game_Editor);
 	
@@ -445,13 +443,12 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
 	
    {
       static float t = 0.0f;
-      t += exe->simData.timeScale * dt;
+      t += dt;
       m4x4Array boneStates = CalculateBoneTransforms(&mesh->skeleton, animation, t);
       PushAnimatedMesh(rg, mesh, AxisAngleToQuaternion(-PI/2.0f, V3(1, 0, 0)), V3(0, 0, -5), 1.0f, V4(1.0f, 1.0f, 1.0f, 1.0f), boneStates);
    }
-	//AnimationTestStuff(rg, &ret, dt);
 	
-	PushRenderSetup(rg, *cam, entityManager->lightSource, Setup_OrthoZeroToOne); //todo  make PushRenderSetup have optional lightsource.
+	PushRenderSetup(rg, *cam, entityManager->lightSource, Setup_OrthoZeroToOne); 
    
 	switch (state->mode)
 	{
