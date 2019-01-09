@@ -38,9 +38,6 @@ uniform vec4 scaleColor;
 uniform mat4x4 shadowTransform;
 #endif
 
-uniform vec3 lightPos;
-// allready transfomed for now, so we do not need a third matrix, that is the transform with out the object Transform
-
 // in
 in vec3 vertP;
 in vec4 vertC;
@@ -55,6 +52,9 @@ smooth out vec4 shadowCoord;
 #endif
 
 #ifdef Phong
+uniform vec3 lightPos;
+// allready transfomed for now, so we do not need a third matrix, that is the transform with out the object Transform
+
 in vec3 vertN;
 uniform f32 specularExponent;
 uniform v3 ka;

@@ -2104,6 +2104,7 @@ static void UnloadMesh(AssetInfo *info)
 static TriangleMesh LoadMesh(AssetHandler *assetHandler, char *fileName, void **filePtr)
 {
    //return {};
+   // todo this should not call Register mesh, we should get rid of type
    TriangleMesh ret;
    
    File file = LoadFile(fileName);

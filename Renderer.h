@@ -34,38 +34,37 @@ struct VertexFormatPCUNBD
    v4  bw;
 };
 
-
 enum RenderGroupEntryType
 {
+	RenderGroup_EntryChangeRenderSetup,
+   RenderGroup_EntryClear,
 	RenderGroup_EntryTexturedQuads,
 	RenderGroup_EntryLines,
 	RenderGroup_EntryTriangles,
-	RenderGroup_EntryClear,
 	RenderGroup_EntryTriangleMesh,
-   RenderGroup_EntryChangeRenderSetup,
    RenderGroup_EntryAnimatedMesh,
-   
-   
 };
 
-// todo how does this work? this looks weird
 enum RenderSetUpFlags
 {
-	Setup_Invalid = 0x0,
-	Setup_Projective = 0x1,
-	Setup_Orthogonal = 0x2,
-	Setup_ZeroToOne  = 0x3, 
-	Setup_ShadowMapping = 0x4,
+	Setup_Projective         = 0x0,
+	Setup_Orthogonal         = 0x1,
+	Setup_OrthoZeroToOne     = 0x2, 
+   
+   Setup_Type_Mask     = 0x3,
+   
+	Setup_ShadowMapping = 0x8,
+   Setup_Animating     = 0x10,
+   
 };
 
-// todo just put a camera on here?
 struct RenderSetup
 {
-	m4x4 projection;
-	m4x4 cameraTransform;
-   LightSource lightSource;
-	v3 cameraPos; 
 	u32 flag;
+   m4x4 projection;
+	m4x4 cameraTransform;
+   m4x4 shadowMat;
+   v3 transformedLightP;
 };
 
 struct RenderGroupEntryHeader
@@ -93,27 +92,39 @@ struct EntryClear
 	v4 color;
 };
 
+
 struct EntryTriangleMesh
 {
-	RenderGroupEntryHeader header;
-	TriangleMesh mesh;
-	u32Array textureIDs;
-	Quaternion orientation;
-	v3 pos;
-	f32 scale;
-	v4 scaleColor;
+   RenderGroupEntryHeader header;
+   VertexFormatType vertexType;
+   
+   u32 meshType;
+   m4x4 objectTransform;
+   v4 scaleColor;
+   
+   IndexSetArray indexSets;
+   u32Array textureIDs;
+   
+   u32 vertexVBO;
+	u32 indexVBO;
 };
 
 struct EntryAnimatedMesh
 {
 	RenderGroupEntryHeader header;
-	TriangleMesh mesh;
-	u32Array textureIDs;
-	Quaternion orientation;
-	v3 pos;
-	f32 scale;
-	v4 scaleColor;
+   VertexFormatType vertexType;
+   
+   u32 meshType;
+   m4x4 objectTransform;
+   v4 scaleColor;
    m4x4Array boneStates;
+   
+   IndexSetArray indexSets;
+   u32Array textureIDs;
+   
+   u32 vertexVBO;
+	u32 indexVBO;
+   
 };
 
 struct EntryTexturedQuads
@@ -191,6 +202,7 @@ static void ClearPushBuffer(RenderGroup *rg)
 	rg->commands->pushBufferSize = 0;
 }
 
+// todo not sure how to make this good. we could make a lot of little special purpose ones, to get rid of arguments, but that also makes it more complicated.
 static void PushRenderSetup(RenderGroup *rg, Camera camera, LightSource lightSource, u32 flag)
 {
 	TimedBlock;
@@ -201,8 +213,7 @@ static void PushRenderSetup(RenderGroup *rg, Camera camera, LightSource lightSou
    
    RenderSetup *setup = &entry->setup;
    
-   // todo this is reaaaaaly ugly.
-   switch (flag & 0x3)
+   switch (flag & Setup_Type_Mask)
 	{
       case Setup_Projective:
       {
@@ -218,7 +229,7 @@ static void PushRenderSetup(RenderGroup *rg, Camera camera, LightSource lightSou
          setup->cameraTransform = Identity();
          
       }break;
-      case Setup_ZeroToOne:
+      case Setup_OrthoZeroToOne:
       {
          m4x4 ortho = Orthogonal(1.0f, 1.0f);
          
@@ -235,8 +246,8 @@ static void PushRenderSetup(RenderGroup *rg, Camera camera, LightSource lightSou
 	rg->currentTriangles = NULL;
 	rg->currentQuads = NULL;
 	
-	setup->cameraPos = camera.pos;
-	setup->lightSource = lightSource;
+   setup->transformedLightP = (setup->cameraTransform * V4(lightSource.pos, 1.0f)).xyz;
+	setup->shadowMat = CameraTransform(lightSource.orientation, lightSource.pos);
 	setup->flag = flag;
    
 	rg->setup = *setup;
@@ -383,17 +394,27 @@ static void PushTriangleMesh(RenderGroup *rg, TriangleMesh *mesh, Quaternion ori
 	if (!mesh) return; // todo think about this, we want this if we redo our mesh write
    
 	EntryTriangleMesh *meshHeader = PushRenderEntry(EntryTriangleMesh);
-	meshHeader->mesh = *mesh;
-	meshHeader->orientation = orientation;
 	u32Array arr = PushArray(frameArena, u32, mesh->indexSets.amount);
+   // todo this still feels pretty stupid
 	for (u32 i = 0; i < arr.amount; i++)
 	{
 		arr[i] = GetTexture(rg->assetHandler, mesh->indexSets[i].mat.bitmapID)->textureHandle;
 	}
-	meshHeader->textureIDs = arr;
-	meshHeader->pos = pos;
-	meshHeader->scale = scale;
-	meshHeader->scaleColor = scaleColor;
+   
+   // todo most of these could be stored on the asset entry. But maybe this should just be on there for cache
+   // this depeds whether I usually access these per id or per mesh, per id we might be able to only get the 
+   // asset entry. We might be able to get rid of meshes that way.
+   meshHeader->vertexType = mesh->vertexType;
+   meshHeader->vertexVBO = mesh->vertexVBO;
+   meshHeader->indexVBO = mesh->indexVBO;
+   
+	meshHeader->indexSets = mesh->indexSets;
+   meshHeader->textureIDs = arr;
+   
+	meshHeader->objectTransform =InterpolationDataToMatrix(pos, orientation, scale);
+   meshHeader->scaleColor = scaleColor;
+   meshHeader->meshType = mesh->type;
+	
 }
 
 static void PushTriangleMesh(RenderGroup *rg, u32 meshId, Quaternion orientation, v3 pos, f32 scale, v4 scaleColor)
@@ -408,18 +429,24 @@ static void PushAnimatedMesh(RenderGroup *rg, TriangleMesh *mesh, Quaternion ori
 	if (!mesh) return; // todo think about this, we want this if we redo our mesh write
    
 	EntryAnimatedMesh *meshHeader = PushRenderEntry(EntryAnimatedMesh);
-	meshHeader->mesh = *mesh;
-	meshHeader->orientation = orientation;
 	u32Array arr = PushArray(frameArena, u32, mesh->indexSets.amount);
 	for (u32 i = 0; i < arr.amount; i++)
 	{
 		arr[i] = GetTexture(rg->assetHandler, mesh->indexSets[i].mat.bitmapID)->textureHandle;
-	}
-	meshHeader->textureIDs = arr;
-	meshHeader->pos = pos;
-	meshHeader->scale = scale;
-	meshHeader->scaleColor = scaleColor;
+   }
+   
+   meshHeader->vertexType = mesh->vertexType;
+   meshHeader->vertexVBO = mesh->vertexVBO;
+   meshHeader->indexVBO = mesh->indexVBO;
+   
+	meshHeader->indexSets = mesh->indexSets;
+   meshHeader->textureIDs = arr;
+   
+	meshHeader->objectTransform =InterpolationDataToMatrix(pos, orientation, scale);
+   meshHeader->scaleColor = scaleColor;
+	
    meshHeader->boneStates = boneStates;
+   meshHeader->meshType = mesh->type;
 }
 
 static void PushAnimatedMeshImmidiet(RenderGroup *rg, TriangleMesh *mesh, Quaternion orientation, v3 pos, f32 scale, v4 scaleColor, m4x4Array boneStates)

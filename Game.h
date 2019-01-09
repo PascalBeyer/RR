@@ -33,7 +33,6 @@
 
 #include "AssetHandler.h"
 
-
 #include "Entity.h"
 #include "Generation.h"
 
@@ -48,7 +47,6 @@
 
 #include "Lighting.h"
 
-//#include "MovementHandler.h"
 #include "Editor.h"
 
 #include "Level.h"
@@ -79,7 +77,6 @@ struct GameState
 	GameMode mode;
    
 	Arena *constantArena;
-	Arena *workingArena;
 	Arena *currentStateArena;
    
 	// tempoary
@@ -152,8 +149,7 @@ static GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHa
 	ret.font = LoadFont("consola.ttf", constantArena);
 	globalFont = ret.font;
 	InitConsole(constantArena);
-	ret.workingArena = InitArena(PushData(constantArena, u8, MegaBytes(50)), MegaBytes(50));
-	ret.assetHandler = CreateAssetHandler(constantArena, ret.workingArena);
+	ret.assetHandler = CreateAssetHandler(constantArena);
 	ret.soundMixer = {};
 	ret.editor = InitEditor(constantArena);
 	
@@ -455,7 +451,7 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
    }
 	//AnimationTestStuff(rg, &ret, dt);
 	
-	PushRenderSetup(rg, *cam, entityManager->lightSource, Setup_ZeroToOne); //todo  make PushRenderSetup have optional lightsource.
+	PushRenderSetup(rg, *cam, entityManager->lightSource, Setup_OrthoZeroToOne); //todo  make PushRenderSetup have optional lightsource.
    
 	switch (state->mode)
 	{
@@ -488,7 +484,7 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
    
 	PushString(rg, V2(0.75f, 0.01f), GameModeStrings[state->mode], 0.03f, font);
    
-	ToOutput(soundMixer, soundBuffer, state->workingArena);
+	ToOutput(soundMixer, soundBuffer);
    
 }
 #endif

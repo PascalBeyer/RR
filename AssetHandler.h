@@ -258,7 +258,7 @@ static bool ConvertNewAssets(AssetHandler *handler, Arena *currentStateArena)
 
 // todo load everything always only for a frame?
 // todo get rid of workingArena
-static AssetHandler CreateAssetHandler(Arena *arena, Arena *workingArena)
+static AssetHandler CreateAssetHandler(Arena *arena)
 {
 	AssetHandler ret;
    

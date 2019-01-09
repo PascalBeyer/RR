@@ -51,13 +51,13 @@ struct Wavefmt
 static Sound CreateSound(char *fileName)
 {
 	Sound ret;
-    
+   
 	File tempFile = LoadFile(fileName);
-    
+   
 	Assert(tempFile.fileSize);
-    
+   
 	WaveHeader *waveHeader = (WaveHeader *)tempFile.memory;
-    
+   
 	u8 *it = (u8 *)(waveHeader + 1);
 	u8 *end = it + (waveHeader->size - 4);
 	while (it < end) {
@@ -65,31 +65,31 @@ static Sound CreateSound(char *fileName)
 		it += sizeof(WaveChunk);
 		switch (waveChunk->id)
 		{
-            case WaveChunkId_fmt:
-            {
-                Wavefmt *fmt = (Wavefmt *)it;
-                ret.chanelCount = fmt->nChannels; // this has to come before the WaveChunkID_data apperantly
-            }break;
-            case WaveChunkId_data:
-            {
-                ret.sampleAmount = waveChunk->size / (ret.chanelCount * sizeof(u16));
-                ret.samples[0] = (i16 *)it;
-            }break;
-            case WaveChunkId_RIFF:
-            {
-                
-            }break;
-            case WaveChunkId_WAVE:
-            {
-                
-            }break;
-            default:
+         case WaveChunkId_fmt:
+         {
+            Wavefmt *fmt = (Wavefmt *)it;
+            ret.chanelCount = fmt->nChannels; // this has to come before the WaveChunkID_data apperantly
+         }break;
+         case WaveChunkId_data:
+         {
+            ret.sampleAmount = waveChunk->size / (ret.chanelCount * sizeof(u16));
+            ret.samples[0] = (i16 *)it;
+         }break;
+         case WaveChunkId_RIFF:
+         {
+            
+         }break;
+         case WaveChunkId_WAVE:
+         {
+            
+         }break;
+         default:
 			break;
 		}
 		u32 chunkSize = (waveChunk->size + 1) & ~1;
 		it += chunkSize;
 	}
-    
+   
 	if (ret.chanelCount == 2)
 	{
 		u16 *sourceSamples = (u16 *)ret.samples[0];
@@ -112,9 +112,9 @@ struct SoundListEntry
 	u32 soundIndex;
 	SoundListEntry *next;
 	SoundListEntry *prev;
-    
+   
 	u32 listIndex;
-    
+   
 };
 
 #define PlayingListSize 256
@@ -162,7 +162,7 @@ void Add(PlayingSoundList *list, float volume0, float volume1, i32 samplesPlayed
 	if (leastUnfilledIndex < list->maxListSize)
 	{
 		list->empty[leastUnfilledIndex] = false;
-        
+      
 		SoundListEntry *entry = list->list + leastUnfilledIndex;
 		entry->volume0 = volume0;
 		entry->volume1 = volume1;
@@ -179,12 +179,12 @@ void Add(PlayingSoundList *list, float volume0, float volume1, i32 samplesPlayed
 void Free(PlayingSoundList *list, SoundListEntry *entry)
 {
 	Assert(entry);
-    
+   
 	if (entry == list->first)
 	{
 		list->first = entry->next;
 	}
-    
+   
 	u32 indexOfNext = entry->listIndex;
 	list->empty[indexOfNext] = false;
 	SoundListEntry *previous = entry->prev;
@@ -205,13 +205,13 @@ void PlaySound(SoundMixer *mixer, Sound sound, u32 soundIndex)
 	Add(&mixer->list, 1.0f, 1.0f, 0, sound, soundIndex);
 }
 
-void ToOutput(SoundMixer *mixer, SoundBuffer *buffer, Arena *workingArena)
+void ToOutput(SoundMixer *mixer, SoundBuffer *buffer)
 {
-	Clear(workingArena);
-    
-	float *floatChanel0 = PushData(workingArena, float, buffer->sampleAmount);
-	float *floatChanel1 = PushData(workingArena, float, buffer->sampleAmount);
-    
+   DeferRestore(frameArena);
+   
+	float *floatChanel0 = PushData(frameArena, float, buffer->sampleAmount);
+	float *floatChanel1 = PushData(frameArena, float, buffer->sampleAmount);
+   
 	// memset to zero
 	{
 		float *dest0 = floatChanel0;
@@ -222,49 +222,49 @@ void ToOutput(SoundMixer *mixer, SoundBuffer *buffer, Arena *workingArena)
 			*dest1++ = 0.0f;
 		}
 	}
-    
-    
+   
+   
 	for (SoundListEntry *it = mixer->list.first; it; it = it->next)
 	{
 		float volume0 = it->volume0;
 		float volume1 = it->volume1;
-        
+      
 		float *dest0 = floatChanel0;
 		float *dest1 = floatChanel1;
-        
+      
 		u32 samplesAlreadyPlayed = it->samplesPlayed;
-        
+      
 		Sound sound = it->sound;
-        
+      
 		u32 samplesToMix = buffer->sampleAmount;
 		if (sound.sampleAmount < samplesToMix + samplesAlreadyPlayed)
 		{
 			samplesToMix = sound.sampleAmount - samplesAlreadyPlayed;
 		}
-        
+      
 		for (u32 sampleIt = 0; sampleIt < samplesToMix; sampleIt++)
 		{
 			u32 testSoundSampleIndex = (samplesAlreadyPlayed + sampleIt) % sound.sampleAmount;
-            
+         
 			float sampleValue0 = (float)sound.samples[0][testSoundSampleIndex];
 			//float sampleValue1 = (float)sound.samples[1][testSoundSampleIndex];
-            
+         
 			*dest0++ += volume0 * sampleValue0;
 			*dest1++ += volume1 * sampleValue0;
 		}
-        
+      
 		it->samplesPlayed += samplesToMix;
 		if ((u32)it->samplesPlayed == sound.sampleAmount)
 		{
 			Free(&mixer->list, it);
 		}
-        
+      
 	}
-    
+   
 	{
 		float *source0 = floatChanel0;
 		float *source1 = floatChanel1;
-        
+      
 		i16 *sampleOut = buffer->soundSamples;
 		for (int sampleIt = 0; sampleIt < buffer->sampleAmount; sampleIt++)
 		{

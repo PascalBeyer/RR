@@ -95,6 +95,27 @@ static m4x4 InterpolationDataToMatrix(InterpolationData a)
 	return ret;
 }
 
+static m4x4 InterpolationDataToMatrix(v3 translation, Quaternion orientation, f32 scale)
+{
+	m4x4 ret;
+   
+	ret = QuaternionToMatrix4(orientation);
+	ret = Translate(ret, translation);
+	ret.a[0][0] *= scale;
+	ret.a[0][1] *= scale;
+	ret.a[0][2] *= scale;
+   
+	ret.a[1][0] *= scale;
+	ret.a[1][1] *= scale;
+	ret.a[1][2] *= scale;
+   
+	ret.a[2][0] *= scale;
+	ret.a[2][1] *= scale;
+	ret.a[2][2] *= scale;
+	
+	return ret;
+}
+
 static InterpolationData MatrixToInterpolationData(m4x4 mat)
 {
 	// copied from (XForm states : GetFromMatrix in jBlow: Animation Playback part 2 37 min.), slightly altered
@@ -238,6 +259,16 @@ enum TriangleMeshType
 	TrianlgeMeshType_Strip,
 };
 
+// todo this really does not belong here, but so does pretty much nothing in this file.
+enum VertexFormatType
+{
+   VertexFormat_PC,
+   VertexFormat_PCU,
+   VertexFormat_PCUN,
+   VertexFormat_PCUNBD,
+};
+
+
 struct TriangleMesh
 {
 	String name;
@@ -256,6 +287,7 @@ struct TriangleMesh
    
 	AABB aabb;
    
+   VertexFormatType vertexType;
 	u32 vertexVBO; // to init this call glBufferData and glBindData
 	u32 indexVBO;
 };

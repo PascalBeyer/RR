@@ -69,7 +69,7 @@ struct Entity
 	u32 meshId;
 	f32 scale;
 	Quaternion orientation;
-	v3i physicalPos;
+   v3i physicalPos;
 	v3i initialPos;
 	v3 offset;
 	v4 color;

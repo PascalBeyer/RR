@@ -257,85 +257,84 @@ static void ConsoleHandleCommand(String inputLine)
    
 	String command = EatToNextSpaceReturnHead(&remaining);
    
-	bool parsedCommand = false;
+   ConsoleCommand *selectedCommand = NULL;
    
 	For(console.commands)
 	{
 		if (it->name == command)
-		{
-			parsedCommand = true;
-			ConsoleCommand selectedCommand = *it;
-         
-			StringArray args = {};
-			Clear(gameState.workingArena);
-			args = PushArray(gameState.workingArena, String, 0);
-         
-			EatSpaces(&remaining);
-			while (remaining.length)
-			{
-				String arg = EatToNextSpaceReturnHead(&remaining);
-				Assert(arg.length);
-				BuildStaticArray(gameState.workingArena, args, arg);
-				EatSpaces(&remaining);
-			}
-         
-			if (!(selectedCommand.minArgs <= args.amount && args.amount <= selectedCommand.maxArgs))
-			{
-            ConsoleOutput("Error: Wrong amount of Arguments!");
-				break;
-			}
-         
-			selectedCommand.interp(args);
-			break;
-		}
+      {
+         selectedCommand = it;
+      }
 	}
-	
-	if (!parsedCommand)
-	{
-		ConsoleOutput("Error: This is not a command.");
-	}
+   
+   if (!selectedCommand)
+   {
+      ConsoleOutputError("Could not find command.");
+      return;
+   }
+   
+   EatSpaces(&remaining);
+   
+   BeginArray(frameArena, String, args);
+   while (remaining.length)
+   {
+      String arg = EatToNextSpaceReturnHead(&remaining);
+      Assert(arg.length);
+      *PushStruct(frameArena, String) = arg;
+      EatSpaces(&remaining);
+   }
+   EndArray(frameArena, String, args);
+   
+   if (!(selectedCommand->minArgs <= args.amount && args.amount <= selectedCommand->maxArgs))
+   {
+      ConsoleOutputError("Wrong amount of Arguments, for command %s! Expected between %u32 and %u32 arguments.", selectedCommand->name, selectedCommand->minArgs, selectedCommand->maxArgs);
+      return;
+   }
+   
+   selectedCommand->interp(args);
+   ConsoleOutput("Executed command %s!", selectedCommand->name);
 }
 
 static void RemoveSubstring(String *string, u32 first, u32 last)
 {
-	if (first == last) return;
-	Assert(first < last);
-	Assert(last <= string->length);
+   if (first == last) return;
+   Assert(first < last);
+   Assert(last <= string->length);
    
-	String rest = *string;
-	rest.data += last;
-	rest.length -= last;
+   String rest = *string;
+   rest.data += last;
+   rest.length -= last;
    
-	String toWrite = *string;
-	toWrite.data += first;
+   String toWrite = *string;
+   toWrite.data += first;
    
-	CopyStringToString(rest, &toWrite);
-	string->length -= (last - first);
+   CopyStringToString(rest, &toWrite);
+   string->length -= (last - first);
 }
 
 static void ShiftSelectionUpdate(u32 intendedPos)
 {
-	if (ConsoleHasActiveTextFieldSelection())
-	{
-		console.endSelectPos = intendedPos;
-	}
-	else
-	{
-		console.selecting = SelectTag_TextField;
-		console.firstSelectPos = console.cursorPos;
-		console.endSelectPos = intendedPos;
-	}
+   if (ConsoleHasActiveTextFieldSelection())
+   {
+      console.endSelectPos = intendedPos;
+   }
+   else
+   {
+      console.selecting = SelectTag_TextField;
+      console.firstSelectPos = console.cursorPos;
+      console.endSelectPos = intendedPos;
+   }
    
 }
 
 static void ConsoleHandleEvent(KeyStateMessage message, Input *input)
 {
-	TimedBlock;
+   TimedBlock;
    
-	if (message.flag & (KeyState_PressedThisFrame | KeyState_Repeaded))
-	{
-		switch (message.key)
-		{
+   if (message.flag & (KeyState_PressedThisFrame | KeyState_Repeaded))
+   {
+      switch (message.key)
+      {
          case Key_F1:
          {
             f32 newIntededOpenness = (message.flag & KeyState_ShiftDown) ? console.openWide : console.open;
@@ -375,13 +374,13 @@ static void ConsoleHandleEvent(KeyStateMessage message, Input *input)
             
          }break;
          
-		}
-	}
+      }
+   }
    
-	if (message.flag & (KeyState_ReleasedThisFrame))
-	{
-		switch (message.key)
-		{
+   if (message.flag & (KeyState_ReleasedThisFrame))
+   {
+      switch (message.key)
+      {
          case Key_leftMouse:
          {
             console.selecting &= ~SelectTag_Selecting;
@@ -392,19 +391,19 @@ static void ConsoleHandleEvent(KeyStateMessage message, Input *input)
             console.intendedOpenness = 0.0f;
          }break;
          
-		}
+      }
       
-	}
+   }
    
-	if (!ConsoleActive())
-	{
-		return;
-	}
+   if (!ConsoleActive())
+   {
+      return;
+   }
    
-	if (message.flag & (KeyState_PressedThisFrame | KeyState_Repeaded))
-	{
-		switch (message.key)
-		{
+   if (message.flag & (KeyState_PressedThisFrame | KeyState_Repeaded))
+   {
+      switch (message.key)
+      {
          
          case Key_mouseWheelForward:
          {
@@ -450,19 +449,19 @@ static void ConsoleHandleEvent(KeyStateMessage message, Input *input)
                return;
             }
          }break;
-		}
-	}
+      }
+   }
    
    
-	if (!ConsoleReadyToType())
-	{
-		return;
-	}
+   if (!ConsoleReadyToType())
+   {
+      return;
+   }
    
-	if (message.flag & (KeyState_PressedThisFrame | KeyState_Repeaded))
-	{
-		switch (message.key)
-		{
+   if (message.flag & (KeyState_PressedThisFrame | KeyState_Repeaded))
+   {
+      switch (message.key)
+      {
          case Key_v:
          {
             if (message.flag & KeyState_ControlDown)
@@ -642,325 +641,325 @@ static void ConsoleHandleEvent(KeyStateMessage message, Input *input)
          {
             
          }break;
-		}
+      }
       
-		Char charPressed = KeyToChar(message.key, message.flag & KeyState_ShiftDown);
+      Char charPressed = KeyToChar(message.key, message.flag & KeyState_ShiftDown);
       
-		if (charPressed)
-		{
-			console.recallHistoryPos = 0;
-			if (ConsoleHasActiveTextFieldSelection())
-			{
-				u32 first = Min((u32)console.firstSelectPos, (u32)console.endSelectPos);
-				u32 end = Max((u32)console.firstSelectPos, (u32)console.endSelectPos);
+      if (charPressed)
+      {
+         console.recallHistoryPos = 0;
+         if (ConsoleHasActiveTextFieldSelection())
+         {
+            u32 first = Min((u32)console.firstSelectPos, (u32)console.endSelectPos);
+            u32 end = Max((u32)console.firstSelectPos, (u32)console.endSelectPos);
             
-				if (first < (end - 1))
-				{
-					RemoveSubstring(&console.inputString, first, end - 1);
-				}
-				
-				console.inputString[first] = charPressed;
+            if (first < (end - 1))
+            {
+               RemoveSubstring(&console.inputString, first, end - 1);
+            }
             
-				console.cursorPos = first + 1;
-				ConsoleResetSelection();
+            console.inputString[first] = charPressed;
             
-			}
-			else if (console.inputString.length + 1 < console.maxInputStringLength)
-			{
-				String rest = console.inputString;
-				rest.data += console.cursorPos;
-				rest.length -= console.cursorPos;
-				String copy = CopyString(rest);
-				console.inputString.data[console.cursorPos++] = charPressed;
-				console.inputString.length++;
+            console.cursorPos = first + 1;
+            ConsoleResetSelection();
             
-				for (u32 i = 0; i < copy.length; i++)
-				{
-					console.inputString.data[console.cursorPos + i] = copy.data[i];
-				}
+         }
+         else if (console.inputString.length + 1 < console.maxInputStringLength)
+         {
+            String rest = console.inputString;
+            rest.data += console.cursorPos;
+            rest.length -= console.cursorPos;
+            String copy = CopyString(rest);
+            console.inputString.data[console.cursorPos++] = charPressed;
+            console.inputString.length++;
             
-			}
-		}
-		console.cursorTimer = 0.0f;
-	}
+            for (u32 i = 0; i < copy.length; i++)
+            {
+               console.inputString.data[console.cursorPos + i] = copy.data[i];
+            }
+            
+         }
+      }
+      console.cursorTimer = 0.0f;
+   }
    
 }
 
 static void UpdateConsole(Input input) 
 {
-	TimedBlock;
+   TimedBlock;
    
-	if (console.intendedOpenness > console.openness)
-	{
-		console.openness += console.dt * input.dt;
-		if(console.openness > console.intendedOpenness)
-		{ 
-			console.openness = console.intendedOpenness;
-		}
-	}
-	else
-	{
-		console.openness -= console.dt * input.dt;
-		if (console.openness < console.intendedOpenness)
-		{
-			console.openness = console.intendedOpenness;
-		}
-	}
+   if (console.intendedOpenness > console.openness)
+   {
+      console.openness += console.dt * input.dt;
+      if(console.openness > console.intendedOpenness)
+      { 
+         console.openness = console.intendedOpenness;
+      }
+   }
+   else
+   {
+      console.openness -= console.dt * input.dt;
+      if (console.openness < console.intendedOpenness)
+      {
+         console.openness = console.intendedOpenness;
+      }
+   }
    
-	String preCursorString = console.inputString;
-	preCursorString.length = console.cursorPos;
+   String preCursorString = console.inputString;
+   preCursorString.length = console.cursorPos;
    
-	f32 stringLengthUpToCursor = GetActualStringLength(preCursorString, console.fontSize, globalFont);
-	
-	if ((stringLengthUpToCursor - console.typeFieldTextScrollOffset) > (1.0f - console.cursorScrollEdge))
-	{
-		console.typeFieldTextScrollOffset = stringLengthUpToCursor - (1.0f - console.cursorScrollEdge);
-	}
-	else if ((stringLengthUpToCursor >  console.cursorScrollEdge) && (stringLengthUpToCursor - console.typeFieldTextScrollOffset) < console.cursorScrollEdge)
-	{
-		console.typeFieldTextScrollOffset = stringLengthUpToCursor - console.cursorScrollEdge;
-	}
+   f32 stringLengthUpToCursor = GetActualStringLength(preCursorString, console.fontSize, globalFont);
    
-	console.cursorTimer += input.dt;
-	if (console.cursorTimer > 1.0f)
-	{
-		console.cursorTimer -= 1.0f;
-	}
+   if ((stringLengthUpToCursor - console.typeFieldTextScrollOffset) > (1.0f - console.cursorScrollEdge))
+   {
+      console.typeFieldTextScrollOffset = stringLengthUpToCursor - (1.0f - console.cursorScrollEdge);
+   }
+   else if ((stringLengthUpToCursor >  console.cursorScrollEdge) && (stringLengthUpToCursor - console.typeFieldTextScrollOffset) < console.cursorScrollEdge)
+   {
+      console.typeFieldTextScrollOffset = stringLengthUpToCursor - console.cursorScrollEdge;
+   }
    
-	if (console.selecting & SelectTag_Selecting)
-	{
-		if (console.selecting & SelectTag_TextField)
-		{
-			u32 bestLocation = GetBestCursorLocationForString(console.inputString, console.typeFieldTextScrollOffset + input.mouseZeroToOne.x, console.typeFieldXOffset);
-			console.endSelectPos = bestLocation;
+   console.cursorTimer += input.dt;
+   if (console.cursorTimer > 1.0f)
+   {
+      console.cursorTimer -= 1.0f;
+   }
+   
+   if (console.selecting & SelectTag_Selecting)
+   {
+      if (console.selecting & SelectTag_TextField)
+      {
+         u32 bestLocation = GetBestCursorLocationForString(console.inputString, console.typeFieldTextScrollOffset + input.mouseZeroToOne.x, console.typeFieldXOffset);
+         console.endSelectPos = bestLocation;
          
-			console.cursorPos = bestLocation;
-			console.cursorTimer = 0.0f;
-		}
-		else if (console.selecting & SelectTag_History)
-		{
-			u32 bestLocation = GetBestCursorLocationForConsoleHistory(input);
-			console.endSelectPos = bestLocation;
+         console.cursorPos = bestLocation;
+         console.cursorTimer = 0.0f;
+      }
+      else if (console.selecting & SelectTag_History)
+      {
+         u32 bestLocation = GetBestCursorLocationForConsoleHistory(input);
+         console.endSelectPos = bestLocation;
          
-			console.cursorTimer = 0.0f;
-			//ConsoleOutputString(CreateString(workingArena, bestLocation));
-		}
-		else
-		{
-			ConsoleOutput("What are we selecting?");
-		}
-		
-	}
-	else if (console.scrollingScrollbar)
-	{
-		f32 lineSize = 1.5f * console.fontSize;
-		f32 amountOfDisplayedLinesf = console.openness / lineSize;
-		u32 amountOfDisplayedLines = (u32)amountOfDisplayedLinesf + 1;
+         console.cursorTimer = 0.0f;
+         //ConsoleOutputString(CreateString(workingArena, bestLocation));
+      }
+      else
+      {
+         ConsoleOutput("What are we selecting?");
+      }
       
-		i32 topLine = (i32)(console.historyLength - amountOfDisplayedLines - console.historyPos);
-		topLine = Max(0, topLine);
-		i32 bottomLine = console.historyLength - 1 - console.historyPos;
+   }
+   else if (console.scrollingScrollbar)
+   {
+      f32 lineSize = 1.5f * console.fontSize;
+      f32 amountOfDisplayedLinesf = console.openness / lineSize;
+      u32 amountOfDisplayedLines = (u32)amountOfDisplayedLinesf + 1;
       
-		f32 scrollbarBottom = console.openness - console.textInputFieldSize;
-		f32 scrollMiny = (f32)(topLine) / (f32)console.historyLength * scrollbarBottom;
-		f32 scrollMaxy = (f32)(bottomLine + 1) / (f32)console.historyLength * scrollbarBottom;
+      i32 topLine = (i32)(console.historyLength - amountOfDisplayedLines - console.historyPos);
+      topLine = Max(0, topLine);
+      i32 bottomLine = console.historyLength - 1 - console.historyPos;
       
-		f32 scrollbarHalfLength = 0.5f * (scrollMaxy - scrollMiny);
+      f32 scrollbarBottom = console.openness - console.textInputFieldSize;
+      f32 scrollMiny = (f32)(topLine) / (f32)console.historyLength * scrollbarBottom;
+      f32 scrollMaxy = (f32)(bottomLine + 1) / (f32)console.historyLength * scrollbarBottom;
       
-		f32 inpMid = input.mouseZeroToOne.y;
-		f32 bottomMinusHalfLength = scrollbarBottom - scrollbarHalfLength;
+      f32 scrollbarHalfLength = 0.5f * (scrollMaxy - scrollMiny);
       
-		f32 intendedScollbarMid = Clamp(inpMid, scrollbarHalfLength, bottomMinusHalfLength);
-		f32 scrollbarIntendedBot = intendedScollbarMid + scrollbarHalfLength;
-		f32 intendedBottomLine = scrollbarIntendedBot / scrollbarBottom * (f32)console.historyLength - 1.0f;
-		u32 intendedHistoryPos = console.historyLength - 1 - (u32)intendedBottomLine;
-		console.historyPos = intendedHistoryPos;
+      f32 inpMid = input.mouseZeroToOne.y;
+      f32 bottomMinusHalfLength = scrollbarBottom - scrollbarHalfLength;
       
-	}
+      f32 intendedScollbarMid = Clamp(inpMid, scrollbarHalfLength, bottomMinusHalfLength);
+      f32 scrollbarIntendedBot = intendedScollbarMid + scrollbarHalfLength;
+      f32 intendedBottomLine = scrollbarIntendedBot / scrollbarBottom * (f32)console.historyLength - 1.0f;
+      u32 intendedHistoryPos = console.historyLength - 1 - (u32)intendedBottomLine;
+      console.historyPos = intendedHistoryPos;
+      
+   }
 }
 
 static void ConsoleDrawSelection(RenderGroup *rg, String string, u32 first, u32 end, f32 yMin, f32 yMax, f32 xOffset)
 {
-	String prefirst = string;
-	prefirst.length = first;
-	f32 stringLengthUpToSelection = GetActualStringLength(prefirst, console.fontSize, globalFont);
-	String selection = string;
-	selection.length = (end - first);
-	f32 selectionLength = GetActualStringLength(selection, console.fontSize, globalFont);
+   String prefirst = string;
+   prefirst.length = first;
+   f32 stringLengthUpToSelection = GetActualStringLength(prefirst, console.fontSize, globalFont);
+   String selection = string;
+   selection.length = (end - first);
+   f32 selectionLength = GetActualStringLength(selection, console.fontSize, globalFont);
    
-	f32 selectionMinX = stringLengthUpToSelection - console.typeFieldTextScrollOffset + xOffset;
-	f32 selectionMaxX = selectionMinX + selectionLength;
+   f32 selectionMinX = stringLengthUpToSelection - console.typeFieldTextScrollOffset + xOffset;
+   f32 selectionMaxX = selectionMinX + selectionLength;
    
-	Tweekable(v4, consoleSelectionColor); // V4(1.0f, 0.0f, 0.2f, 0.45f)
+   Tweekable(v4, consoleSelectionColor); // V4(1.0f, 0.0f, 0.2f, 0.45f)
    
-	PushRectangle(rg, V2(selectionMinX, yMin), V2(selectionMaxX, yMax), consoleSelectionColor);
+   PushRectangle(rg, V2(selectionMinX, yMin), V2(selectionMaxX, yMax), consoleSelectionColor);
 }
 
 
 // 0 to 1 screen space
 static void DrawConsole(RenderGroup *rg) 
 {
-	if (console.openness == 0.0f) return;
+   if (console.openness == 0.0f) return;
    
-	v2 p1 = V2(0, 0);
-	v2 p2 = V2(1, 0);
-	v2 p3 = V2(0, console.openness);
-	v2 p4 = V2(1, console.openness);
+   v2 p1 = V2(0, 0);
+   v2 p2 = V2(1, 0);
+   v2 p3 = V2(0, console.openness);
+   v2 p4 = V2(1, console.openness);
    
-	//mainField
-	PushRectangle(rg, p1, V2(1 - console.scrollbarWidth, console.openness) - V2(0, console.textInputFieldSize), V4(1.0f, 0.5f, 0.6f, 0.85f));
+   //mainField
+   PushRectangle(rg, p1, V2(1 - console.scrollbarWidth, console.openness) - V2(0, console.textInputFieldSize), V4(1.0f, 0.5f, 0.6f, 0.85f));
    
-	//typeField
-	Tweekable(v4, consoleTextFieldColor); //V4(1.0f, 0.6f, 0.7f, 0.85f)
-	v2 typeFieldPos = p3 - V2(0, console.textInputFieldSize);
-	PushRectangle(rg, typeFieldPos, p4, consoleTextFieldColor);
+   //typeField
+   Tweekable(v4, consoleTextFieldColor); //V4(1.0f, 0.6f, 0.7f, 0.85f)
+   v2 typeFieldPos = p3 - V2(0, console.textInputFieldSize);
+   PushRectangle(rg, typeFieldPos, p4, consoleTextFieldColor);
    
-	//cursor
-	if ((console.cursorTimer < 0.5f) && !(console.selecting & SelectTag_History))
-	{
-		String preCursorString = console.inputString;
-		preCursorString.length = console.cursorPos;
+   //cursor
+   if ((console.cursorTimer < 0.5f) && !(console.selecting & SelectTag_History))
+   {
+      String preCursorString = console.inputString;
+      preCursorString.length = console.cursorPos;
       
-		f32 stringLengthUpToCursor = GetActualStringLength(preCursorString, console.fontSize, globalFont); 
-		v2 cursorPos = V2(console.typeFieldXOffset + stringLengthUpToCursor - console.typeFieldTextScrollOffset, typeFieldPos.y);
-		PushRectangle(rg, cursorPos, console.cursorWidth, console.fontSize, V4(1.0f, 1.0f, 1.0f, 0.85f));
-	}
+      f32 stringLengthUpToCursor = GetActualStringLength(preCursorString, console.fontSize, globalFont); 
+      v2 cursorPos = V2(console.typeFieldXOffset + stringLengthUpToCursor - console.typeFieldTextScrollOffset, typeFieldPos.y);
+      PushRectangle(rg, cursorPos, console.cursorWidth, console.fontSize, V4(1.0f, 1.0f, 1.0f, 0.85f));
+   }
    
-	//typefield Selection
-	if (ConsoleHasActiveTextFieldSelection())
-	{
-		u32 first = Min((u32)console.firstSelectPos, (u32)console.endSelectPos);
-		u32 end = Max((u32)console.firstSelectPos, (u32)console.endSelectPos);
+   //typefield Selection
+   if (ConsoleHasActiveTextFieldSelection())
+   {
+      u32 first = Min((u32)console.firstSelectPos, (u32)console.endSelectPos);
+      u32 end = Max((u32)console.firstSelectPos, (u32)console.endSelectPos);
       
-		ConsoleDrawSelection(rg, console.inputString, first, end, typeFieldPos.y, p4.y, console.typeFieldXOffset);
-	}
+      ConsoleDrawSelection(rg, console.inputString, first, end, typeFieldPos.y, p4.y, console.typeFieldXOffset);
+   }
    
-	f32 lineSize = 1.5f * console.fontSize;
-	f32 amountOfDisplayedLinesf = console.openness / lineSize;
-	u32 amountOfDisplayedLines = (u32)amountOfDisplayedLinesf + 1;
+   f32 lineSize = 1.5f * console.fontSize;
+   f32 amountOfDisplayedLinesf = console.openness / lineSize;
+   u32 amountOfDisplayedLines = (u32)amountOfDisplayedLinesf + 1;
    
-	if (console.historyLength < amountOfDisplayedLines)
-	{
-		amountOfDisplayedLines = console.historyLength;
-	}
+   if (console.historyLength < amountOfDisplayedLines)
+   {
+      amountOfDisplayedLines = console.historyLength;
+   }
    
-	v2 consoleFieldFirstRow = V2(console.historyXOffset, typeFieldPos.y);
-	i32 topLine = (i32)(console.historyLength - amountOfDisplayedLines - console.historyPos);
-	topLine = Max(0, topLine);
-	i32 bottomLine = console.historyLength - 1 - console.historyPos;
+   v2 consoleFieldFirstRow = V2(console.historyXOffset, typeFieldPos.y);
+   i32 topLine = (i32)(console.historyLength - amountOfDisplayedLines - console.historyPos);
+   topLine = Max(0, topLine);
+   i32 bottomLine = console.historyLength - 1 - console.historyPos;
    
-	//History Selection
-	if (ConsoleHasActiveHistorySelection())
-	{
-		u32 first = Min((u32)console.firstSelectPos, (u32)console.endSelectPos);
-		u32 end = Max((u32)console.firstSelectPos, (u32)console.endSelectPos);
+   //History Selection
+   if (ConsoleHasActiveHistorySelection())
+   {
+      u32 first = Min((u32)console.firstSelectPos, (u32)console.endSelectPos);
+      u32 end = Max((u32)console.firstSelectPos, (u32)console.endSelectPos);
       
-		u32 firstLine = 0;
-		for (i32 i = topLine; i <= bottomLine; i++)
-		{
-			u32 linePos = (u32)(console.history[i].entry.data - console.history[0].entry.data);
+      u32 firstLine = 0;
+      for (i32 i = topLine; i <= bottomLine; i++)
+      {
+         u32 linePos = (u32)(console.history[i].entry.data - console.history[0].entry.data);
          if (linePos > first)
-			{
-				break;
-			}
-			firstLine = i;
-		}
+         {
+            break;
+         }
+         firstLine = i;
+      }
       
-		u32 endLine = firstLine;
-		for (i32 i = firstLine; i <= bottomLine; i++)
-		{
-			u32 linePos = (u32)(console.history[i].entry.data - console.history[0].entry.data);
-			if (linePos > end)
-			{
-				break;
-			}
-			endLine = i;
-		}
-		
-		if (endLine == firstLine)
-		{
-			u32 firstLinePosInBuffer = (u32)(console.history[firstLine].entry.data - console.history[0].entry.data);
-			u32 newFirst = SaveSubstract(first, firstLinePosInBuffer);
-			first = newFirst;
-			u32 newEnd = SaveSubstract(end, firstLinePosInBuffer);
-			end = newEnd;
-         
-			f32 pos = (f32)(console.historyLength - console.historyPos - endLine);
-         
-			ConsoleDrawSelection(rg, console.history[firstLine].entry, first, end, consoleFieldFirstRow.y - pos * lineSize, consoleFieldFirstRow.y - (pos - 1) * lineSize, console.historyXOffset);
-		}
-		else
-		{
-			u32 firstLinePosInBuffer = (u32)(console.history[firstLine].entry.data - console.history[0].entry.data);
-			u32 firstLineEndInBuffer = (u32)(console.history[firstLine + 1].entry.data - console.history[0].entry.data);
-			u32 endLinePosInBuffer = (u32)(console.history[endLine].entry.data - console.history[0].entry.data);
-			u32 endLineEndInBuffer = (u32)(console.history[endLine + 1].entry.data - console.history[0].entry.data);
-         
-			//draw head
-			{
-				u32 firstHead = SaveSubstract(first, firstLinePosInBuffer);
-				u32 endHead = firstLineEndInBuffer;
-            
-				f32 pos = (f32)(console.historyLength - console.historyPos - firstLine);
-            
-				ConsoleDrawSelection(rg, console.history[firstLine].entry, firstHead, endHead, consoleFieldFirstRow.y - pos * lineSize, consoleFieldFirstRow.y - (pos - 1) * lineSize, console.historyXOffset);
-			}
-         
-         
-			//fill inbetween
-			for (u32 i = firstLine + 1; i < endLine; i++)
-			{
-				u32 firstI = 0;
-				u32 endI = console.history[i].entry.length;
-            
-				f32 pos = (f32)(console.historyLength - console.historyPos - i);
-            
-				ConsoleDrawSelection(rg, console.history[i].entry, firstI, endI, consoleFieldFirstRow.y - pos * lineSize, consoleFieldFirstRow.y - (pos - 1) * lineSize, console.historyXOffset);
-			}
-         
-			//draw tail
-			{
-				u32 firstEnd = 0;
-				u32 endEnd = SaveSubstract(end, endLinePosInBuffer);
-            
-				f32 pos = (f32)(console.historyLength - console.historyPos - endLine);
-            
-				ConsoleDrawSelection(rg, console.history[endLine].entry, firstEnd, endEnd, consoleFieldFirstRow.y - pos * lineSize, consoleFieldFirstRow.y - (pos - 1) * lineSize, console.historyXOffset);
-			}
-		}
-	}
-   
-	//typefield Text
-	v2 typeFieldTextPos = p3 + V2(console.typeFieldXOffset - console.typeFieldTextScrollOffset, -console.textInputFieldSize);
-	PushString(rg, typeFieldTextPos - V2(0.001f, 0.001f), console.inputString, console.fontSize, globalFont, V4(1.0f, 0.5f, 0.5f, 0.5f));
-	PushString(rg, typeFieldTextPos, console.inputString, console.fontSize, globalFont, V4(1.0f, 1.0f, 1.0f, 1.0f)); 
-   
-	//History Text
-	for (i32 i = bottomLine; i >= topLine; i--)
-	{
-		f32 pos = (f32)(console.historyLength - console.historyPos - i);
-		v4 color = ColorForHistoryEntry(console.history[i].flag);
-		PushString(rg, consoleFieldFirstRow - pos * V2(0, lineSize), console.history[i].entry, console.fontSize, globalFont, color);
-	}
-	
-	//scrollbar
-	f32 scrollbarBottom = console.openness - console.textInputFieldSize;
-	v2 scrollbarFieldMin = V2(1.0f - console.scrollbarWidth, 0.0f);
-	v2 scrollbarFieldMax = V2(1.0f, scrollbarBottom);
-	Tweekable(v4, consoleScrollbarBackGroundColor);
-	PushRectangle(rg, scrollbarFieldMin, scrollbarFieldMax, consoleScrollbarBackGroundColor);
-   
-	Tweekable(v4, consoleScrollbarColor); //V4(1.0f, 0.5f, 0.6f, 0.85f)
-	if(console.historyLength)
-	{
-		f32 scrollMiny = (f32)(topLine) / (f32)console.historyLength * scrollbarBottom;
-		f32 scrollMaxy = (f32)(bottomLine + 1) / (f32)console.historyLength * scrollbarBottom;
+      u32 endLine = firstLine;
+      for (i32 i = firstLine; i <= bottomLine; i++)
+      {
+         u32 linePos = (u32)(console.history[i].entry.data - console.history[0].entry.data);
+         if (linePos > end)
+         {
+            break;
+         }
+         endLine = i;
+      }
       
-		v2 scrollbarMin = V2(1.0f - console.scrollbarWidth + 0.003f, scrollMiny);
-		v2 scrollbarMax = V2(1.0f - 0.003f, scrollMaxy);
+      if (endLine == firstLine)
+      {
+         u32 firstLinePosInBuffer = (u32)(console.history[firstLine].entry.data - console.history[0].entry.data);
+         u32 newFirst = SaveSubstract(first, firstLinePosInBuffer);
+         first = newFirst;
+         u32 newEnd = SaveSubstract(end, firstLinePosInBuffer);
+         end = newEnd;
+         
+         f32 pos = (f32)(console.historyLength - console.historyPos - endLine);
+         
+         ConsoleDrawSelection(rg, console.history[firstLine].entry, first, end, consoleFieldFirstRow.y - pos * lineSize, consoleFieldFirstRow.y - (pos - 1) * lineSize, console.historyXOffset);
+      }
+      else
+      {
+         u32 firstLinePosInBuffer = (u32)(console.history[firstLine].entry.data - console.history[0].entry.data);
+         u32 firstLineEndInBuffer = (u32)(console.history[firstLine + 1].entry.data - console.history[0].entry.data);
+         u32 endLinePosInBuffer = (u32)(console.history[endLine].entry.data - console.history[0].entry.data);
+         u32 endLineEndInBuffer = (u32)(console.history[endLine + 1].entry.data - console.history[0].entry.data);
+         
+         //draw head
+         {
+            u32 firstHead = SaveSubstract(first, firstLinePosInBuffer);
+            u32 endHead = firstLineEndInBuffer;
+            
+            f32 pos = (f32)(console.historyLength - console.historyPos - firstLine);
+            
+            ConsoleDrawSelection(rg, console.history[firstLine].entry, firstHead, endHead, consoleFieldFirstRow.y - pos * lineSize, consoleFieldFirstRow.y - (pos - 1) * lineSize, console.historyXOffset);
+         }
+         
+         
+         //fill inbetween
+         for (u32 i = firstLine + 1; i < endLine; i++)
+         {
+            u32 firstI = 0;
+            u32 endI = console.history[i].entry.length;
+            
+            f32 pos = (f32)(console.historyLength - console.historyPos - i);
+            
+            ConsoleDrawSelection(rg, console.history[i].entry, firstI, endI, consoleFieldFirstRow.y - pos * lineSize, consoleFieldFirstRow.y - (pos - 1) * lineSize, console.historyXOffset);
+         }
+         
+         //draw tail
+         {
+            u32 firstEnd = 0;
+            u32 endEnd = SaveSubstract(end, endLinePosInBuffer);
+            
+            f32 pos = (f32)(console.historyLength - console.historyPos - endLine);
+            
+            ConsoleDrawSelection(rg, console.history[endLine].entry, firstEnd, endEnd, consoleFieldFirstRow.y - pos * lineSize, consoleFieldFirstRow.y - (pos - 1) * lineSize, console.historyXOffset);
+         }
+      }
+   }
+   
+   //typefield Text
+   v2 typeFieldTextPos = p3 + V2(console.typeFieldXOffset - console.typeFieldTextScrollOffset, -console.textInputFieldSize);
+   PushString(rg, typeFieldTextPos - V2(0.001f, 0.001f), console.inputString, console.fontSize, globalFont, V4(1.0f, 0.5f, 0.5f, 0.5f));
+   PushString(rg, typeFieldTextPos, console.inputString, console.fontSize, globalFont, V4(1.0f, 1.0f, 1.0f, 1.0f)); 
+   
+   //History Text
+   for (i32 i = bottomLine; i >= topLine; i--)
+   {
+      f32 pos = (f32)(console.historyLength - console.historyPos - i);
+      v4 color = ColorForHistoryEntry(console.history[i].flag);
+      PushString(rg, consoleFieldFirstRow - pos * V2(0, lineSize), console.history[i].entry, console.fontSize, globalFont, color);
+   }
+   
+   //scrollbar
+   f32 scrollbarBottom = console.openness - console.textInputFieldSize;
+   v2 scrollbarFieldMin = V2(1.0f - console.scrollbarWidth, 0.0f);
+   v2 scrollbarFieldMax = V2(1.0f, scrollbarBottom);
+   Tweekable(v4, consoleScrollbarBackGroundColor);
+   PushRectangle(rg, scrollbarFieldMin, scrollbarFieldMax, consoleScrollbarBackGroundColor);
+   
+   Tweekable(v4, consoleScrollbarColor); //V4(1.0f, 0.5f, 0.6f, 0.85f)
+   if(console.historyLength)
+   {
+      f32 scrollMiny = (f32)(topLine) / (f32)console.historyLength * scrollbarBottom;
+      f32 scrollMaxy = (f32)(bottomLine + 1) / (f32)console.historyLength * scrollbarBottom;
       
-		PushRectangle(rg, scrollbarMin, scrollbarMax, consoleScrollbarColor);
-	}
+      v2 scrollbarMin = V2(1.0f - console.scrollbarWidth + 0.003f, scrollMiny);
+      v2 scrollbarMax = V2(1.0f - 0.003f, scrollMaxy);
+      
+      PushRectangle(rg, scrollbarMin, scrollbarMax, consoleScrollbarColor);
+   }
 }
 
 //todo:

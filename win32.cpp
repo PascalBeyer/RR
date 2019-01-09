@@ -1164,7 +1164,7 @@ ClipCursor(&windowRect);
       
       PushString(rg, V2(20.1f, 10.1f), s, 20, font);
       
-      PushRenderSetup(rg, {}, {}, Setup_Orthogonal | Setup_ZeroToOne);
+      PushRenderSetup(rg, {}, {}, Setup_OrthoZeroToOne);
       
       DrawDebugRecords(rg, gameState.font, targetSecondsPerFrame, input);
       //DrawTweekers(rg, font);

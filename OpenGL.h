@@ -524,7 +524,7 @@ static void RegisterTriangleMesh(TriangleMesh *mesh)
    if(mesh->skeleton.bones.amount)
    {
       stride = sizeof(VertexFormatPCUNBD);
-      
+      mesh->vertexType = VertexFormat_PCUNBD;
       v3Array colors = PushArray(frameArena, v3, mesh->skeleton.bones.amount);
       
       RandomSeries series = GetRandomSeries();
@@ -589,7 +589,7 @@ static void RegisterTriangleMesh(TriangleMesh *mesh)
    else
    {
       stride = sizeof(VertexFormatPCUN);
-      
+      mesh->vertexType = VertexFormat_PCUN;
       VertexFormatPCUN *packedData = PushData(frameArena, VertexFormatPCUN, 0);
       
       for(u32 i = 0; i < mesh->positions.amount; i++)
@@ -661,10 +661,6 @@ static void BeginUseProgram(OpenGLContext *context, OpenGLProgram prog, RenderSe
    
    if (prog.flags & ShaderFlags_ShadowMapping)
    {
-      // todo not sure whats the best for this transformation feels hacky anywhere
-      v3 lightP = (setup.cameraTransform * V4(setup.lightSource.pos, 1.0f)).xyz;
-      glUniform3f(prog.lightP, lightP.x, lightP.y, lightP.z);
-      
       m4x4 shadowMat = uniforms.shadowMat * uniforms.objectTransform;
       glUniformMatrix4fv(prog.shadowTransform, 1, GL_TRUE, shadowMat.a[0]);
       glActiveTexture(GL_TEXTURE1);
@@ -675,6 +671,12 @@ static void BeginUseProgram(OpenGLContext *context, OpenGLProgram prog, RenderSe
    if(prog.flags & ShaderFlags_Animated)
    {
       glUniformMatrix4fv(prog.boneStates, uniforms.boneStates.amount, GL_TRUE, (GLfloat *)uniforms.boneStates.data);
+   }
+   
+   if(prog.flags & ShaderFlags_Phong)
+   {
+      v3 lightP = setup.transformedLightP;
+      glUniform3f(prog.lightP, lightP.x, lightP.y, lightP.z);
    }
    
 	glBindBuffer(GL_ARRAY_BUFFER, uniforms.vertexBuffer);
@@ -763,19 +765,44 @@ static void BeginAttribArraysPCUNBD(OpenGLProgram prog)
    }
 }
 
+static void BeginAttribArrays(OpenGLProgram prog, VertexFormatType type)
+{
+   switch (type)
+   {
+      case VertexFormat_PC:
+      {
+         BeginAttribArraysPC(prog);
+      }break;
+      case VertexFormat_PCU:
+      {
+         BeginAttribArraysPCU(prog);
+      }break;
+      case VertexFormat_PCUN:
+      {
+         BeginAttribArraysPCUN(prog);
+      }break;
+      case VertexFormat_PCUNBD:
+      {
+         BeginAttribArraysPCUNBD(prog);
+      }break;
+      
+      InvalidDefaultCase;
+   }
+}
+
 static void EndAttribArrays(OpenGLProgram prog)
 {
    glDisableVertexAttribArray(prog.vertP);
-	glDisableVertexAttribArray(prog.vertC);
+   glDisableVertexAttribArray(prog.vertC);
    
-	if(prog.flags & ShaderFlags_Textured)
-	{
-		glDisableVertexAttribArray(prog.vertUV);
-	}
+   if(prog.flags & ShaderFlags_Textured)
+   {
+      glDisableVertexAttribArray(prog.vertUV);
+   }
    if(prog.flags & ShaderFlags_Phong)
-	{
-		glDisableVertexAttribArray(prog.vertN);
-	}
+   {
+      glDisableVertexAttribArray(prog.vertN);
+   }
    if(prog.flags & ShaderFlags_Animated)
    {
       glDisableVertexAttribArray(prog.boneIndices);
@@ -786,8 +813,8 @@ static void EndAttribArrays(OpenGLProgram prog)
 
 static OpenGLContext OpenGLInit(bool modernContext)
 {
-	//GLuint reservedBltTexture;
-	//glGenTextures(1, &reservedBltTexture);
+   //GLuint reservedBltTexture;
+   //glGenTextures(1, &reservedBltTexture);
    
    OpenGLContext ret;
    
@@ -795,32 +822,32 @@ static OpenGLContext OpenGLInit(bool modernContext)
    
    ret.info = info;
    
-	if (glDebugMessageCallback)
-	{
-		glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
-		glDebugMessageCallback(OpenGLDebugCallback, 0);
-	}
+   if (glDebugMessageCallback)
+   {
+      glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+      glDebugMessageCallback(OpenGLDebugCallback, 0);
+   }
    
-	ret.defaultInternalTextureFormat = GL_RGBA;
-	if (info.GL_EXT_texture_sRGB)
-	{
-		ret.defaultInternalTextureFormat = GL_SRGB_ALPHA;
-	}
+   ret.defaultInternalTextureFormat = GL_RGBA;
+   if (info.GL_EXT_texture_sRGB)
+   {
+      ret.defaultInternalTextureFormat = GL_SRGB_ALPHA;
+   }
    
-	GLuint DummyVertexArray;
-	glGenVertexArrays(1, &DummyVertexArray);
-	glBindVertexArray(DummyVertexArray);
+   GLuint DummyVertexArray;
+   glGenVertexArrays(1, &DummyVertexArray);
+   glBindVertexArray(DummyVertexArray);
    
    
    GLuint vertexBuffer;
-	glGenBuffers(1, &vertexBuffer);
-	glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
-	
+   glGenBuffers(1, &vertexBuffer);
+   glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
+   
    ret.vertexBuffer = vertexBuffer;
    
 #if 0
-	glGenBuffers(1, &elementBuffer);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementBuffer);
+   glGenBuffers(1, &elementBuffer);
+   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementBuffer);
 #endif
    
    File file = LoadFile("src/ubershader.glsl");
@@ -830,7 +857,7 @@ static OpenGLContext OpenGLInit(bool modernContext)
    
    // used for untextured quads
    ret.basic = OpenGLMakeProgram((char *)file.data, ShaderFlags_ShadowMapping);
-	
+   
    ret.animated = OpenGLMakeProgram((char *)file.data, ShaderFlags_Animated|ShaderFlags_ShadowMapping|ShaderFlags_Phong|ShaderFlags_Textured);
    
    ret.basicMesh = OpenGLMakeProgram((char *)file.data, ShaderFlags_ShadowMapping|ShaderFlags_Phong|ShaderFlags_Textured);
@@ -922,8 +949,8 @@ static OpenGLContext OpenGLInit(bool modernContext)
       Assert(status == GL_FRAMEBUFFER_COMPLETE);
    }
    
-	glBindTexture(GL_TEXTURE_2D, 0);
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+   glBindTexture(GL_TEXTURE_2D, 0);
+   glBindFramebuffer(GL_FRAMEBUFFER, 0);
    
    FrameBuffer shadowBuffer;
    
@@ -962,20 +989,20 @@ static OpenGLContext OpenGLInit(bool modernContext)
       Assert(status == GL_FRAMEBUFFER_COMPLETE);
    }
    
-	//glEnable(GL_PRIMITIVE_RESTART_FIXED_INDEX);
+   //glEnable(GL_PRIMITIVE_RESTART_FIXED_INDEX);
    
-	glDepthMask(GL_TRUE);
-	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-	glDepthFunc(GL_LEQUAL);
-	glEnable(GL_DEPTH_TEST);
-	glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE);
-	glEnable(GL_SAMPLE_ALPHA_TO_ONE);
-	glEnable(GL_MULTISAMPLE);
-	glEnable(GL_CULL_FACE);
+   glDepthMask(GL_TRUE);
+   glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+   glDepthFunc(GL_LEQUAL);
+   glEnable(GL_DEPTH_TEST);
+   glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE);
+   glEnable(GL_SAMPLE_ALPHA_TO_ONE);
+   glEnable(GL_MULTISAMPLE);
+   glEnable(GL_CULL_FACE);
    
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-	
+   glEnable(GL_BLEND);
+   glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+   
    
    {
       GLuint err = glGetError();
@@ -987,8 +1014,8 @@ static OpenGLContext OpenGLInit(bool modernContext)
 
 static u32 HeaderSize(RenderGroupEntryHeader *header)
 {
-	switch (header->type)
-	{
+   switch (header->type)
+   {
       case RenderGroup_EntryClear:
       {
          return sizeof(EntryClear);
@@ -1014,39 +1041,38 @@ static u32 HeaderSize(RenderGroupEntryHeader *header)
          Die;
          return 1;
       }break;
-	}
+   }
 }
 
 static void RenderIntoShadowMap(RenderCommands *rg, OpenGLContext *context)
 {
-	TimedBlock;
+   TimedBlock;
    
-	glDisable(GL_CULL_FACE);
-	//glCullFace(GL_FRONT);
+   glDisable(GL_CULL_FACE);
+   //glCullFace(GL_FRONT);
    
-	glUseProgram(context->shadow.program);
+   glUseProgram(context->shadow.program);
    
-	glBindFramebuffer(GL_FRAMEBUFFER, context->shadowBuffer.id);
+   glBindFramebuffer(GL_FRAMEBUFFER, context->shadowBuffer.id);
    
-	glViewport(0, 0, context->shadowBuffer.width, context->shadowBuffer.height);  // is this per framebuffer?
+   glViewport(0, 0, context->shadowBuffer.width, context->shadowBuffer.height);  // is this per framebuffer?
    
-   // todo hardcoded. this is the size of the shadow texture
-	glClearDepth(1.0f);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+   glClearDepth(1.0f);
+   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
    
    RenderSetup currentSetup = {};
    
-	for (u32 pBufferIt = 0; pBufferIt < rg->pushBufferSize;)
-	{
+   for (u32 pBufferIt = 0; pBufferIt < rg->pushBufferSize;)
+   {
       
-		RenderGroupEntryHeader *header = (RenderGroupEntryHeader *)(rg->pushBufferBase + pBufferIt);
+      RenderGroupEntryHeader *header = (RenderGroupEntryHeader *)(rg->pushBufferBase + pBufferIt);
       switch (header->type)
       {
          case RenderGroup_EntryChangeRenderSetup:
          {
             EntryChangeRenderSetup *setupHeader = (EntryChangeRenderSetup *)header;
             currentSetup = setupHeader->setup;
-            currentSetup.cameraTransform = CameraTransform(currentSetup.lightSource.orientation, currentSetup.lightSource.pos);
+            currentSetup.cameraTransform = currentSetup.shadowMat;
             
             pBufferIt += sizeof(*setupHeader);
          }break;
@@ -1055,34 +1081,19 @@ static void RenderIntoShadowMap(RenderCommands *rg, OpenGLContext *context)
          {
             EntryTriangleMesh *meshHeader = (EntryTriangleMesh *)header;
             
-            TriangleMesh mesh = meshHeader->mesh;
-            
-            Quaternion q = meshHeader->orientation;
-            f32 scale    = meshHeader->scale;
-            v3 pos       = meshHeader->pos;
-            
-            m4x4 objectTransform = Translate(QuaternionToMatrix4(q) * ScaleMatrix(scale), pos);
-            
             OpenGLUniformInfo uniforms;
-            uniforms.objectTransform = objectTransform;
-            uniforms.vertexBuffer    = mesh.vertexVBO;
-            uniforms.indexBuffer     = mesh.indexVBO;
+            uniforms.objectTransform = meshHeader->objectTransform;
+            uniforms.vertexBuffer    = meshHeader->vertexVBO;
+            uniforms.indexBuffer     = meshHeader->indexVBO;
             
             BeginUseProgram(context, context->shadow, currentSetup, uniforms);
             
-            if(mesh.skeleton.bones.amount)
-            {
-               BeginAttribArraysPCUNBD(context->shadow);
-            }
-            else
-            {
-               BeginAttribArraysPCUN(context->shadow);
-            }
+            BeginAttribArrays(context->shadow, meshHeader->vertexType);
             
-            For(mesh.indexSets)
+            For(meshHeader->indexSets)
             {
                
-               switch (mesh.type)
+               switch (meshHeader->meshType)
                {
                   case TriangleMeshType_List:
                   {
@@ -1158,7 +1169,7 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
          {
             EntryChangeRenderSetup *setupHeader = (EntryChangeRenderSetup *)header;
             currentSetup = setupHeader->setup;
-            shadowMat = biasMatrix * currentSetup.projection * CameraTransform(currentSetup.lightSource.orientation, currentSetup.lightSource.pos);
+            shadowMat = biasMatrix * currentSetup.projection * currentSetup.shadowMat;
             // todo do this in the setup, so we do not have to do it for every pass.
             pBufferIt += sizeof(*setupHeader);
          }break;
@@ -1215,38 +1226,20 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
          {
             EntryTriangleMesh *meshHeader = (EntryTriangleMesh *)header;
             
-            v3 pos       = meshHeader->pos;
-            f32 scale    = meshHeader->scale;
-            Quaternion q = meshHeader->orientation;
-            
-            // todo slow
-            m4x4 objectTransform = Translate(QuaternionToMatrix4(q) * ScaleMatrix(scale), pos);
-            
-            v4 lightP = currentSetup.cameraTransform * V4(currentSetup.lightSource.pos, 1.0f);
-            
-            TriangleMesh mesh = meshHeader->mesh;
-            
             OpenGLUniformInfo uniforms;
-            uniforms.objectTransform = objectTransform;
-            uniforms.shadowMat = shadowMat;
-            uniforms.scaleColor = meshHeader->scaleColor;
-            uniforms.vertexBuffer = mesh.vertexVBO;
-            uniforms.indexBuffer  = mesh.indexVBO;
+            uniforms.objectTransform = meshHeader->objectTransform;
+            uniforms.shadowMat       = shadowMat;
+            uniforms.scaleColor      = meshHeader->scaleColor;
+            uniforms.vertexBuffer    = meshHeader->vertexVBO;
+            uniforms.indexBuffer     = meshHeader->indexVBO;
             
             BeginUseProgram(context, context->basicMesh, currentSetup, uniforms);
             
-            if(mesh.skeleton.bones.amount) // this feels dumb
-            {
-               BeginAttribArraysPCUNBD(context->basicMesh);
-            }
-            else
-            {
-               BeginAttribArraysPCUN(context->basicMesh);
-            }
+            BeginAttribArrays(context->basicMesh, meshHeader->vertexType);
             
-            for(u32 i = 0; i < mesh.indexSets.amount; i++)
+            for(u32 i = 0; i < meshHeader->indexSets.amount; i++)
             {
-               auto it = &mesh.indexSets[i];
+               auto it = &meshHeader->indexSets[i];
                
                glUniform1f(context->basicMesh.specularExponent, it->mat.specularExponent);
                glUniform3f(context->basicMesh.ka, it->mat.ka.x, it->mat.ka.y, it->mat.ka.z);
@@ -1254,7 +1247,7 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
                glUniform3f(context->basicMesh.ks, it->mat.ks.x, it->mat.ks.y, it->mat.ks.z);
                glBindTexture(GL_TEXTURE_2D, meshHeader->textureIDs[i]);
                
-               switch (mesh.type)
+               switch (meshHeader->meshType)
                {
                   case TriangleMeshType_List:
                   {
@@ -1278,34 +1271,21 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
          {
             EntryAnimatedMesh *meshHeader = (EntryAnimatedMesh *)header;
             
-            
-            // this should become InterpolationData
-            v3 pos       = meshHeader->pos;
-            f32 scale    = meshHeader->scale;
-            Quaternion q = meshHeader->orientation;
-            
-            // todo slow
-            m4x4 objectTransform = Translate(QuaternionToMatrix4(q) * ScaleMatrix(scale), pos);
-            
-            v4 lightP = currentSetup.cameraTransform * V4(currentSetup.lightSource.pos, 1.0f);
-            
-            TriangleMesh mesh = meshHeader->mesh;
-            
             OpenGLUniformInfo uniforms;
-            uniforms.objectTransform = objectTransform;
+            uniforms.objectTransform = meshHeader->objectTransform;
             uniforms.shadowMat       = shadowMat;
             uniforms.scaleColor      = meshHeader->scaleColor;
-            uniforms.vertexBuffer    = mesh.vertexVBO;
-            uniforms.indexBuffer     = mesh.indexVBO;
+            uniforms.vertexBuffer    = meshHeader->vertexVBO;
+            uniforms.indexBuffer     = meshHeader->indexVBO;
             uniforms.boneStates      = meshHeader->boneStates;
             
             BeginUseProgram(context, context->animated, currentSetup, uniforms);
             
-            BeginAttribArraysPCUNBD(context->animated);
+            BeginAttribArrays(context->animated, meshHeader->vertexType);
             
-            for(u32 i = 0; i < mesh.indexSets.amount; i++)
+            for(u32 i = 0; i < meshHeader->indexSets.amount; i++)
             {
-               auto it = &mesh.indexSets[i];
+               auto it = &meshHeader->indexSets[i];
                
                glUniform1f(context->animated.specularExponent, it->mat.specularExponent);
                glUniform3f(context->animated.ka, it->mat.ka.x, it->mat.ka.y, it->mat.ka.z);
@@ -1313,7 +1293,7 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
                glUniform3f(context->animated.ks, it->mat.ks.x, it->mat.ks.y, it->mat.ks.z);
                
                glBindTexture(GL_TEXTURE_2D, meshHeader->textureIDs[i]);
-               switch (mesh.type)
+               switch (meshHeader->meshType)
                {
                   case TriangleMeshType_List:
                   {
