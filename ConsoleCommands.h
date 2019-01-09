@@ -61,7 +61,7 @@ static void TweekHelper(StringArray args)
 {
 	if (args.amount == 0)
 	{
-		For(globalDebugState.tweekers)
+		For(globalTweekers.tweekers)
 		{
 			ConsoleOutput("%s %s", it->name, TweekerToString(*it));
 		}
@@ -161,7 +161,7 @@ static void SaveTweekersHelper(StringArray args)
 
 static void TweekersHelper(StringArray args)
 {
-	For(globalDebugState.tweekers)
+	For(globalTweekers.tweekers)
 	{
 		ConsoleOutput("%s %s", it->name, TweekerToString(*it));
 	}

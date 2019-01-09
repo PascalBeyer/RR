@@ -2086,6 +2086,199 @@ static DAEReturn ReadDAE(Arena *constantArena, char *fileName)
 }
 
 
+
+
+static Bitmap CreateBitmap(u32* pixels, u32 width, u32 height)
+{
+	Bitmap ret;
+	ret.pixels = pixels;
+	ret.width = width;
+	ret.height = height;
+	ret.textureHandle = RegisterWrapingTexture(width, height, pixels);
+	return ret;
+}
+
+
+#pragma pack(push, 1)
+struct BitmapFileHeader
+{
+	u16 bfType;
+	u32 bfSize;
+	u16 bfReserved1;
+	u16 bfReserved2;
+	u32 bfOffBits;
+   
+	//infoheader
+	u32 biSize;
+	i32 biWidth;
+	i32 biHeight;
+	u16 biPlanes;
+	u16 biBitCount;
+	u32 compression;
+	u32 sizeImage;
+	i32 biXPerlsPerMeter;
+	i32 biYPerlsPerMeter;
+	u32 biClrUsed;
+	u32 biCLrImpartant;
+   
+	u32 redMask;
+	u32 greenMask;
+	u32 blueMask;
+};
+#pragma pack(pop)
+
+
+static Bitmap CreateBitmap(char* fileName, Arena *arena = NULL, bool wrapping = false)
+{
+	Bitmap ret = {};
+	//TODO: maybe check if its actually a bmp
+	File tempFile;
+   if(arena)
+   {
+      tempFile = LoadFile(fileName, arena);
+   }
+   else
+   {
+      tempFile = LoadFile(fileName);
+   }
+   
+	void *memPointer = tempFile.memory;
+	if (!memPointer) return ret;
+	ret.textureHandle = NULL;
+	BitmapFileHeader *header = (BitmapFileHeader *)memPointer;
+   
+	ret.width = header->biWidth;
+	ret.height = header->biHeight;
+   
+	u8 *bitMemPointer = (u8 *)memPointer;
+	bitMemPointer += header->bfOffBits;
+	ret.pixels = (u32 *)bitMemPointer;
+   
+	//switching masks
+	u32 redMask = header->redMask;
+	u32 blueMask = header->blueMask;
+	u32 greenMask = header->greenMask;
+	u32 alphaMask = ~(redMask | blueMask | greenMask);
+   
+	u32 redShift = BitwiseScanForward(redMask);
+	u32 blueShift = BitwiseScanForward(blueMask);
+	u32 greenShift = BitwiseScanForward(greenMask);
+	u32 alphaShift = BitwiseScanForward(alphaMask);
+   
+	u32 *tempPixels = ret.pixels;
+	for (i32 x = 0; x < header->biWidth; x++)
+	{
+		for (i32 y = 0; y < header->biHeight; y++)
+		{
+			u32 c = *tempPixels;
+         
+			u32 R = ((c >> redShift) & 0xFF);
+			u32 G = ((c >> greenShift) & 0xFF);
+			u32 B = ((c >> blueShift) & 0xFF);
+			u32 A = ((c >> alphaShift) & 0xFF);
+			float an = (A / 255.0f);
+         
+			R = (u32)((float)R * an);
+			G = (u32)((float)G * an);
+			B = (u32)((float)B * an);
+			R = (u32)((float)R * an);
+         
+			*tempPixels++ = ((A << 24) | (R << 16) | (G << 8) | (B << 0));
+		}
+	}
+   
+	ret.textureHandle = RegisterWrapingTexture(ret.width, ret.height, ret.pixels);
+	return ret;
+}
+
+static Bitmap CreateBitmap(String fileName)
+{
+	return CreateBitmap(ToNullTerminated(fileName));
+}
+
+static void DoNothing(void *x) { }
+
+#define STBTT_ifloor(x)   ((int) Floor(x))
+#define STBTT_iceil(x)    ((int) Ceil(x))
+#define STBTT_sqrt(x)      Sqrt(x)
+#define STBTT_pow(x,y)     pow(x,y)
+#define STBTT_fmod(x,y)    fmod(x,y)
+#define STBTT_cos(x)       cos(x)
+#define STBTT_acos(x)      acos(x)
+#define STBTT_fabs(x)      fabs(x)
+#define STBTT_malloc(x,u)  ((void)(u), (void *)PushData(frameArena, u8, (u32)(x)))
+#define STBTT_free(x,u)    ((void)(u), DoNothing(x));
+#define STBTT_assert(x)    {Assert(x)}
+#define STBTT_strlen(x)    NullTerminatedStringLength(x)
+#define STBTT_memcpy       memcpy
+#define STBTT_memset       memset
+
+#define STB_TRUETYPE_IMPLEMENTATION
+#include "stb_truetype.h"
+
+static Font CreateFontFromSTB(u32 width, u32 height, u8 *pixels, u32 amountOfChars, f32 charHeight, stbtt_bakedchar *charData, Arena *arena)
+{
+	Font ret;
+   
+	u32 *output = PushData(arena, u32, width * height);
+	u32 *out = output;
+	u8 *inp = pixels;
+   
+	for (u32 h = 0; h < height; h++)
+	{
+		for (u32 w = 0; w < width; w++)
+		{
+			u8 source = *inp++;
+			//u32 color = 0xFFFFFFFF;
+			u32 color = source << 24 | source << 16 | source << 8 | source << 0;
+			*out++ = color;
+		}
+	}
+   
+	ret.charData = PushData(arena, CharData, amountOfChars);
+	v2 scale = V2(1.0f / (f32)width, 1.0f / (f32)height);
+	for (u32 i = 0; i < amountOfChars; i++)
+	{
+		stbtt_bakedchar *cur = charData + i;
+		CharData data;
+      
+		data.xAdvance = cur->xadvance;
+		data.minUV = scale * V2(cur->x0, cur->y0);
+		data.maxUV = scale * V2(cur->x1, cur->y1);
+		data.width = cur->x1 - cur->x0;
+		data.height = cur->y1 - cur->y0;
+		data.xOff = cur->xoff;
+		data.yOff = cur->yoff;
+      
+		ret.charData[i] = data;
+	}
+   
+   
+	ret.bitmap = CreateBitmap(output, width, height);
+	ret.amountOfChars = amountOfChars;
+	ret.charHeight = charHeight;
+	return ret;
+}
+
+static Font LoadFont(char *fileName, Arena *arena)
+{
+	File file = LoadFile(fileName);
+   
+	u32 width = 1024;
+	u32 height = 1024;
+	u8 *pixels = PushData(frameArena, u8, width * height);
+	
+	u32 amountOfChars = 255;
+	f32 charHeight = 64.0f;
+	stbtt_bakedchar *charData = PushData(frameArena, stbtt_bakedchar, amountOfChars);
+	stbtt_BakeFontBitmap((char *)file.memory, 0, charHeight, pixels, width, height, 0, amountOfChars, charData);
+   
+	FreeFile(file);
+   
+	return CreateFontFromSTB(width, height, pixels, amountOfChars, charHeight, charData, arena);
+}
+
+
 #define PullOff(type) *(type *)at; at += sizeof(type);
 
 #define PullOffArray(type, arr) \

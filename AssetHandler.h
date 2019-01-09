@@ -194,7 +194,7 @@ static bool ConvertNewAssets(AssetHandler *handler, Arena *currentStateArena)
 			if (AssetExits(handler, *it, Asset_Texture)) continue;
          
 			char* nameToSave = FormatCString("textures/%s.texture", GetToChar(*it, '.'));
-			Bitmap bitmap = CreateBitmap(nameToLoad);
+			Bitmap bitmap = CreateBitmap(nameToLoad, frameArena);
          
 			if (!bitmap.pixels)
 			{

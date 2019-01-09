@@ -26,28 +26,15 @@ We could go from a "tileMap" system to a "traversables" system? // kinda done, w
 remove entity serials ? // wwhat no!
 we could just make that be the switch. // done, in the setup.
 let the user specify the granuality at which he wants to switch the setup. // done?
-
-Asset:
+make World -> EntityManager? // done?
+Loading and saving skeletons // done ? 
+Loading and saving animations // done?
+make animations assets. // done?
+OpenGL stuff, i.e rendering it on the hardware // done?
+how to handle setup.projection, it seems it will _always_ be the same, but either orthogonal or projective...  // done?
 Newly added assets should go into the asset system, not sure how. // done?
 Asset system has to handle materials. // no, well maybe
-Get PNG loader
-make font into asset, would also make the draw String call way better, also solves the problem where I do not currently know where it is supposed to be stored
-
-Tweekers:
-make tweek search the file, if no loaded tweeker variable is found. maybe write out the tweekerfile instead of writing out all tweeker values.
-make tweeker work based on filenames as well I.e. tweek editor meshSelectColor instead of having to use editorMeshSelectColor
-maybe load all tweekers on startup?
-
-MISC:
 reduce api calls in opengl // done?
-associating data to triangles, to open gl... like normals.
-render strings leftbound
-add lightPos to the level
-
-make debug Ui for amount of memory used.
-
-
-EDITOR : 
 save (crtl-s) //done?
 camera for tilemap editor //done ?
 make us able to shift click to remove, if already in selection // done?
@@ -56,16 +43,6 @@ copy paste // done?
 undo, redo, // done?
 paste of rows // done ?
 make the cancel work off of the undo system, once it is in place // no, undo relies on this
-double click = 'numpad .'
-box select
-make the orbiting more of a always usable flag, maybe just a bool.
-how do you bright up colors? (brightness/ negative colors?)
-Euler thing
-
-UndoRedo has error with scale pushing one even if nothing selected
-
-
-Execute:
 rotations // will do if animations
 interpolation // done?
 undoing path // done?
@@ -88,74 +65,68 @@ clear flags in the begining, but do the sim at the end? // done?
 make stuff save InterpolationData // done?
 shift click for multi walk / control for unit select // done? does not feel that good
 Undo data for game, so we can play in both directions, maybe the events are enought? // no, done.
+ctime // done ?
+check that convertNewAssets is not leaking // done ?
+make a DynamicFlags entry in the Entity flags enum, which is just all of them or ed together // we have EntityFlag_FrameResetFlag now, so done?
+add lightPos to the level // done?
+
+Asset:
+Get PNG loader
+make font into asset, would also make the draw String call way better, also solves the problem where I do not currently know where it is supposed to be stored
+make levels assets, 
+animationInfo in assethandler
+
+
+Tweekers:
+make tweek search the file, if no loaded tweeker variable is found. maybe write out the tweekerfile instead of writing out all tweeker values.
+make tweeker work based on filenames as well I.e. tweek editor meshSelectColor instead of having to use editorMeshSelectColor
+maybe load all tweekers on startup?
+seperate tweekers from debug completly
+fix the verbose tweeker hack that load the file everytime we write
+
+OpenGL:
+associating data to triangles, to open gl... like normals.
+figure out how to let buffers of differant multisample counts interact.
+figure out a way to detect changes to the render setup, so we can reduce API calls.
+maybe rendersetup should have the shader...., because I have to repeat myself alot right now in opengl
+make a find shader thing that matches the flags and the returns a shader that fits the job.
+
+
+MISC:
+render strings leftbound
+look at tempoary memory system.
+general data oriented cleanup
+upscale bmps
+string.h memcpy
+
+DEBUG:
+make debug Ui for amount of memory used.
+make frame bar zoomable
+make DEBUG an actually usable flag, which compiles out the console, editor and such
+
+EDITOR : 
+double click = 'numpad .'
+box select
+make the orbiting more of a always usable flag, maybe just a bool.
+how do you bright up colors? (brightness/ negative colors?)
+Euler thing
+UndoRedo has error with scale pushing one even if nothing selected
+direction keys do not record undos right now.
+
+Execute:
 undo does not really have to be a thing, if I do a Least commom multiple system.
 speed meter
 redo lighting, kd-tree for AABB's? make it just 4 u16 per triangle and work with the old system?
 get rid of meshes having color? lighting should go into a seperate buffer that stores those colors
 victory currupts position right now, if we are too fast.
 
-upscale bmps
-string.h memcpy
-
-teleporters, moving platforms, ramps?
-blocks on dudes? maybe only on blocks?, but what should be the fail? kill the guy?
-
 make _unit_ into active entity and gather infos about the stones and maybe platforms and such, 
 so we can actually generate the _production cycle_ and proof throughput and latency
 
-Level idears
-2 guys, stone.
-halving the path (path that one guy has to do half of no space to manouver)
-pushable maze (one stone in a maze, can push from the outside)
-stone ride. get up a stone and a guy, then ride em around
-Bridge with dudes,
-Bridge with blocks, that fall down.
-
-what should happen?
-guy _waits_ on a thing that moves									-> guy stays on the thing
-guy _waits_ on a thing and gets pushed into a wall that is one up	-> guy maintains his position and maybe falls
-guy _moves_ from a moving thing										-> motion should be absolute.
-stack of falling things												-> things should fall together
-guy _moves_ from a falling thing									-> guy should move as if the thing was stationary
-guy _moves_ from a falling thing with something on his head			-> the thing on his head should get carried
-
-stacks all moving in the same direction should be fast?
-pushing a stone while being moved?									-> motion should be absolute
-
-tried relative motion, it feels really weird, and everything is really _special casey_
-
--> things can only move, if they are supported
-
-splitt how editor and game works.
-
-check sim loop for DF array could be replaced by a static build.
-
-lets try to make a game where you go through tripyness = 4th dimension
-
-make World -> EntityManager?
-
 Animation:
-Loading and saving skeletons // done ? 
-Loading and saving animations // done?
-make animations assets. // done?
-OpenGL stuff, i.e rendering it on the hardware // done?
-how to handle setup.projection, it seems it will _always_ be the same, but either orthogonal or projective...  // done?
 Animation player (save in skeleton?, save in world?)
-
-animationInfo in assethandler
-
-figure out how to let buffers of differant multisample counts interact.
-
-figure out a way to detect changes to the render setup, so we can reduce API calls.
-
-ctime
-
-make levels assets, do weight averageing in the loading.
+do weight averageing in the loading.
 I feel like skeletons and meshes should be parralel. And so should bones and bone names
 
-check that convertNewAssets is not leaking
-maybe rendersetup should have the shader...., because I have to repeat myself alot right now in opengl
-make a DynamicFlags entry in the Entity flags enum, which is just all of them or ed together
-direction keys do not record undos right now.
 
-look at tempoary memory system.
+TODO we were just making AssetTypes.h continue that.

@@ -23,14 +23,15 @@ enum EntityFlags
 	EntityFlag_Dead = 0x4,
 	EntityFlag_PushAble = 0x8,
 	EntityFlag_CanBeCarried = 0x800,
+   EntityFlag_IsDynamic = 0x200,
    
-   
+   // dynamic flags
 	EntityFlag_IsFalling = 0x10,
 	EntityFlag_IsMoving = 0x20,
 	EntityFlag_InTree = 0x40,
 	
-	EntityFlag_IsDynamic = 0x200,
-   
+   EntityFlag_FrameResetFlag = EntityFlag_IsFalling | EntityFlag_IsMoving,
+	
 	BlockFlag_TryingToSpawn = 0x400,
 	
 };
@@ -66,23 +67,25 @@ DefineDynamicArray(UnitInstruction);
 
 struct Entity
 {
-	u32 meshId;
+   // general entity data header if you will
+   EntityType type;
+	u64 flags;
+   u32 serialNumber;
+   
+   // render stuff
+   u32 meshId;
 	f32 scale;
 	Quaternion orientation;
+   v3 offset;
+	v4 color;
+   v4 frameColor;
+   
+   // simulation stuff, also needed for render
+	EntityInterpolation interpolation;
    v3i physicalPos;
 	v3i initialPos;
-	v3 offset;
-	v4 color;
-   
-	v4 frameColor;
-   
-	u32 serialNumber;
-   
-	EntityType type;
-	u64 flags;
-   
-	EntityInterpolation interpolation;
-   
+	
+   // specific stuff
 	union
 	{
 		UnitInstructionDynamicArray instructions;
@@ -168,7 +171,6 @@ static v3 GetRenderPos(EntityCopyData e)
 DefineArray(EntityCopyData);
 
 DefineDynamicArray(EntityInterpolation);
-
 
 struct LightSource
 {
@@ -352,7 +354,6 @@ struct EntityManager
 	u32 at; // execute data?
 	f32 t;
    
-	u32 wallMeshId;
 	u32 blockMeshId;
 	u32 dudeMeshId;
 };

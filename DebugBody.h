@@ -16,7 +16,7 @@ static void LoadDebugVariablesFile() //todo strings?
 {
 	File *file = PushStruct(globalDebugState.arena, File);
 	*file = LoadFile("src/DebugVariables.txt");
-	globalDebugState.tweekerFile = file;
+	globalTweekers.tweekerFile = file;
 }
 
 #if 0
@@ -56,7 +56,7 @@ static void DrawTweekers(RenderGroup *rg, Font font)
 {
 	Tweekable(f32, tweekerFontSize);
 	DebugUITweekerFile *stack = NULL;
-	For (globalDebugState.tweekers)
+	For (globalTweekers.tweekers)
 	{
 		auto s = stack;
 		while (s)
@@ -99,7 +99,6 @@ static void DrawTweekers(RenderGroup *rg, Font font)
 	
 }
 
-
 static void InitDebug()
 {
 	DebugState *s = &globalDebugState;
@@ -110,7 +109,7 @@ static void InitDebug()
 		debugInfoArray[i].color = RandomColorU32(&series);
 	}
    
-	s->tweekers = TweekerCreateDynamicArray();
+	globalTweekers.tweekers = TweekerCreateDynamicArray();
 	s->lastFrameTime = 1.0f;
    
 	for (u32 i = 0; i < DEBUG_AMOUNT_OF_DEBUG_FRAMES; i++)
@@ -315,7 +314,7 @@ static Tweeker ExtractTweekerFromFile(String toFind)
 {
 	Assert(toFind.length);
    
-	File *file = globalDebugState.tweekerFile;
+	File *file = globalTweekers.tweekerFile;
    
 	char *data = (char *)file->memory;
 	String inputString = CreateString(data);
@@ -512,8 +511,8 @@ static void *MaybeAddTweekerReturnValue(char *_name, TweekerType type, char *_fu
 		t.name = name;
 		t.function = function;
       
-		u32 addedIndex = ArrayAdd(&globalDebugState.tweekers, t);
-		return (void *)(&(globalDebugState.tweekers.data + addedIndex)->u);
+		u32 addedIndex = ArrayAdd(&globalTweekers.tweekers, t);
+		return (void *)(&(globalTweekers.tweekers.data + addedIndex)->u);
 	}
 	return (void *)(&toTweek->u);
 }
@@ -538,8 +537,8 @@ static void *MaybeAddTweekerReturnValue(char *_name, TweekerType type, char *_fu
 		t.name = name;
 		t.function = function;
       
-		u32 addedIndex = ArrayAdd(&globalDebugState.tweekers, t);
-		return (void *)(&(globalDebugState.tweekers.data + addedIndex)->u);
+		u32 addedIndex = ArrayAdd(&globalTweekers.tweekers, t);
+		return (void *)(&(globalTweekers.tweekers.data + addedIndex)->u);
 	}
 	return (void *)(&toTweek->u);
 }
@@ -547,7 +546,7 @@ static void *MaybeAddTweekerReturnValue(char *_name, TweekerType type, char *_fu
 
 static void WriteSingleTweeker(Tweeker tweeker) 
 {
-	File *file = globalDebugState.tweekerFile;
+	File *file = globalTweekers.tweekerFile;
    
 	char *data = (char *)file->memory;
 	String inputString = CreateString(data);
@@ -612,8 +611,8 @@ static void WriteSingleTweeker(Tweeker tweeker)
 			Assert(WriteEntireFile("src/DebugVariables.txt", newFile));
          
 			//todo : hack
-			FreeFile(*globalDebugState.tweekerFile);
-			*globalDebugState.tweekerFile = LoadFile("src/DebugVariables.txt");
+			FreeFile(*globalTweekers.tweekerFile);
+			*globalTweekers.tweekerFile = LoadFile("src/DebugVariables.txt");
          
 			ConsoleOutput("Saved to file."); // todo  somehow there no failing right now
 		}
@@ -632,8 +631,8 @@ static void WriteSingleTweeker(Tweeker tweeker)
 	Assert(WriteEntireFile("src/DebugVariables.txt", newFile)); 
    
 	//todo : hack
-	FreeFile(*globalDebugState.tweekerFile);
-	*globalDebugState.tweekerFile = LoadFile("DebugVariables.txt");
+	FreeFile(*globalTweekers.tweekerFile);
+	*globalTweekers.tweekerFile = LoadFile("DebugVariables.txt");
    
 	ConsoleOutputError("Saved to file."); // todo  somehow there no failing right now
 }
@@ -645,7 +644,7 @@ static void WriteDebugVariables()
    
 	// todo : sorting by file and then lex add comments to make it pretty,
    
-	For(globalDebugState.tweekers)
+	For(globalTweekers.tweekers)
 	{
 		CopyString(it->name, frameArena);
 		S(" ", frameArena);

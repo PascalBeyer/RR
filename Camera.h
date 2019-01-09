@@ -1,5 +1,3 @@
-#ifndef RR_WORLD
-#define RR_WORLD
 
 
 //Righthanded coordinates, +Z going into the screen, +Y is "down" ? , +X is to the right
@@ -223,6 +221,3 @@ static void UpdateCamGodMode(Input *input, Camera *cam, DEBUGKeyTracker tracker)
 	
 }
 #endif
-
-#endif 
-

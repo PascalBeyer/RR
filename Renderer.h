@@ -1,39 +1,6 @@
 #ifndef RR_RENDERER
 #define RR_RENDERER
 
-struct VertexFormatPC
-{
-	v3  p;
-	u32 c;
-};
-
-struct VertexFormatPCU
-{
-	v3  p;
-	u32 c;
-   v2  uv;
-};
-DefineArray(VertexFormatPC);
-
-struct VertexFormatPCUN
-{
-	v3  p;
-   u32 c;
-	v2  uv;
-	v3  n;
-};
-DefineArray(VertexFormatPCUN);
-
-struct VertexFormatPCUNBD
-{
-   v3  p;
-   u32 c;
-   v2  uv;
-   v3  n;
-   v4i bi;
-   v4  bw;
-};
-
 enum RenderGroupEntryType
 {
 	RenderGroup_EntryChangeRenderSetup,
