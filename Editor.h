@@ -253,7 +253,7 @@ static EulerAngle QuaternionToEulerAngle(Quaternion q)
 	return ret;
 }
 
-static bool LoadLevel(String fileName, World *world, Arena *currentStateArena, AssetHandler *assetHandler, Editor *editor);
+static bool LoadLevel(String fileName, EntityManager *entityManager, Arena *currentStateArena, AssetHandler *assetHandler, Editor *editor);
 
 static Quaternion EulerAngleToQuaternion(EulerAngle angle)
 {
@@ -273,12 +273,12 @@ static Quaternion EulerAngleToQuaternion(EulerAngle angle)
 	return q;
 }
 
-static v3 GetAveragePosForSelection(Editor *editor, World *world)
+static v3 GetAveragePosForSelection(Editor *editor, EntityManager *entityManager)
 {
 	v3 averagePos = V3();
 	For(editor->hotEntityInfos)
 	{
-		averagePos += GetRenderPos(*GetEntity(world, it->placedSerial));
+		averagePos += GetRenderPos(*GetEntity(entityManager, it->placedSerial));
 	}
 	averagePos /= (f32)editor->hotEntityInfos.amount;
 	return averagePos;
@@ -627,16 +627,16 @@ static void EditorGoToNone(Editor *editor)
 #endif
 }
 
-static Entity *GetHotEntity(World *world, AssetHandler *handler, v2 mousePosZeroToOne)
+static Entity *GetHotEntity(EntityManager *entityManager, AssetHandler *handler, v2 mousePosZeroToOne)
 {
-	v3 camP = world->camera.pos; // todo camera or debugCamera? Maybe we should again unify them
-	v3 camD = ScreenZeroToOneToDirecion(world->camera, mousePosZeroToOne);
+	v3 camP = entityManager->camera.pos; // todo camera or debugCamera? Maybe we should again unify them
+	v3 camD = ScreenZeroToOneToDirecion(entityManager->camera, mousePosZeroToOne);
    
 	f32 minDist = F32MAX;
    
 	Entity *ret = NULL;
    
-	For(world->entities)
+	For(entityManager->entities)
 	{
       
 		MeshInfo *info = GetMeshInfo(handler, it->meshId);
@@ -727,7 +727,7 @@ static void EditorSelectNothing(Editor *editor)
 	Clear(&editor->hotEntityInfos);
 }
 
-static bool WriteLevel(char *fileName, World world, AssetHandler *assetHandler);
+static bool WriteLevel(char *fileName, EntityManager entityManager, AssetHandler *assetHandler);
 
 static EditorSelect EntityToEditorSelect(Entity *e)
 {
@@ -746,11 +746,11 @@ static bool EditorHasSelection(Editor *editor)
 	return (editor->hotEntityInfos.amount > 0);
 }
 
-static void ResetHotMeshes(Editor *editor, World *world)
+static void ResetHotMeshes(Editor *editor, EntityManager *entityManager)
 {
 	For(editor->hotEntityInfos)
 	{
-		Entity *e = GetEntity(world, it->placedSerial);
+		Entity *e = GetEntity(entityManager, it->placedSerial);
 		e->physicalPos = it->initialPhysicalPos;
 		e->offset = it->initialOffset;
 		e->scale = it->initialScale;
@@ -769,7 +769,7 @@ static void AddActionToUndoRedoBuffer(Editor *editor, EditorAction toAdd)
 	Assert((editor->undoRedoAt + 1) == editor->undoRedoBuffer.amount);
 }
 
-static void EditorPerformUndo(Editor *editor, World *world)
+static void EditorPerformUndo(Editor *editor, EntityManager *entityManager)
 {
 	if (editor->undoRedoAt == 0xFFFFFFFF) return;
 	EditorAction toReverse = editor->undoRedoBuffer[editor->undoRedoAt--];
@@ -780,7 +780,7 @@ static void EditorPerformUndo(Editor *editor, World *world)
          EditorEntityUndoRedoData data = toReverse.preModifyMesh;
          u32 serial = toReverse.preModifyMesh.placedSerial;
          Assert(toReverse.preModifyMesh.placedSerial == toReverse.postModifyMesh.placedSerial);
-         Entity *mesh = GetEntity(world, toReverse.preModifyMesh.placedSerial);
+         Entity *mesh = GetEntity(entityManager, toReverse.preModifyMesh.placedSerial);
          
          mesh->color			= data.color;
          mesh->physicalPos	= data.physicalPos;
@@ -794,12 +794,12 @@ static void EditorPerformUndo(Editor *editor, World *world)
       {
          EditorEntityUndoRedoData data = toReverse.preModifyMesh;
          u32 serial = toReverse.preModifyMesh.placedSerial;
-         RestoreEntity(world, serial, data.meshId, data.scale, data.orientation, data.physicalPos, data.offset, data.color, data.type, data.flags);
+         RestoreEntity(entityManager, serial, data.meshId, data.scale, data.orientation, data.physicalPos, data.offset, data.color, data.type, data.flags);
       }break;
       case EditorAction_PlaceMesh:
       {
          EditorEntityUndoRedoData data = toReverse.postModifyMesh;
-         RemoveEntity(world, data.placedSerial);
+         RemoveEntity(entityManager, data.placedSerial);
       }break;
       case EditorAction_BeginBundle:
       {
@@ -809,7 +809,7 @@ static void EditorPerformUndo(Editor *editor, World *world)
       {
          while (editor->undoRedoBuffer[editor->undoRedoAt].type != EditorAction_BeginBundle)
          {
-            EditorPerformUndo(editor, world);
+            EditorPerformUndo(editor, entityManager);
          }
          editor->undoRedoAt--;
       }break;
@@ -819,7 +819,7 @@ static void EditorPerformUndo(Editor *editor, World *world)
 }
 
 
-static void EditorPerformRedo(Editor *editor, World *world)
+static void EditorPerformRedo(Editor *editor, EntityManager *entityManager)
 {
 	if (editor->undoRedoAt == (editor->undoRedoBuffer.amount - 1)) return;
 	EditorAction toReverse = editor->undoRedoBuffer[++editor->undoRedoAt];
@@ -830,7 +830,7 @@ static void EditorPerformRedo(Editor *editor, World *world)
          EditorEntityUndoRedoData data = toReverse.postModifyMesh;
          u32 serial = toReverse.postModifyMesh.placedSerial;
          Assert(toReverse.postModifyMesh.placedSerial == toReverse.postModifyMesh.placedSerial);
-         Entity *e = GetEntity(world, toReverse.postModifyMesh.placedSerial);
+         Entity *e = GetEntity(entityManager, toReverse.postModifyMesh.placedSerial);
          e->color = data.color;
          e->physicalPos = data.physicalPos;
          e->offset = data.offset;
@@ -843,18 +843,18 @@ static void EditorPerformRedo(Editor *editor, World *world)
       {
          EditorEntityUndoRedoData data = toReverse.preModifyMesh;
          u32 serial = toReverse.preModifyMesh.placedSerial;
-         RemoveEntity(world, serial);
+         RemoveEntity(entityManager, serial);
       }break;
       case EditorAction_PlaceMesh:
       {
          EditorEntityUndoRedoData data = toReverse.postModifyMesh;
-         RestoreEntity(world, data.placedSerial, data.meshId, data.scale, data.orientation, data.physicalPos, data.offset, data.color, data.type, data.flags);
+         RestoreEntity(entityManager, data.placedSerial, data.meshId, data.scale, data.orientation, data.physicalPos, data.offset, data.color, data.type, data.flags);
       }break;
       case EditorAction_BeginBundle:
       {
          while (editor->undoRedoBuffer[editor->undoRedoAt].type != EditorAction_EndBundle)
          {
-            EditorPerformRedo(editor, world);
+            EditorPerformRedo(editor, entityManager);
          }
       }break;
       case EditorAction_EndBundle:
@@ -867,9 +867,9 @@ static void EditorPerformRedo(Editor *editor, World *world)
 }
 
 
-static EditorEntityUndoRedoData PreModifyToEditorSelect(EditorSelect select, Editor *editor, World *world)
+static EditorEntityUndoRedoData PreModifyToEditorSelect(EditorSelect select, Editor *editor, EntityManager *entityManager)
 {
-	Entity *e = GetEntity(world, select.placedSerial);
+	Entity *e = GetEntity(entityManager, select.placedSerial);
 	EditorEntityUndoRedoData ret;
 	ret.meshId			= e->meshId;
 	ret.placedSerial	= e->serialNumber;
@@ -884,9 +884,9 @@ static EditorEntityUndoRedoData PreModifyToEditorSelect(EditorSelect select, Edi
 	return ret;
 }
 
-static EditorEntityUndoRedoData PostModifyToEditorSelect(EditorSelect select, Editor *editor, World *world)
+static EditorEntityUndoRedoData PostModifyToEditorSelect(EditorSelect select, Editor *editor, EntityManager *entityManager)
 {
-	Entity *e = GetEntity(world, select.placedSerial);
+	Entity *e = GetEntity(entityManager, select.placedSerial);
 	EditorEntityUndoRedoData ret;
 	ret.color			= e->color;
 	ret.placedSerial	= e->serialNumber;
@@ -900,19 +900,19 @@ static EditorEntityUndoRedoData PostModifyToEditorSelect(EditorSelect select, Ed
 	return ret;
 }
 
-static void PushAlterMeshModifies(Editor *editor, World *world)
+static void PushAlterMeshModifies(Editor *editor, EntityManager *entityManager)
 {
 	For(editor->hotEntityInfos)
 	{
 		EditorAction toAdd;
 		toAdd.type = EditorAction_AlterMesh;
-		toAdd.preModifyMesh = PreModifyToEditorSelect(*it, editor, world);
-		toAdd.postModifyMesh = PostModifyToEditorSelect(*it, editor, world);
+		toAdd.preModifyMesh = PreModifyToEditorSelect(*it, editor, entityManager);
+		toAdd.postModifyMesh = PostModifyToEditorSelect(*it, editor, entityManager);
 		AddActionToUndoRedoBuffer(editor, toAdd);
 	}
 }
 
-static void EditorPushUndo(Editor *editor, World *world)
+static void EditorPushUndo(Editor *editor, EntityManager *entityManager)
 {
 	Assert(editor->hotEntityInfos.amount);
    
@@ -928,23 +928,23 @@ static void EditorPushUndo(Editor *editor, World *world)
 	{
       case EditorState_Scaling:
       {
-         PushAlterMeshModifies(editor, world);
+         PushAlterMeshModifies(editor, entityManager);
       }break;
       case EditorState_Rotating:
       {
-         PushAlterMeshModifies(editor, world);
+         PushAlterMeshModifies(editor, entityManager);
       }break;
       case EditorState_Moving:
       {
-         PushAlterMeshModifies(editor, world);
+         PushAlterMeshModifies(editor, entityManager);
       }break;
       case EditorState_PickingColor:
       {
-         PushAlterMeshModifies(editor, world);
+         PushAlterMeshModifies(editor, entityManager);
       }break;
       case EditorState_AlteringValue:
       {
-         PushAlterMeshModifies(editor, world);
+         PushAlterMeshModifies(editor, entityManager);
       }break;
       case EditorState_PlacingNewMesh:
       {
@@ -952,9 +952,9 @@ static void EditorPushUndo(Editor *editor, World *world)
          {
             EditorAction toAdd;
             toAdd.type = EditorAction_PlaceMesh;
-            Entity *mesh = GetEntity(world, it->placedSerial);
+            Entity *mesh = GetEntity(entityManager, it->placedSerial);
             
-            toAdd.postModifyMesh = PostModifyToEditorSelect(*it, editor, world);
+            toAdd.postModifyMesh = PostModifyToEditorSelect(*it, editor, entityManager);
             
             AddActionToUndoRedoBuffer(editor, toAdd);
          }
@@ -966,9 +966,9 @@ static void EditorPushUndo(Editor *editor, World *world)
          {
             EditorAction toAdd;
             toAdd.type = EditorAction_DeleteMesh;
-            Entity *mesh = GetEntity(world, it->placedSerial);
+            Entity *mesh = GetEntity(entityManager, it->placedSerial);
             
-            toAdd.preModifyMesh = PreModifyToEditorSelect(*it, editor, world);
+            toAdd.preModifyMesh = PreModifyToEditorSelect(*it, editor, entityManager);
             
             AddActionToUndoRedoBuffer(editor, toAdd);
          }
@@ -996,11 +996,11 @@ static void ResetEditorPanel(Editor *editor)
 	editor->panel.visible = false;
 }
 
-static void ResetSelectionInitials(Editor *editor, World *world)
+static void ResetSelectionInitials(Editor *editor, EntityManager *entityManager)
 {
 	For(editor->hotEntityInfos)
 	{
-		Entity *e = GetEntity(world, it->placedSerial);
+		Entity *e = GetEntity(entityManager, it->placedSerial);
 		it->initialPhysicalPos = e->physicalPos;
 		it->initialOffset = e->offset;
 		it->initialOrientation = e->orientation;
@@ -1008,7 +1008,6 @@ static void ResetSelectionInitials(Editor *editor, World *world)
 		it->initialColor = e->color;
 	}
 }
-
 
 static void EditorUpdateCamFocus(Editor *editor, Camera *cam, Input input)
 {
@@ -1023,33 +1022,33 @@ static void EditorUpdateCamFocus(Editor *editor, Camera *cam, Input input)
    
 	f32 rotSpeed = 0.001f * 3.141592f;
    
-	f32 mouseCXRot = -mouseDelta.y * rotSpeed;
-	f32 mouseZRot  =  mouseDelta.x * rotSpeed;
+	f32 mouseCXRot =  mouseDelta.y * rotSpeed;
+	f32 mouseZRot  = -mouseDelta.x * rotSpeed;
    
    Quaternion rotX = AxisAngleToQuaternion(mouseCXRot, V3(1, 0, 0));
    Quaternion rotZ = AxisAngleToQuaternion(mouseZRot,  V3(0, 0, 1));
-   Quaternion rot = Inverse(rotX) * c * Inverse(rotZ);
+   Quaternion rot = rotX * c * rotZ;
    
 	v3 delta = cam->pos - editor->focusPoint;
    // this somehow works, think about why tomorrow!
-   Quaternion conj = Inverse(c) * rotX * c * rotZ;
+   Quaternion conj = Inverse(c) * Inverse(rotX) * c * Inverse(rotZ);
 	cam->pos = editor->focusPoint +  QuaternionToMatrix3(conj) * delta;
    
 	cam->orientation = rot;
 }
 
-static void FrameColorSelection(Editor *editor, World *world, v4 editorMeshSelectColor)
+static void FrameColorSelection(Editor *editor, EntityManager *entityManager, v4 editorMeshSelectColor)
 {
 	For(editor->hotEntityInfos)
 	{
-		GetEntity(world, it->placedSerial)->frameColor *= editorMeshSelectColor;
+		GetEntity(entityManager, it->placedSerial)->frameColor *= editorMeshSelectColor;
 	}
 }
 
 // todo maybe make all this matrix stuff more consitent
-static void UpdateEditor(Editor *editor, World *world, Camera *cam, Input input)
+static void UpdateEditor(Editor *editor, EntityManager *entityManager, Camera *cam, Input input)
 {
-	//Camera *cam = &world->camera;
+	//Camera *cam = &entityManager->camera;
 	
 	UpdateColorPickers(editor, input);
    
@@ -1078,11 +1077,11 @@ static void UpdateEditor(Editor *editor, World *world, Camera *cam, Input input)
 	{
       case EditorState_Default:
       {
-         FrameColorSelection(editor, world, editorMeshSelectColor);
+         FrameColorSelection(editor, entityManager, editorMeshSelectColor);
       }break;
       case EditorState_Rotating:
       {
-         v3 averagePos = GetAveragePosForSelection(editor, world);
+         v3 averagePos = GetAveragePosForSelection(editor, entityManager);
          
          //todo not sure about all this being in the z= 0 plane
          v2 oldP = ScreenZeroToOneToInGame(*cam, input.mouseZeroToOne - input.mouseZeroToOneDelta);
@@ -1096,7 +1095,7 @@ static void UpdateEditor(Editor *editor, World *world, Camera *cam, Input input)
          
          For(editor->hotEntityInfos)
          {
-            Entity *e = GetEntity(world, it->placedSerial);
+            Entity *e = GetEntity(entityManager, it->placedSerial);
             
             v4 relPos = V4(GetRenderPos(*e) - averagePos, 1.0f);
             e->orientation = q * e->orientation;
@@ -1110,7 +1109,7 @@ static void UpdateEditor(Editor *editor, World *world, Camera *cam, Input input)
          v2 mouseD = input.mouseZeroToOneDelta;
          if (mouseD == V2()) break;
          
-         v3 averagePos = GetAveragePosForSelection(editor, world);
+         v3 averagePos = GetAveragePosForSelection(editor, entityManager);
          
          m4x4 proj = Projection(cam->aspectRatio, cam->focalLength) * CameraTransform(cam->orientation, cam->pos);
          v4 projectiveMidPoint = V4(averagePos, 1.0f);
@@ -1126,7 +1125,7 @@ static void UpdateEditor(Editor *editor, World *world, Camera *cam, Input input)
          
          For(editor->hotEntityInfos)
          {
-            Entity *mesh = GetEntity(world, it->placedSerial);
+            Entity *mesh = GetEntity(entityManager, it->placedSerial);
             v3 delta = GetRenderPos(*mesh) - averagePos;
             v3 newPos = exp * delta + averagePos;
             
@@ -1138,7 +1137,7 @@ static void UpdateEditor(Editor *editor, World *world, Camera *cam, Input input)
       case EditorState_Moving:
       {	
          // todo speed, but whatever
-         v3 averagePos = GetAveragePosForSelection(editor, world);
+         v3 averagePos = GetAveragePosForSelection(editor, entityManager);
          v3 oldP = ScreenZeroToOneToScreenInGame(*cam, input.mouseZeroToOne - input.mouseZeroToOneDelta);
          v3 newP = ScreenZeroToOneToScreenInGame(*cam, input.mouseZeroToOne);
          v3 camPos = cam->pos;
@@ -1157,7 +1156,7 @@ static void UpdateEditor(Editor *editor, World *world, Camera *cam, Input input)
          
          For(editor->hotEntityInfos)
          {
-            Entity *mesh = GetEntity(world, it->placedSerial);
+            Entity *mesh = GetEntity(entityManager, it->placedSerial);
             
             v3 pos = GetRenderPos(*mesh) + realDelta;
             
@@ -1168,7 +1167,7 @@ static void UpdateEditor(Editor *editor, World *world, Camera *cam, Input input)
       }break;
       case EditorState_DragingPanel:
       {
-         FrameColorSelection(editor, world, editorMeshSelectColor);
+         FrameColorSelection(editor, entityManager, editorMeshSelectColor);
          editor->panel.pos += input.mouseZeroToOneDelta;
       }break;
       case EditorState_PickingColor:
@@ -1177,7 +1176,7 @@ static void UpdateEditor(Editor *editor, World *world, Camera *cam, Input input)
       }break;
       case EditorState_AlteringValue:
       {
-         FrameColorSelection(editor, world, editorMeshSelectColor);
+         FrameColorSelection(editor, entityManager, editorMeshSelectColor);
       }break;
       
       default:
@@ -1202,9 +1201,9 @@ static void ResetEditor(Editor *editor)
    
 }
 
-static void NewLevel(World *world, Editor *editor, Arena *currentStateArena)
+static void NewLevel(EntityManager *entityManager, Editor *editor, Arena *currentStateArena)
 {
-	UnloadLevel(world);
+	UnloadLevel(entityManager);
 	ResetEditor(editor);
 }
 

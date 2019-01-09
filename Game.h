@@ -93,7 +93,7 @@ struct GameState
    
 	// level specific stuff
 	ExecuteData executeData;
-	World world;
+   EntityManager entityManager;
 	Editor editor;
 };
 
@@ -113,19 +113,19 @@ static void SwitchGameMode(GameState *state, GameMode mode)
 	{
       case Game_Execute:
       {
-         auto world = &state->world;
-         ResetTree(world, &world->entityTree);
-         For(world->entities)
+         auto entityManager = &state->entityManager;
+         ResetTree(entityManager, &entityManager->entityTree);
+         For(entityManager->entities)
          {
-            InsertEntity(world, it);
+            InsertEntity(entityManager, it);
          }
-         ChangeExecuteState(world, &state->executeData, Execute_PathCreator);
+         ChangeExecuteState(entityManager, &state->executeData, Execute_PathCreator);
          state->mode = Game_Execute;
       }break;
       case Game_Editor:
       {
          state->mode = Game_Editor;
-         ResetWorld(&state->world);
+         ResetEntityManager(&state->entityManager);
       }break;
       
       InvalidDefaultCase;
@@ -162,10 +162,10 @@ static GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHa
 	ret.currentStateArena = InitArena(PushData(constantArena, u8, constantArenaRestCapacity), constantArenaRestCapacity);
    
    // todo load this together with level
-	ret.world = InitWorld(ret.currentStateArena, &ret.assetHandler, (u32)screenWidth, (u32)screenHeight);
+	ret.entityManager = InitEntityManager(ret.currentStateArena, &ret.assetHandler, (u32)screenWidth, (u32)screenHeight);
 	ret.executeData = InitExecute();
    
-	ChangeExecuteState(&ret.world, &ret.executeData, Execute_PathCreator);
+	ChangeExecuteState(&ret.entityManager, &ret.executeData, Execute_PathCreator);
    
 #if 0
 	For(ret.assetHandler.textureCatalog)
@@ -182,7 +182,7 @@ static GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHa
 	}
 #endif
 	
-	LoadLevel(CreateString("bridge"), &ret.world, ret.currentStateArena, &ret.assetHandler, &ret.editor);
+	LoadLevel(CreateString("bridge"), &ret.entityManager, ret.currentStateArena, &ret.assetHandler, &ret.editor);
    
 	SwitchGameMode(&ret, Game_Editor);
 	
@@ -194,7 +194,7 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
 	TimedBlock;
 	AssetHandler *assetHandler = &state->assetHandler;
 	Editor *editor = &state->editor;
-	World *world = &state->world;
+   EntityManager *entityManager= &state->entityManager;
 	SoundMixer *soundMixer = &state->soundMixer;
 	Arena *currentStateArena = state->currentStateArena;
 	Font font = state->font;
@@ -202,17 +202,19 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
    
 	Tweekable(b32, debugCam);
    
-	Camera *cam = debugCam ? &world->debugCamera : &world->camera;
+	Camera *cam = debugCam ? &entityManager->debugCamera : &entityManager->camera;
    
-	f32 aspectRatio = world->camera.aspectRatio; // todo, this does not really belong in the camera.
-	f32 focalLength = world->camera.focalLength;
+	f32 aspectRatio = entityManager->camera.aspectRatio; // todo, this does not really belong in the camera.
+	f32 focalLength = entityManager->camera.focalLength;
    f32 dt = input.dt;
    
 	//reset
-	For(world->entities)
+	For(entityManager->entities)
 	{
 		it->frameColor = V4(1, 1, 1, 1);
 	}
+   
+   static f32 timeScale = 1.0f;
    
 	// HandleInput
 	{
@@ -236,12 +238,12 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
             {
                ColorPickersHandleEvents(&state->editor, message, input);
                
-               ExecuteHandleEvents(world, assetHandler, exe, message, input);
+               ExecuteHandleEvents(entityManager, assetHandler, exe, message, input);
                
             }break;
             case Game_Editor:
             {
-               EditorHandleEvents(editor, world, assetHandler, message, input, currentStateArena);
+               EditorHandleEvents(editor, entityManager, cam, assetHandler, message, input, currentStateArena);
             }break;
             InvalidDefaultCase;
             
@@ -278,12 +280,12 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
       {
          UpdateColorPickers(editor, input);
          
-         GameExecuteUpdate(world, exe, dt);
+         GameExecuteUpdate(entityManager, exe, dt);
          
       }break;
       case Game_Editor:
       {
-         UpdateEditor(editor, world, cam, input);
+         UpdateEditor(editor, entityManager, cam, input);
          
       }break;
 	}
@@ -292,13 +294,13 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
 	RenderGroup *rg = &renderGroup;
 	ClearPushBuffer(rg);
    
-	PushRenderSetup(rg, *cam, world->lightSource, (Setup_Projective | Setup_ShadowMapping));
+	PushRenderSetup(rg, *cam, entityManager->lightSource, (Setup_Projective | Setup_ShadowMapping));
 	PushClear(rg, V4(1.0f, 0.1f, 0.1f, 0.1f));
    
 	Tweekable(b32, DrawMeshOutlines);
 	if (DrawMeshOutlines)
 	{
-		For(world->entities)
+		For(entityManager->entities)
 		{
 			MeshInfo *info = GetMeshInfo(assetHandler, it->meshId);
 			if (!info) continue;
@@ -307,7 +309,7 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
 			transformedAABB.minDim *= it->scale;
 			transformedAABB.maxDim *= it->scale;
          
-			m4x4 mat = Translate(QuaternionToMatrix4(it->orientation), GetRenderPos(*it, world->t));
+			m4x4 mat = Translate(QuaternionToMatrix4(it->orientation), GetRenderPos(*it, entityManager->t));
          
          
 			v3 d1 = V3(transformedAABB.maxDim.x - transformedAABB.minDim.x, 0, 0);
@@ -350,7 +352,7 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
 		}
 	}
    
-	PushDebugPointCuboid(rg, world->lightSource.pos);
+	PushDebugPointCuboid(rg, entityManager->lightSource.pos);
    
 	v4 allColorsOfTheRainbow[] =
 	{
@@ -378,7 +380,13 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
 	if (drawCamera)
 	{
       
-      Camera *camera = &world->camera;
+      Camera *camera = &entityManager->camera;
+      
+#if 0
+      Input asd;
+      asd.mouseDelta = V2(10, 0);
+      EditorUpdateCamFocus(editor, camera, asd);
+#endif
       
       m3x3 camM = QuaternionToMatrix3(camera->orientation);
       
@@ -392,6 +400,8 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
 		PushLine(rg, camera->pos, camera->pos + B2(camera->orientation), 0xFF00FF00); // green
 		PushLine(rg, camera->pos, camera->pos + B3(camera->orientation), 0xFF0000FF); // red
       
+      
+      //PushDebugPointCuboid(rg, camera->pos + B3(camera->orientation) *5.0f);
       
 #if 0
 		m4x4 proj = Projection(aspectRatio, focalLength) * CameraTransform(camera->orientation, camera->pos);
@@ -415,18 +425,18 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
    
 	if (drawEntityTree)
 	{
-		RenderEntityQuadTree(rg, &world->entityTree.root);
+		RenderEntityQuadTree(rg, &entityManager->entityTree.root);
 	}
    
 	switch (state->mode)
 	{
       case Game_Editor:
       {
-         RenderEditor(rg, assetHandler, state->editor, world, input);
+         RenderEditor(rg, assetHandler, state->editor, entityManager, input);
       }break;
       case Game_Execute:
       {
-         RenderExecute(rg, world, exe, assetHandler, input);
+         RenderExecute(rg, entityManager, exe, assetHandler, input);
       }break;
       
 	}
@@ -445,7 +455,7 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
    }
 	//AnimationTestStuff(rg, &ret, dt);
 	
-	PushRenderSetup(rg, *cam, world->lightSource, Setup_ZeroToOne); //todo  make PushRenderSetup have optional lightsource.
+	PushRenderSetup(rg, *cam, entityManager->lightSource, Setup_ZeroToOne); //todo  make PushRenderSetup have optional lightsource.
    
 	switch (state->mode)
 	{

@@ -1,5 +1,5 @@
 
-static void PlacingUnitsHandleEvent(ExecuteData *exe, World *world, AssetHandler *assetHandler, KeyStateMessage message, Input input)
+static void PlacingUnitsHandleEvent(ExecuteData *exe, EntityManager *entityManager, AssetHandler *assetHandler, KeyStateMessage message, Input input)
 {
 	if (message.flag & KeyState_ReleasedThisFrame)
 	{
@@ -8,20 +8,20 @@ static void PlacingUnitsHandleEvent(ExecuteData *exe, World *world, AssetHandler
          case Key_leftMouse:
          {
             // todo only ones that are in the tree, i.e. are gamePlay related
-            Entity *clickedE = GetHotEntity(world, assetHandler, input.mouseZeroToOne); 
+            Entity *clickedE = GetHotEntity(entityManager, assetHandler, input.mouseZeroToOne); 
             if (clickedE)
             {
                v3i posToPlace = clickedE->physicalPos + V3i(0, 0, -1);
                Entity *e = exe->placingUnits.unitsToPlace[0];
                e->physicalPos = posToPlace;
                
-               InsertEntity(world, e);
+               InsertEntity(entityManager, e);
                
                e->initialPos = e->physicalPos;
                UnorderedRemove(&exe->placingUnits.unitsToPlace, 0);
                if (!exe->placingUnits.unitsToPlace)
                {
-                  ChangeExecuteState(world, exe, Execute_PathCreator);
+                  ChangeExecuteState(entityManager, exe, Execute_PathCreator);
                   exe->pathCreator.hotUnit = e->serialNumber;
                   exe->pathCreator.state = PathCreator_CreatingPath;
                   return;
@@ -33,9 +33,9 @@ static void PlacingUnitsHandleEvent(ExecuteData *exe, World *world, AssetHandler
 }
 
 
-static void PathCreatorHandleEvent(World *world, ExecuteData *exe, AssetHandler *assetHandler, KeyStateMessage message, Input input)
+static void PathCreatorHandleEvent(EntityManager *entityManager, ExecuteData *exe, AssetHandler *assetHandler, KeyStateMessage message, Input input)
 {
-	Camera cam = world->camera;
+	Camera cam = entityManager->camera;
 	PathCreator *pathCreator = &exe->pathCreator;
 	if (message.flag & KeyState_PressedThisFrame)
 	{
@@ -47,19 +47,19 @@ static void PathCreatorHandleEvent(World *world, ExecuteData *exe, AssetHandler 
             {
                case Key_leftMouse:
                {
-                  u32 unitIndex = GetHotUnit(world, assetHandler, input.mouseZeroToOne, cam);
+                  u32 unitIndex = GetHotUnit(entityManager, assetHandler, input.mouseZeroToOne, cam);
                   
                   if (unitIndex == 0xFFFFFFFF)
                   {
                      break;
                   }
                   
-                  Entity *e = GetEntity(world, unitIndex);
+                  Entity *e = GetEntity(entityManager, unitIndex);
                   
                   if (message.flag & KeyState_ControlDown)
                   {
-                     RemoveEntityFromTree(world, e);
-                     ChangeExecuteState(world, exe, Execute_PlacingUnits);
+                     RemoveEntityFromTree(entityManager, e);
+                     ChangeExecuteState(entityManager, exe, Execute_PlacingUnits);
                      ArrayAdd(&exe->placingUnits.unitsToPlace, e);
                      
                      break;
@@ -68,16 +68,16 @@ static void PathCreatorHandleEvent(World *world, ExecuteData *exe, AssetHandler 
                   pathCreator->hotUnit = unitIndex;
                   pathCreator->state = PathCreator_CreatingPath;
                   
-                  ResetWorld(world);
+                  ResetEntityManager(entityManager);
                   
                   For(e->instructions)
                   {
-                     AdvanceGameState(world, exe, false);
+                     AdvanceGameState(entityManager, exe, false);
                   }
                }break;
                case Key_F6:
                {
-                  ChangeExecuteState(world, exe, Execute_Simulation);
+                  ChangeExecuteState(entityManager, exe, Execute_Simulation);
                }break;
             }
          }break;
@@ -95,11 +95,11 @@ static void PathCreatorHandleEvent(World *world, ExecuteData *exe, AssetHandler 
                   {
                      pathCreator->state = PathCreator_None;
                      pathCreator->hotUnit = 0xFFFFFFFF;
-                     ResetWorld(world);
+                     ResetEntityManager(entityManager);
                      break;
                   }
                   
-                  Entity *entity = GetEntity(world, pathCreator->hotUnit);
+                  Entity *entity = GetEntity(entityManager, pathCreator->hotUnit);
                   auto program = &entity->instructions;
                   if (PointInRectangle(pathCreator->resetUnitButton, input.mouseZeroToOne))
                   {
@@ -143,14 +143,14 @@ static void PathCreatorHandleEvent(World *world, ExecuteData *exe, AssetHandler 
                }break;
                case Key_rightMouse:
                {
-                  Entity *e = GetEntity(world, pathCreator->hotUnit);
+                  Entity *e = GetEntity(entityManager, pathCreator->hotUnit);
                   auto program = &e->instructions;
                   if (!program->amount) break;
                   --program->amount;
                }break;
                case Key_F6:
                {
-                  ChangeExecuteState(world, exe, Execute_Simulation);
+                  ChangeExecuteState(entityManager, exe, Execute_Simulation);
                }break;
                
             }
@@ -164,7 +164,7 @@ static void PathCreatorHandleEvent(World *world, ExecuteData *exe, AssetHandler 
 	}
 }
 
-static void SimHandleEvents(World *world, ExecuteData *exe, KeyStateMessage message)
+static void SimHandleEvents(EntityManager *entityManager, ExecuteData *exe, KeyStateMessage message)
 {
 	SimData *sim = &exe->simData;
 	if (message.flag & KeyState_PressedThisFrame)
@@ -181,40 +181,40 @@ static void SimHandleEvents(World *world, ExecuteData *exe, KeyStateMessage mess
          }break;
          case Key_F6:
          {
-            ChangeExecuteState(world, exe, Execute_PathCreator);
+            ChangeExecuteState(entityManager, exe, Execute_PathCreator);
          }break;
 		}
 	}
    
 }
 
-static void VictoryHandleEvents(ExecuteData *exe, World *world, KeyStateMessage message)
+static void VictoryHandleEvents(ExecuteData *exe, EntityManager *entityManager, KeyStateMessage message)
 {
 	if (message.flag & KeyState_PressedThisFrame)
 	{
-		ChangeExecuteState(world, exe, Execute_PathCreator);
+		ChangeExecuteState(entityManager, exe, Execute_PathCreator);
 	}
 }
 
-static void ExecuteHandleEvents(World *world, AssetHandler *assetHandler, ExecuteData *exe, KeyStateMessage message, Input input)
+static void ExecuteHandleEvents(EntityManager *entityManager, AssetHandler *assetHandler, ExecuteData *exe, KeyStateMessage message, Input input)
 {
 	switch (exe->state)
 	{
       case Execute_PlacingUnits:
       {
-         PlacingUnitsHandleEvent(exe, world, assetHandler, message, input);
+         PlacingUnitsHandleEvent(exe, entityManager, assetHandler, message, input);
       }break;
       case Execute_Simulation:
       {
-         SimHandleEvents(world, exe, message);
+         SimHandleEvents(entityManager, exe, message);
       }break;
       case Execute_PathCreator:
       {
-         PathCreatorHandleEvent(world, exe, assetHandler, message, input);
+         PathCreatorHandleEvent(entityManager, exe, assetHandler, message, input);
       }break;
       case Execute_Victory:
       {
-         VictoryHandleEvents(exe, world, message);
+         VictoryHandleEvents(exe, entityManager, message);
       }break;
       
       InvalidDefaultCase;
@@ -307,11 +307,11 @@ static v3i AdjustForCamera(Camera cam, KeyEnum key)
             }break;
             case Key_left:
             {
-               return V3i(-1, 0, 0);
+               return V3i(0, -1, 0);
             }break;
             case Key_right:
             {
-               return V3i(1, 0, 0);
+               return V3i(0, 1, 0);
             }break;
          }
          
@@ -332,11 +332,11 @@ static v3i AdjustForCamera(Camera cam, KeyEnum key)
             
             case Key_left:
             {
-               return V3i(1, 0, 0);
+               return V3i(0, 1, 0);
             }break;
             case Key_right:
             {
-               return V3i(-1, 0, 0);
+               return V3i(0, -1, 0);
             }break;
          }
       }
@@ -358,11 +358,11 @@ static v3i AdjustForCamera(Camera cam, KeyEnum key)
             
             case Key_left:
             {
-               return V3i(-1, 0, 0);
+               return V3i(1, 0, 0);
             }break;
             case Key_right:
             {
-               return V3i(1, 0, 0);
+               return V3i(-1, 0, 0);
             }break;
          }
       }
@@ -380,11 +380,11 @@ static v3i AdjustForCamera(Camera cam, KeyEnum key)
             }break;
             case Key_left:
             {
-               return V3i(1, 0, 0);
+               return V3i(-1, 0, 0);
             }break;
             case Key_right:
             {
-               return V3i(-1, 0, 0);
+               return V3i(1, 0, 0);
             }break;
          }
       }
@@ -393,9 +393,8 @@ static v3i AdjustForCamera(Camera cam, KeyEnum key)
 	return V3i();
 }
 
-static void EditorHandleEvents(Editor *editor, World *world, AssetHandler *assetHandler, KeyStateMessage message, Input input, Arena *currentStateArena)
+static void EditorHandleEvents(Editor *editor, EntityManager *entityManager, Camera *cam, AssetHandler *assetHandler, KeyStateMessage message, Input input, Arena *currentStateArena)
 {
-	Camera *cam = &world->camera;
 	For(editor->elements)
 	{
 		switch (it->type)
@@ -458,9 +457,9 @@ static void EditorHandleEvents(Editor *editor, World *world, AssetHandler *asset
 		{
          case EditorState_PickingColor:
          {
-            EditorPushUndo(editor, world);
+            EditorPushUndo(editor, entityManager);
             
-            ResetSelectionInitials(editor, world);
+            ResetSelectionInitials(editor, entityManager);
             EditorGoToNone(editor);
          }break;
          case EditorState_Default:
@@ -505,7 +504,7 @@ static void EditorHandleEvents(Editor *editor, World *world, AssetHandler *asset
                            case Tweeker_EntityType:
                            {
                               if (editor->hotEntityInfos.amount != 1) break;
-                              Entity *e = GetEntity(world, editor->hotEntityInfos[0].placedSerial);
+                              Entity *e = GetEntity(entityManager, editor->hotEntityInfos[0].placedSerial);
                               
                               if (PointInRectangle(pos, 0.5f * widthWithoutBoarder, height, input.mouseZeroToOne))
                               {
@@ -608,7 +607,7 @@ static void EditorHandleEvents(Editor *editor, World *world, AssetHandler *asset
                      return;
                   }
                   
-                  Entity *hotEntity = GetHotEntity(world, assetHandler, input.mouseZeroToOne);
+                  Entity *hotEntity = GetHotEntity(entityManager, assetHandler, input.mouseZeroToOne);
                   
                   if (message.flag & KeyState_ShiftDown)
                   {
@@ -672,7 +671,7 @@ static void EditorHandleEvents(Editor *editor, World *world, AssetHandler *asset
                   v3i inc = AdjustForCamera(*cam, Key_left);
                   For(editor->hotEntityInfos)
                   {
-                     Entity *mesh = GetEntity(world, it->placedSerial);
+                     Entity *mesh = GetEntity(entityManager, it->placedSerial);
                      mesh->physicalPos += inc;
                   }
                }break;
@@ -681,7 +680,7 @@ static void EditorHandleEvents(Editor *editor, World *world, AssetHandler *asset
                   v3i inc = AdjustForCamera(*cam, Key_right);
                   For(editor->hotEntityInfos)
                   {
-                     Entity *mesh = GetEntity(world, it->placedSerial);
+                     Entity *mesh = GetEntity(entityManager, it->placedSerial);
                      mesh->physicalPos += inc;
                   }
                   
@@ -692,7 +691,7 @@ static void EditorHandleEvents(Editor *editor, World *world, AssetHandler *asset
                   {
                      For(editor->hotEntityInfos)
                      {
-                        Entity *mesh = GetEntity(world, it->placedSerial);
+                        Entity *mesh = GetEntity(entityManager, it->placedSerial);
                         mesh->physicalPos += V3i(0, 0, -1);
                      }
                      break;
@@ -701,7 +700,7 @@ static void EditorHandleEvents(Editor *editor, World *world, AssetHandler *asset
                   v3i inc = AdjustForCamera(*cam, Key_up);
                   For(editor->hotEntityInfos)
                   {
-                     Entity *mesh = GetEntity(world, it->placedSerial);
+                     Entity *mesh = GetEntity(entityManager, it->placedSerial);
                      mesh->physicalPos += inc;
                   }
                   
@@ -712,7 +711,7 @@ static void EditorHandleEvents(Editor *editor, World *world, AssetHandler *asset
                   {
                      For(editor->hotEntityInfos)
                      {
-                        Entity *mesh = GetEntity(world, it->placedSerial);
+                        Entity *mesh = GetEntity(entityManager, it->placedSerial);
                         mesh->physicalPos += V3i(0, 0, 1);
                      }
                      break;
@@ -721,7 +720,7 @@ static void EditorHandleEvents(Editor *editor, World *world, AssetHandler *asset
                   v3i inc = AdjustForCamera(*cam, Key_down);
                   For(editor->hotEntityInfos)
                   {
-                     Entity *mesh = GetEntity(world, it->placedSerial);
+                     Entity *mesh = GetEntity(entityManager, it->placedSerial);
                      mesh->physicalPos += inc;
                   }
                   
@@ -729,29 +728,29 @@ static void EditorHandleEvents(Editor *editor, World *world, AssetHandler *asset
                
                case Key_g:
                {
-                  ResetSelectionInitials(editor, world);
+                  ResetSelectionInitials(editor, entityManager);
                   editor->state = EditorState_Moving;
                }break;
                case Key_r:
                {
-                  ResetSelectionInitials(editor, world);
+                  ResetSelectionInitials(editor, entityManager);
                   editor->state = EditorState_Rotating;
                }break;
                case Key_s:
                {
-                  ResetSelectionInitials(editor, world);
+                  ResetSelectionInitials(editor, entityManager);
                   
                   if ((message.flag & KeyState_ControlDown))
                   {
-                     if (!world->loadedLevel.name.amount) break;
+                     if (!entityManager->loadedLevel.name.amount) break;
                      
-                     For(world->entities)
+                     For(entityManager->entities)
                      {
                         it->initialPos = it->physicalPos;
                      }
                      
-                     char *fileName = FormatCString("level/%s.level", world->loadedLevel.name);
-                     if (WriteLevel(fileName, *world, assetHandler))
+                     char *fileName = FormatCString("level/%s.level", entityManager->loadedLevel.name);
+                     if (WriteLevel(fileName, *entityManager, assetHandler))
                      {
                         ConsoleOutput("Saved!");
                      }
@@ -771,12 +770,12 @@ static void EditorHandleEvents(Editor *editor, World *world, AssetHandler *asset
                   if (message.flag & KeyState_ControlDown)
                   {
                      editor->clipBoard.amount = 0;
-                     v3 averagePos = GetAveragePosForSelection(editor, world);
+                     v3 averagePos = GetAveragePosForSelection(editor, entityManager);
                      v3i averageTile = SnapToTileMap(averagePos);
                      averageTile.z = 0;
                      For(editor->hotEntityInfos)
                      {
-                        Entity *mesh = GetEntity(world, it->placedSerial);
+                        Entity *mesh = GetEntity(entityManager, it->placedSerial);
                         EntityCopyData data;
                         data.color = mesh->color;
                         data.meshId = mesh->meshId;
@@ -810,7 +809,7 @@ static void EditorHandleEvents(Editor *editor, World *world, AssetHandler *asset
                   if (message.flag & KeyState_ControlDown)
                   {
                      EditorSelectNothing(editor);
-                     EditorPerformUndo(editor, world);
+                     EditorPerformUndo(editor, entityManager);
                   }
                }break;
                case Key_y:
@@ -818,7 +817,7 @@ static void EditorHandleEvents(Editor *editor, World *world, AssetHandler *asset
                   if (message.flag & KeyState_ControlDown)
                   {
                      EditorSelectNothing(editor);
-                     EditorPerformRedo(editor, world);
+                     EditorPerformRedo(editor, entityManager);
                   }
                }break;
                case Key_x:
@@ -868,7 +867,7 @@ static void EditorHandleEvents(Editor *editor, World *world, AssetHandler *asset
                      break;
                   }
                   
-                  v3 averagePos = GetAveragePosForSelection(editor, world);
+                  v3 averagePos = GetAveragePosForSelection(editor, entityManager);
                   cam->pos = averagePos + cam->pos - editor->focusPoint;
                   editor->focusPoint = averagePos;
                   
@@ -892,14 +891,14 @@ static void EditorHandleEvents(Editor *editor, World *world, AssetHandler *asset
             {
                case Key_leftMouse:
                {
-                  EditorPushUndo(editor, world);
-                  ResetSelectionInitials(editor, world);
+                  EditorPushUndo(editor, entityManager);
+                  ResetSelectionInitials(editor, entityManager);
                   EditorGoToNone(editor);
                }break;
                case Key_rightMouse:
                {
-                  ResetHotMeshes(editor, world);
-                  ResetSelectionInitials(editor, world);
+                  ResetHotMeshes(editor, entityManager);
+                  ResetSelectionInitials(editor, entityManager);
                   EditorGoToNone(editor);
                }break;
                
@@ -915,19 +914,19 @@ static void EditorHandleEvents(Editor *editor, World *world, AssetHandler *asset
                   {
                      For(editor->hotEntityInfos)
                      {
-                        Entity *mesh = GetEntity(world, it->placedSerial);
+                        Entity *mesh = GetEntity(entityManager, it->placedSerial);
                         mesh->offset = V3();
                      }
                   }
                   
-                  EditorPushUndo(editor, world);
-                  ResetSelectionInitials(editor, world);
+                  EditorPushUndo(editor, entityManager);
+                  ResetSelectionInitials(editor, entityManager);
                   EditorGoToNone(editor);
                }break;
                case Key_rightMouse:
                {
-                  ResetHotMeshes(editor, world);
-                  ResetSelectionInitials(editor, world);
+                  ResetHotMeshes(editor, entityManager);
+                  ResetSelectionInitials(editor, entityManager);
                   EditorGoToNone(editor);
                }break;
                
@@ -939,14 +938,14 @@ static void EditorHandleEvents(Editor *editor, World *world, AssetHandler *asset
             {
                case Key_leftMouse:
                {
-                  EditorPushUndo(editor, world);
-                  ResetSelectionInitials(editor, world);
+                  EditorPushUndo(editor, entityManager);
+                  ResetSelectionInitials(editor, entityManager);
                   EditorGoToNone(editor);
                }break;
                case Key_rightMouse:
                {
-                  ResetHotMeshes(editor, world);
-                  ResetSelectionInitials(editor, world);
+                  ResetHotMeshes(editor, entityManager);
+                  ResetSelectionInitials(editor, entityManager);
                   EditorGoToNone(editor);
                }break;
                
@@ -1138,8 +1137,8 @@ static void EditorHandleEvents(Editor *editor, World *world, AssetHandler *asset
                   t->string.length = 0;
                   editor->panel.hotValue = 0xFFFFFFFF;
                   
-                  EditorPushUndo(editor, world);
-                  ResetSelectionInitials(editor, world);
+                  EditorPushUndo(editor, entityManager);
+                  ResetSelectionInitials(editor, entityManager);
                   EditorGoToNone(editor);
                   break;
                }break;
@@ -1161,7 +1160,7 @@ static void EditorHandleEvents(Editor *editor, World *world, AssetHandler *asset
             {
                case Key_leftMouse:
                {
-                  v2 clickedP = ScreenZeroToOneToInGame(world->camera, input.mouseZeroToOne);
+                  v2 clickedP = ScreenZeroToOneToInGame(entityManager->camera, input.mouseZeroToOne);
                   
                   v3i clickedTile = SnapToTileMap(i12(clickedP));
                   v3 clickedOffset = V3(clickedTile) - V3(clickedP, 0.0f);
@@ -1173,7 +1172,7 @@ static void EditorHandleEvents(Editor *editor, World *world, AssetHandler *asset
                      v3i pos = it->physicalPos + clickedTile;
                      v3 offset = editor->snapToTileMap ? V3() : (it->offset + clickedOffset);
                      
-                     Entity mesh = CreateEntity(world, it->type, it->meshId, pos, it->scale, it->orientation, offset, it->color, it->flags);
+                     Entity mesh = CreateEntity(entityManager, it->type, it->meshId, pos, it->scale, it->orientation, offset, it->color, it->flags);
                      EditorSelect add;
                      add.initialOrientation = mesh.orientation;
                      add.initialPhysicalPos = mesh.physicalPos;
@@ -1184,13 +1183,13 @@ static void EditorHandleEvents(Editor *editor, World *world, AssetHandler *asset
                      ArrayAdd(&editor->hotEntityInfos, add);
                   }
                   
-                  EditorPushUndo(editor, world); // needs them to be selected
-                  ResetSelectionInitials(editor, world);
+                  EditorPushUndo(editor, entityManager); // needs them to be selected
+                  ResetSelectionInitials(editor, entityManager);
                   EditorGoToNone(editor);
                }break;
                case Key_rightMouse:
                {
-                  ResetSelectionInitials(editor, world);
+                  ResetSelectionInitials(editor, entityManager);
                   EditorGoToNone(editor);
                }break;
             }
@@ -1202,18 +1201,18 @@ static void EditorHandleEvents(Editor *editor, World *world, AssetHandler *asset
                case Key_leftMouse:
                {
                   // needs the meshes to be selected, so not yet dead
-                  EditorPushUndo(editor, world);
+                  EditorPushUndo(editor, entityManager);
                   For(editor->hotEntityInfos)
                   {
-                     RemoveEntity(world, it->placedSerial);
+                     RemoveEntity(entityManager, it->placedSerial);
                   }
                   EditorSelectNothing(editor);
-                  ResetSelectionInitials(editor, world);
+                  ResetSelectionInitials(editor, entityManager);
                   EditorGoToNone(editor);
                }break;
                case Key_rightMouse:
                {
-                  ResetSelectionInitials(editor, world);
+                  ResetSelectionInitials(editor, entityManager);
                   EditorGoToNone(editor);
                }break;
             }

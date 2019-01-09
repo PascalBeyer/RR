@@ -107,38 +107,6 @@ struct Triangle
 
 DefineArray(Triangle);
 
-struct RockCorner
-{
-	u32 color;
-	v3 p;
-	union
-	{
-		RockCorner *adjacentCorners[2];
-		struct
-		{
-			RockCorner *prev;
-			RockCorner *next;
-		};
-	};
-   
-	
-};
-
-struct RockCornerListElement
-{
-	RockCorner data;
-	RockCornerListElement *next;
-   
-};
-
-struct RockCornerList
-{
-	RockCornerListElement *list;
-	RockCornerListElement *freeList;
-};
-
-static u32 globalCornerIndex = 0;
-
 inline bool v3InAABB(v3 pos, AABB aabb)
 {
 	return
@@ -150,69 +118,6 @@ inline bool v3InAABB(v3 pos, AABB aabb)
 		aabb.maxDim.z >= pos.z;
 }
 
-static u32 GetCubeNormalIndex(v3 normal)
-{
-	if (normal.x)
-	{
-		Assert(!normal.y & !normal.z);
-		return (normal.x > 0) ? 0u : 1u;
-      
-	}
-	if (normal.y)
-	{
-		Assert(!normal.x & !normal.z);
-		return (normal.y > 0) ? 2u : 3u;
-	}
-	if (normal.z)
-	{
-		Assert(!normal.x & !normal.y);
-		return (normal.z > 0) ? 4u : 5u;
-	}
-	else
-	{
-		Assert(!"invalide normal");
-		return MAXU32;
-	}
-}
-
-static v3 GetCubeNormalFromIndex(u32 index)
-{
-	switch (index)
-	{
-      case 0:
-      {
-         return V3(1, 0, 0);
-      }break;
-      case 1:
-      {
-         return V3(-1, 0, 0);
-      }break;
-      case 2:
-      {
-         return V3(0, 1, 0);
-      }break;
-      case 3:
-      {
-         return V3(0, -1, 0);
-      }break;
-      case 4:
-      {
-         return V3(0, 0, 1);
-      }break;
-      case 5:
-      {
-         return V3(0, 0, -1);
-      }break;
-      default:
-      {
-         
-         Assert(!"invalideCubeNormalIndex");
-         return V3();
-      }break;
-	}
-   
-}
-
 static u32 GrayFromU32(u32 i)
 {
 	u32 c = i & 0xFF;
@@ -220,86 +125,6 @@ static u32 GrayFromU32(u32 i)
 	return ret;
 }
 
-
-static RockCorner CreateRockCorner(v3 p, u32 colorSeed)
-{
-	RockCorner ret;
-	ret.p = p;
-	ret.color = GrayFromU32(colorSeed);
-   
-	//ret.prev = NULL;
-	//ret.next = NULL;
-	return ret;
-}
-
-#if 0
-static void ColorForTileMap(Level *world)
-{
-	v3 screenPos = world->camera.pos;
-   
-	v2 screenUL = ScreenZeroToOneToInGame(world->camera, V2(0.0f, 0.0f));
-	v2 screenUR = ScreenZeroToOneToInGame(world->camera, V2(1.0f, 0.0f));
-	v2 screenBL = ScreenZeroToOneToInGame(world->camera, V2(0.0f, 1.0f));
-	v2 screenBR = ScreenZeroToOneToInGame(world->camera, V2(1.0f, 1.0f));
-   
-	float minScreenX = Min(Min(screenUL.x, screenUR.x), Min(screenBL.x, screenBR.x));
-	float minScreenY = Min(Min(screenUL.y, screenUR.y), Min(screenBL.y, screenBR.y));
-   
-	float maxScreenX = Max(Max(screenUL.x, screenUR.x), Max(screenBL.x, screenBR.x));
-	float maxScreenY = Max(Max(screenUL.y, screenUR.y), Max(screenBL.y, screenBR.y));
-   
-	u32 minScreenXi = (u32)Max((int)floorf(minScreenX) - 1.0f, 0.0f);
-	u32 minScreenYi = (u32)Max((int)floorf(minScreenY) - 1.0f, 0.0f);
-   
-	u32 maxScreenXi = (u32)Min((int)ceilf(maxScreenX) + 1.0f, (float)world->tileMap.width);
-	u32 maxScreenYi = (u32)Min((int)ceilf(maxScreenY) + 1.0f, (float)world->tileMap.height);
-   
-	Tweekable(b32, DrawWholeMap);
-	if (DrawWholeMap)
-	{
-		minScreenXi = 0;
-		minScreenYi = 0;
-		maxScreenXi = world->tileMap.width;
-		maxScreenYi = world->tileMap.height;
-	}
-	for (u32 x = minScreenXi; x < maxScreenXi; x++)
-	{
-		for (u32 y = minScreenYi; y < maxScreenYi; y++)
-		{
-			Tile *tile = GetTile(world->tileMap, V2(x, y));
-			
-			v4 slightlyRed = V4(1.0f, 1.0f, 0.55f, 0.55f);
-			v4 slightlyGreen = V4(1.0f, 0.55f, 1.0f, 0.55f);
-			v4 slightlyYellow = V4(1.0f, 1.0f, 1.0f, 0.55f);
-			v4 slightlyBlue = V4(1.0f, 0.55f, 0.55f, 1.0f);
-         
-			if (tile)
-			{
-				switch (tile->type)
-				{
-               case Tile_Blocked:
-               {
-                  world->entities[tile->meshIndex].frameColor *= slightlyRed;
-               }break;
-               case Tile_Empty:
-               {
-                  world->entities[tile->meshIndex].frameColor *= slightlyGreen;
-               }break;
-               case Tile_Goal:
-               {
-                  world->entities[tile->meshIndex].frameColor *= slightlyYellow;
-               }break;
-               case Tile_Spawner:
-               {
-                  world->entities[tile->meshIndex].frameColor *= slightlyBlue;
-               }break;
-               
-				}
-			}
-		}
-	}
-}
-#endif
 
 static void UpdateCamGame(Input *input, Camera *camera)
 {

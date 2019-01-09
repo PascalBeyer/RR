@@ -239,14 +239,14 @@ static void SaveLevelHelper(StringArray args)
 {
 	char *fileName = FormatCString("level/%s.level", args[0]);
    
-	WriteLevel(fileName, gameState.world, &gameState.assetHandler);
-	gameState.world.loadedLevel.name = CopyString(args[0], gameState.currentStateArena); // todo leak
+	WriteLevel(fileName, gameState.entityManager, &gameState.assetHandler);
+	gameState.entityManager.loadedLevel.name = CopyString(args[0], gameState.currentStateArena); // todo leak
 	ConsoleOutputError("Done!");
 }
 
 static void LoadLevelHelper(StringArray args)
 {
-	if (LoadLevel(args[0], &gameState.world, gameState.currentStateArena, &gameState.assetHandler, &gameState.editor))
+	if (LoadLevel(args[0], &gameState.entityManager, gameState.currentStateArena, &gameState.assetHandler, &gameState.editor))
 	{
 		SwitchGameMode(&gameState, Game_Editor);
 		ConsoleOutput("Loaded level %s!", args[0]);
@@ -258,8 +258,8 @@ static void LoadLevelHelper(StringArray args)
 
 static void NewLevelHelper(StringArray args)
 {
-	UnloadLevel(&gameState.world);
-	ResetWorld(&gameState.world);
+	UnloadLevel(&gameState.entityManager);
+	ResetEntityManager(&gameState.entityManager);
 	ResetEditor(&gameState.editor);
 	
    
@@ -301,14 +301,14 @@ static void AddMeshHelper(StringArray args)
 
 static void SaveCameraHelper(StringArray args)
 {
-	gameState.world.loadedLevel.camera = gameState.world.camera;
+	gameState.entityManager.loadedLevel.camera = gameState.entityManager.camera;
 }
 
 
 static void SetLightHelper(StringArray args)
 {
-	gameState.world.lightSource.orientation = gameState.world.camera.orientation;
-   gameState.world.lightSource.pos = gameState.world.camera.pos;
+	gameState.entityManager.lightSource.orientation = gameState.entityManager.camera.orientation;
+   gameState.entityManager.lightSource.pos = gameState.entityManager.camera.pos;
 }
 
 

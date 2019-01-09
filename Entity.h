@@ -334,7 +334,7 @@ static void RemoveAllEntities(TileOctTree *tree)
 }
 #endif
 
-struct World
+struct EntityManager
 {
 	Level loadedLevel;
    
@@ -375,9 +375,9 @@ static Level EmptyLevel()
 	return ret;
 }
 
-static World InitWorld(Arena *currentStateArena, AssetHandler *assetHandler, u32 screenWidth, u32 screenHeight)
+static EntityManager InitEntityManager(Arena *currentStateArena, AssetHandler *assetHandler, u32 screenWidth, u32 screenHeight)
 {
-	World ret = {};
+	EntityManager ret = {};
    
 	ret.lightSource.pos = V3(20, 0, -20);
    ret.lightSource.orientation = QuaternionId();
@@ -403,18 +403,18 @@ static World InitWorld(Arena *currentStateArena, AssetHandler *assetHandler, u32
 	return ret;
 }
 
-static Entity *GetEntity(World *world, u32 serialNumber)
+static Entity *GetEntity(EntityManager *entityManager, u32 serialNumber)
 {
-	u32 index = world->entitySerialMap[serialNumber];
-	Entity *ret = world->entities + index;
+	u32 index = entityManager->entitySerialMap[serialNumber];
+	Entity *ret = entityManager->entities + index;
 	return ret;
 }
 
-static void RemoveEntityFromTree(World *world, Entity *e)
+static void RemoveEntityFromTree(EntityManager *entityManager, Entity *e)
 {
 	if (!(e->flags & EntityFlag_InTree)) return;
    
-	TileOctTree *tree = &world->entityTree;
+	TileOctTree *tree = &entityManager->entityTree;
 	TileOctTreeNode *cur = &tree->root;
 	
 	e->flags &= ~EntityFlag_InTree;
@@ -443,9 +443,9 @@ static void RemoveEntityFromTree(World *world, Entity *e)
 	Die;
 }
 
-static EntityPtrArray GetEntities(World *world, v3i tile, u64 flags = 0)
+static EntityPtrArray GetEntities(EntityManager *entityManager, v3i tile, u64 flags = 0)
 {
-	TileOctTreeNode *cur = &world->entityTree.root;
+	TileOctTreeNode *cur = &entityManager->entityTree.root;
 	Assert(PointInAABBi(cur->bound, tile));
 	while (!cur->isLeaf)
 	{
@@ -464,7 +464,7 @@ static EntityPtrArray GetEntities(World *world, v3i tile, u64 flags = 0)
 	for (u32 i = 0; i < ArrayCount(cur->entitySerials); i++)
 	{
 		if (cur->entitySerials[i] == 0xFFFFFFFF) continue;
-		Entity *e = GetEntity(world, cur->entitySerials[i]);
+		Entity *e = GetEntity(entityManager, cur->entitySerials[i]);
 		if (e->physicalPos == tile && ((e->flags & flags) == flags))
 		{
 			*PushStruct(frameArena, EntityPtr) = e;
@@ -475,12 +475,12 @@ static EntityPtrArray GetEntities(World *world, v3i tile, u64 flags = 0)
 	return ret;
 }
 
-static void InsertEntity(World *world, TileOctTreeNode *cur, Entity *e)
+static void InsertEntity(EntityManager *entityManager, TileOctTreeNode *cur, Entity *e)
 {
 	TimedBlock;
 	if (!e) return;
    
-	TileOctTree *tree = &world->entityTree;
+	TileOctTree *tree = &entityManager->entityTree;
    
 	while (!cur->isLeaf)
 	{
@@ -503,7 +503,7 @@ static void InsertEntity(World *world, TileOctTreeNode *cur, Entity *e)
 	{
 		if (cur->entitySerials[i] != 0xFFFFFFFF)
 		{
-			Entity *other = GetEntities(world, cur->entitySerials[i]);
+			Entity *other = GetEntities(entityManager, cur->entitySerials[i]);
 			if (other->physicalPos == e->physicalPos)
 			{
 				if (swap) cur->entitySerials[i] = e->serialNumber;
@@ -530,7 +530,7 @@ static void InsertEntity(World *world, TileOctTreeNode *cur, Entity *e)
 	Entity *currentEntities[ArrayCount(cur->entitySerials) + 1];
 	for (u32 i = 0; i < ArrayCount(cur->entitySerials); i++)
 	{
-		currentEntities[i] = (cur->entitySerials[i] != 0xFFFFFFFF) ? GetEntity(world, cur->entitySerials[i]) : NULL;
+		currentEntities[i] = (cur->entitySerials[i] != 0xFFFFFFFF) ? GetEntity(entityManager, cur->entitySerials[i]) : NULL;
 	}
 	currentEntities[ArrayCount(cur->entitySerials)] = e;
    
@@ -548,7 +548,7 @@ static void InsertEntity(World *world, TileOctTreeNode *cur, Entity *e)
 	{
 		Die;
 		e->physicalPos -= V3i(0, 0, 1);
-		InsertEntity(world, &world->entityTree.root, e);
+		InsertEntity(entityManager, &entityManager->entityTree.root, e);
 		return;
 	}
    
@@ -589,61 +589,61 @@ static void InsertEntity(World *world, TileOctTreeNode *cur, Entity *e)
    
 	for (u32 i = 0; i < 17; i++)
 	{
-		InsertEntity(world, cur, currentEntities[i]);
+		InsertEntity(entityManager, cur, currentEntities[i]);
 	}
    
 	return;
 }
 
-static void ResetTreeHelper(World *world, TileOctTree *tree, TileOctTreeNode *node)
+static void ResetTreeHelper(EntityManager *entityManager, TileOctTree *tree, TileOctTreeNode *node)
 {
 	if (node->isLeaf) return;
    
 	for (u32 i = 0; i < 8; i++)
 	{
 		auto c = node->children[i];
-		ResetTreeHelper(world, tree, c);
+		ResetTreeHelper(entityManager, tree, c);
 		c->next = tree->freeList;
 		tree->freeList = c;
 	}
 }
 
-static void ResetTree(World *world, TileOctTree *tree) // todo speed can this be lineraized?
+static void ResetTree(EntityManager *entityManager, TileOctTree *tree) // todo speed can this be lineraized?
 {
-	ResetTreeHelper(world, tree, &tree->root);
+	ResetTreeHelper(entityManager, tree, &tree->root);
 	tree->root.isLeaf = true;
 	for (u32 i = 0; i < ArrayCount(tree->root.entitySerials); i++)
 	{
 		tree->root.entitySerials[i] = 0xFFFFFFFF;
 	}
    
-	For(world->entities)
+	For(entityManager->entities)
 	{
 		it->flags &= ~EntityFlag_InTree;
 	}
 }
 
-static void InsertEntity(World *world, Entity *e)
+static void InsertEntity(EntityManager *entityManager, Entity *e)
 {
 	Assert(!(e->flags & EntityFlag_InTree));
-	TileOctTree *tree = &world->entityTree;
+	TileOctTree *tree = &entityManager->entityTree;
 	TileOctTreeNode *cur = &tree->root;
 	Assert(PointInAABBi(cur->bound, e->physicalPos));
 	// change this to isNotLeaf, to not have to do this not?
    
-	InsertEntity(world, cur, e);
+	InsertEntity(entityManager, cur, e);
    
 	e->flags |= EntityFlag_InTree;
 }
 
-static void MoveEntityInTree(World *world, Entity *e, v3i by)
+static void MoveEntityInTree(EntityManager *entityManager, Entity *e, v3i by)
 {
-	RemoveEntityFromTree(world, e);
+	RemoveEntityFromTree(entityManager, e);
 	e->physicalPos += by;
-	InsertEntity(world, e);
+	InsertEntity(entityManager, e);
 }
 
-static Entity *CreateEntityInternal(World *world, u32 meshID, f32 scale, Quaternion orientation, v3i pos, v3 offset, v4 color, EntityType type, u64 flags)
+static Entity *CreateEntityInternal(EntityManager *entityManager, u32 meshID, f32 scale, Quaternion orientation, v3i pos, v3 offset, v4 color, EntityType type, u64 flags)
 {
 	Entity ret;
 	ret.meshId = meshID;
@@ -654,24 +654,24 @@ static Entity *CreateEntityInternal(World *world, u32 meshID, f32 scale, Quatern
 	ret.offset = offset;
 	ret.color = color;
 	ret.frameColor = V4(1, 1, 1, 1);
-	ret.serialNumber = world->entitySerializer++;
+	ret.serialNumber = entityManager->entitySerializer++;
 	ret.type = type;
 	ret.flags = flags;
 	ret.interpolation = {};
 	
-	u32 arrayIndex = ArrayAdd(&world->entities, ret);
+	u32 arrayIndex = ArrayAdd(&entityManager->entities, ret);
    
-	Assert(ret.serialNumber == world->entitySerialMap.amount);
-	ArrayAdd(&world->entitySerialMap, arrayIndex);
+	Assert(ret.serialNumber == entityManager->entitySerialMap.amount);
+	ArrayAdd(&entityManager->entitySerialMap, arrayIndex);
 	if (flags) // entity != none? // move this out?
 	{
-		InsertEntity(world, world->entities + arrayIndex);
+		InsertEntity(entityManager, entityManager->entities + arrayIndex);
 	}
    
-	return world->entities + arrayIndex;
+	return entityManager->entities + arrayIndex;
 };
 
-static void RestoreEntity(World *world, u32 serial, u32 meshID, f32 scale, Quaternion orientation, v3i pos, v3 offset, v4 color, EntityType type, u64 flags)
+static void RestoreEntity(EntityManager *entityManager, u32 serial, u32 meshID, f32 scale, Quaternion orientation, v3i pos, v3 offset, v4 color, EntityType type, u64 flags)
 {
 	Entity ret;
 	ret.meshId = meshID;
@@ -681,91 +681,91 @@ static void RestoreEntity(World *world, u32 serial, u32 meshID, f32 scale, Quate
 	ret.offset = offset;
 	ret.color = color;
 	ret.frameColor = V4(1, 1, 1, 1);
-	ret.serialNumber = world->entitySerializer++;
+	ret.serialNumber = entityManager->entitySerializer++;
 	ret.type = type;
 	ret.flags = flags;
 	ret.interpolation = {};
    
-	u32 arrayIndex = ArrayAdd(&world->entities, ret);
+	u32 arrayIndex = ArrayAdd(&entityManager->entities, ret);
    
-	Assert(world->entitySerialMap[serial] == 0xFFFFFFFF);
-	world->entitySerialMap[serial] = arrayIndex;
+	Assert(entityManager->entitySerialMap[serial] == 0xFFFFFFFF);
+	entityManager->entitySerialMap[serial] = arrayIndex;
 	if (flags) // entity != none?
 	{
-		InsertEntity(world, world->entities + arrayIndex);
+		InsertEntity(entityManager, entityManager->entities + arrayIndex);
 	}
 }
 
-static void RemoveEntity(World *world, u32 serial)
+static void RemoveEntity(EntityManager *entityManager, u32 serial)
 {
-	u32 index = world->entitySerialMap[serial];
-	Entity *toRemove = world->entities + index;
-	RemoveEntityFromTree(world, toRemove);
+	u32 index = entityManager->entitySerialMap[serial];
+	Entity *toRemove = entityManager->entities + index;
+	RemoveEntityFromTree(entityManager, toRemove);
    
-	world->entitySerialMap[serial] = 0xFFFFFFFF;
+	entityManager->entitySerialMap[serial] = 0xFFFFFFFF;
    
-	u32 lastIndex = world->entities.amount - 1;
+	u32 lastIndex = entityManager->entities.amount - 1;
 	if (index != lastIndex)
 	{
-		u32 serialNumberToChange = world->entities[lastIndex].serialNumber;
-		world->entitySerialMap[serialNumberToChange] = index;
+		u32 serialNumberToChange = entityManager->entities[lastIndex].serialNumber;
+		entityManager->entitySerialMap[serialNumberToChange] = index;
 	}
-	UnorderedRemove(&world->entities, index);
+	UnorderedRemove(&entityManager->entities, index);
 }
 
-static void UnloadLevel(World *world)
+static void UnloadLevel(EntityManager *entityManager)
 {
-	world->loadedLevel = EmptyLevel();
-	world->at = 0;
-	world->camera = world->loadedLevel.camera;
-	world->entities.amount = 0; // this before ResetTree, makes the reset faster
-	ResetTree(world, &world->entityTree);
-	world->entitySerialMap.amount = 0;
-	world->entitySerializer = 0;
-	world->debugCamera = world->camera;
+	entityManager->loadedLevel = EmptyLevel();
+	entityManager->at = 0;
+	entityManager->camera = entityManager->loadedLevel.camera;
+	entityManager->entities.amount = 0; // this before ResetTree, makes the reset faster
+	ResetTree(entityManager, &entityManager->entityTree);
+	entityManager->entitySerialMap.amount = 0;
+	entityManager->entitySerializer = 0;
+	entityManager->debugCamera = entityManager->camera;
 }
 
-static void ResetWorld(World *world)
+static void ResetEntityManager(EntityManager *entityManager)
 {
-	world->camera = world->loadedLevel.camera;
-	world->debugCamera = world->camera;
+	entityManager->camera = entityManager->loadedLevel.camera;
+	entityManager->debugCamera = entityManager->camera;
 	
-	world->at = 0;
-	world->t = 0.0f;
+	entityManager->at = 0;
+	entityManager->t = 0.0f;
    
-	For(world->entities)
+	For(entityManager->entities)
 	{
 		if (it->flags & EntityFlag_IsDynamic)
 		{
-			RemoveEntityFromTree(world, it);
+			RemoveEntityFromTree(entityManager, it);
 		}
 	}
    
-	For(world->entities)
+	For(entityManager->entities)
 	{
 		if (it->flags & EntityFlag_IsDynamic)
 		{
 			it->physicalPos = it->initialPos;
 			it->flags &= ~(EntityFlag_IsFalling | EntityFlag_IsMoving);
 			it->interpolation = {};
-			InsertEntity(world, it);
+			InsertEntity(entityManager, it);
 		}
 		
 	}
    
 }
 
-static u32 GetHotUnit(World *world, AssetHandler *assetHandler, v2 mousePosZeroToOne, Camera camera)
+static u32 GetHotUnit(EntityManager *entityManager, AssetHandler *assetHandler, v2 mousePosZeroToOne, Camera camera)
 {
 	v3 camP = camera.pos; // todo camera or debugCamera? Maybe we should again unify them
 	v3 camD = ScreenZeroToOneToDirecion(camera, mousePosZeroToOne);
    
-	For(world->entities)
+	For(entityManager->entities)
 	{
 		if (it->type != Entity_Dude) continue;
 		Entity *e = it;
 		m4x4 mat = QuaternionToMatrix4(Inverse(e->orientation));
-		v3 rayP = mat * (camP - GetRenderPos(*e, world->t));
+		v3 rayP = mat * (camP - GetRenderPos(*e, entityManager->t));
 		v3 rayD = mat * camD;
       
 		MeshInfo *info = GetMeshInfo(assetHandler, e->meshId);
@@ -866,71 +866,71 @@ static u64 GetStandardFlags(EntityType type)
 	return 0;
 }
 
-static Entity CreateDude(World *world, v3i pos, f32 scale = 1.0f, Quaternion orientation = {1, 0, 0, 0}, v3 offset = V3(), v4 color = V4(1, 1, 1, 1), u32 meshId = 0xFFFFFFFF)
+static Entity CreateDude(EntityManager *entityManager, v3i pos, f32 scale = 1.0f, Quaternion orientation = {1, 0, 0, 0}, v3 offset = V3(), v4 color = V4(1, 1, 1, 1), u32 meshId = 0xFFFFFFFF)
 {
 	u64 flags = GetStandardFlags(Entity_Dude);
-	if (meshId == 0xFFFFFFFF) meshId = world->blockMeshId;
-	Entity *e = CreateEntityInternal(world, meshId, scale, orientation, pos, offset, color, Entity_Dude, flags);
+	if (meshId == 0xFFFFFFFF) meshId = entityManager->blockMeshId;
+	Entity *e = CreateEntityInternal(entityManager, meshId, scale, orientation, pos, offset, color, Entity_Dude, flags);
    
 	e->instructions = UnitInstructionCreateDynamicArray(100);
    
 	return *e;
 }
 
-static Entity CreateBlock(World *world, v3i pos, f32 scale = 1.0f, Quaternion orientation = { 0.707106769f, -0.707106769f, 0, 0 }, v3 offset = V3(0, 0, 0.27f), v4 color = V4(1, 1, 1, 1), u32 meshId = 0xFFFFFFFF)
+static Entity CreateBlock(EntityManager *entityManager, v3i pos, f32 scale = 1.0f, Quaternion orientation = { 0.707106769f, -0.707106769f, 0, 0 }, v3 offset = V3(0, 0, 0.27f), v4 color = V4(1, 1, 1, 1), u32 meshId = 0xFFFFFFFF)
 {
-	if (meshId == 0xFFFFFFFF) meshId = world->blockMeshId;
+	if (meshId == 0xFFFFFFFF) meshId = entityManager->blockMeshId;
 	u64 flags = GetStandardFlags(Entity_Block);
-	return *CreateEntityInternal(world, meshId, scale, orientation, pos, offset, color, Entity_Block, flags);
+	return *CreateEntityInternal(entityManager, meshId, scale, orientation, pos, offset, color, Entity_Block, flags);
 }
 
-static Entity CreateWall(World *world, u32 meshId, v3i pos, f32 scale = 1.0f, Quaternion orientation = { 1, 0, 0, 0 }, v3 offset = V3(), v4 color = V4(1, 1, 1, 1))
+static Entity CreateWall(EntityManager *entityManager, u32 meshId, v3i pos, f32 scale = 1.0f, Quaternion orientation = { 1, 0, 0, 0 }, v3 offset = V3(), v4 color = V4(1, 1, 1, 1))
 {
 	u64 flags = GetStandardFlags(Entity_Wall);
-	return *CreateEntityInternal(world, meshId, scale, orientation, pos, offset, color, Entity_Wall, flags);
+	return *CreateEntityInternal(entityManager, meshId, scale, orientation, pos, offset, color, Entity_Wall, flags);
 }
 
-static Entity CreateSpawner(World *world, u32 meshId, v3i pos, f32 scale = 1.0f, Quaternion orientation = { 1, 0, 0, 0 }, v3 offset = V3(), v4 color = V4(1, 1, 1, 1))
+static Entity CreateSpawner(EntityManager *entityManager, u32 meshId, v3i pos, f32 scale = 1.0f, Quaternion orientation = { 1, 0, 0, 0 }, v3 offset = V3(), v4 color = V4(1, 1, 1, 1))
 {
 	u64 flags = GetStandardFlags(Entity_Spawner);
-	return *CreateEntityInternal(world, meshId, scale, orientation, pos, offset, color, Entity_Spawner, flags);
+	return *CreateEntityInternal(entityManager, meshId, scale, orientation, pos, offset, color, Entity_Spawner, flags);
 }
 
-static Entity CreateGoal(World *world, u32 meshId, v3i pos, f32 scale = 1.0f, Quaternion orientation = { 1, 0, 0, 0 }, v3 offset = V3(), v4 color = V4(1, 1, 1, 1))
+static Entity CreateGoal(EntityManager *entityManager, u32 meshId, v3i pos, f32 scale = 1.0f, Quaternion orientation = { 1, 0, 0, 0 }, v3 offset = V3(), v4 color = V4(1, 1, 1, 1))
 {
 	u64 flags = GetStandardFlags(Entity_Goal);
-	return *CreateEntityInternal(world, meshId, scale, orientation, pos, offset, color, Entity_Goal, flags);
+	return *CreateEntityInternal(entityManager, meshId, scale, orientation, pos, offset, color, Entity_Goal, flags);
 }
 
-static Entity CreateEntity(World *world, EntityType type, u32 meshId, v3i pos, f32 scale, Quaternion orientation, v3 offset, v4 color, u64 flags)
+static Entity CreateEntity(EntityManager *entityManager, EntityType type, u32 meshId, v3i pos, f32 scale, Quaternion orientation, v3 offset, v4 color, u64 flags)
 {
 	switch (type)
 	{
       case Entity_None:
       {
-         return *CreateEntityInternal(world, meshId, scale, orientation, pos, offset, color, type, flags);
+         return *CreateEntityInternal(entityManager, meshId, scale, orientation, pos, offset, color, type, flags);
       }break;
       case Entity_Dude:
       {
-         return CreateDude(world, pos, scale, orientation, offset, color, meshId);
+         return CreateDude(entityManager, pos, scale, orientation, offset, color, meshId);
       }break;
       case Entity_Wall:
       {
-         return CreateWall(world, meshId, pos, scale, orientation, offset, color);
+         return CreateWall(entityManager, meshId, pos, scale, orientation, offset, color);
       }break;
       case Entity_Spawner:
       {
-         return CreateSpawner(world, meshId, pos, scale, orientation, offset, color);
+         return CreateSpawner(entityManager, meshId, pos, scale, orientation, offset, color);
       }break;
       
       case Entity_Goal:
       {
-         return CreateGoal(world, meshId, pos, scale, orientation, offset, color);
+         return CreateGoal(entityManager, meshId, pos, scale, orientation, offset, color);
       }break;
       
       case Entity_Block:
       {
-         return CreateBlock(world, pos, scale, orientation, offset, color, meshId);
+         return CreateBlock(entityManager, pos, scale, orientation, offset, color, meshId);
       }break;
       
       InvalidDefaultCase;

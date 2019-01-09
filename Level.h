@@ -1,20 +1,20 @@
 
-static bool WriteLevel(char *fileName, World world, AssetHandler *assetHandler)
+static bool WriteLevel(char *fileName, EntityManager entityManager, AssetHandler *assetHandler)
 {
 	u8 *mem = PushData(frameArena, u8, 0);
    
 	*PushStruct(frameArena, u32) = 5; // Version number, do not remove
    
-	*PushStruct(frameArena, LightSource) = world.lightSource;
+	*PushStruct(frameArena, LightSource) = entityManager.lightSource;
    
-	*PushStruct(frameArena, v3) = world.loadedLevel.camera.pos;
-	*PushStruct(frameArena, Quaternion) = world.loadedLevel.camera.orientation;
-	*PushStruct(frameArena, f32) = world.loadedLevel.camera.aspectRatio;
-	*PushStruct(frameArena, f32) = world.loadedLevel.camera.focalLength;
+	*PushStruct(frameArena, v3) = entityManager.loadedLevel.camera.pos;
+	*PushStruct(frameArena, Quaternion) = entityManager.loadedLevel.camera.orientation;
+	*PushStruct(frameArena, f32) = entityManager.loadedLevel.camera.aspectRatio;
+	*PushStruct(frameArena, f32) = entityManager.loadedLevel.camera.focalLength;
    
-	*PushStruct(frameArena, u32) = world.entities.amount;
+	*PushStruct(frameArena, u32) = entityManager.entities.amount;
    
-	For(world.entities)
+	For(entityManager.entities)
 	{
 		*PushStruct(frameArena, Quaternion) = it->orientation;
 		*PushStruct(frameArena, v3i) = it->physicalPos;
@@ -52,9 +52,9 @@ static EntityCopyData EntityToData(Entity e)
    
 }
 
-static bool LoadLevelV3(u8 *at, World *world, AssetHandler *assetHandler, Editor *editor, Arena *currentStateArena)
+static bool LoadLevelV3(u8 *at, EntityManager *entityManager, AssetHandler *assetHandler, Editor *editor, Arena *currentStateArena)
 {
-	Level *level = &world->loadedLevel;
+	Level *level = &entityManager->loadedLevel;
    
 	level->lightSource.pos = PullOff(v3);
    level->lightSource.orientation = QuaternionId();
@@ -88,7 +88,7 @@ static bool LoadLevelV3(u8 *at, World *world, AssetHandler *assetHandler, Editor
 		v3i physicalPos = SnapToTileMap(pos); 
 		v3 offset = pos - V3(SnapToTileMap(pos));
       
-		Entity e = CreateEntity(world, entityType, meshId, physicalPos, scale, orientation, offset, color, 0);
+		Entity e = CreateEntity(entityManager, entityType, meshId, physicalPos, scale, orientation, offset, color, 0);
       
 		*it = EntityToData(e);
       
@@ -98,14 +98,14 @@ static bool LoadLevelV3(u8 *at, World *world, AssetHandler *assetHandler, Editor
    
 	level->blocksNeeded = 10000;
 	editor->focusPoint = i12(ScreenZeroToOneToInGame(level->camera, V2(0.5f, 0.5f)));
-	world->debugCamera = world->camera = level->camera;
+	entityManager->debugCamera = entityManager->camera = level->camera;
    
 	return true;
 }
 
-static bool LoadLevelV4(u32 version, u8 *at, World *world, AssetHandler *assetHandler, Editor *editor, Arena *currentStateArena)
+static bool LoadLevelV4(u32 version, u8 *at, EntityManager *entityManager, AssetHandler *assetHandler, Editor *editor, Arena *currentStateArena)
 {
-	Level *level = &world->loadedLevel;
+	Level *level = &entityManager->loadedLevel;
    
 	level->lightSource = PullOff(LightSource);
    
@@ -145,7 +145,7 @@ static bool LoadLevelV4(u32 version, u8 *at, World *world, AssetHandler *assetHa
 		u32 meshId = RegisterAsset(assetHandler, Asset_Mesh, name);
 		at += nameLength * sizeof(Char);
       
-		Entity e = CreateEntity(world, entityType, meshId, physicalPos, scale, orientation, offset, color, 0);
+		Entity e = CreateEntity(entityManager, entityType, meshId, physicalPos, scale, orientation, offset, color, 0);
 		*it = EntityToData(e);
 	}
    
@@ -154,26 +154,26 @@ static bool LoadLevelV4(u32 version, u8 *at, World *world, AssetHandler *assetHa
 	ResetEditor(editor);
    
 	editor->focusPoint = i12(ScreenZeroToOneToInGame(level->camera, V2(0.5f, 0.5f)));
-	world->debugCamera = world->camera = level->camera;
+	entityManager->debugCamera = entityManager->camera = level->camera;
    
 	return true;
 }
 
 
-static bool LoadLevel(String fileName, World *world, Arena *currentStateArena, AssetHandler *assetHandler, Editor *editor)
+static bool LoadLevel(String fileName, EntityManager *entityManager, Arena *currentStateArena, AssetHandler *assetHandler, Editor *editor)
 {
 	File file = LoadFile(FormatCString("level/%s.level", fileName));
 	if (!file.fileSize) return false;
 	defer(FreeFile(file));
    
-	UnloadLevel(world);
-	ResetWorld(world);
+	UnloadLevel(entityManager);
+	ResetEntityManager(entityManager);
 	ResetEditor(editor);
    
 	u8 *at = (u8 *)file.memory;
 	u32 version = PullOff(u32);
    
-	world->loadedLevel.name = CopyString(fileName, currentStateArena);
+	entityManager->loadedLevel.name = CopyString(fileName, currentStateArena);
    
 	switch (version)
 	{
@@ -187,15 +187,15 @@ static bool LoadLevel(String fileName, World *world, Arena *currentStateArena, A
       }break;
       case 3:
       {
-         return LoadLevelV3(at, world, assetHandler, editor, currentStateArena);
+         return LoadLevelV3(at, entityManager, assetHandler, editor, currentStateArena);
       }break;
       case 4:
       {
-         return LoadLevelV4(4, at, world, assetHandler, editor, currentStateArena);
+         return LoadLevelV4(4, at, entityManager, assetHandler, editor, currentStateArena);
       }break;
       case 5:
       {
-         return LoadLevelV4(version, at, world, assetHandler, editor, currentStateArena);
+         return LoadLevelV4(version, at, entityManager, assetHandler, editor, currentStateArena);
       }break;
       InvalidDefaultCase;
 	}

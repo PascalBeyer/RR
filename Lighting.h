@@ -1821,24 +1821,24 @@ static void InitLighting(LightingSolution *light, Arena *constantArena)
 	//bitmap.pixels = image[0];
 	globalLightingBitmap = CreateBitmap(image[0], globalLightingImageWidth, globalLightingImageHeight);
    
-	TriangleArray t = world->triangles;
+	TriangleArray t = entityManager->triangles;
 	u32 amountOfTriangles = t.amount;
-	world->light.amountOfTriangles = amountOfTriangles;
+	entityManager->light.amountOfTriangles = amountOfTriangles;
 	LightingTriangle *trs = PushData(constantArena, LightingTriangle, amountOfTriangles);
 	for (u32 i = 0; i < amountOfTriangles; i++)
 	{
 		trs[i] = CreateLightingTriangleFromThreePoints(t[i].p1, t[i].p2, t[i].p3, Unpack3x8(t[i].c2), constantArena);
 	}
-	world->light.lightingTriangles = trs;
-	world->light.kdTree = BuildKdTree(trs, t.amount, constantArena, frameArena);
+	entityManager->light.lightingTriangles = trs;
+	entityManager->light.kdTree = BuildKdTree(trs, t.amount, constantArena, frameArena);
    
-	world->light.cache = PushStruct(constantArena, IrradianceCache);
-	world->light.cache->maxEntriesPerTriangle = 200;
-	world->light.cache->triangleSamples = PushData(constantArena, IrradianceSampleArray, amountOfTriangles);
+	entityManager->light.cache = PushStruct(constantArena, IrradianceCache);
+	entityManager->light.cache->maxEntriesPerTriangle = 200;
+	entityManager->light.cache->triangleSamples = PushData(constantArena, IrradianceSampleArray, amountOfTriangles);
 	for (u32 i = 0; i < amountOfTriangles; i++)
 	{
-		world->light.cache->triangleSamples[i].entries = PushData(constantArena, IrradianceSample, world->light.cache->maxEntriesPerTriangle);
-		world->light.cache->triangleSamples[i].amount = 0;
+		entityManager->light.cache->triangleSamples[i].entries = PushData(constantArena, IrradianceSample, entityManager->light.cache->maxEntriesPerTriangle);
+		entityManager->light.cache->triangleSamples[i].amount = 0;
 	}
 #endif
 }
@@ -1850,14 +1850,14 @@ static void PushLightingImage(RenderGroup *rg)
 	PushBitmap(rg, V2(), globalLightingBitmap);
 }
 
-static void CalculateLightingSolution(World *world, AssetHandler *assetHandler)
+static void CalculateLightingSolution(EntityManager *entityManager, AssetHandler *assetHandler)
 {
 	LightingSolution light;
 	BeginArray(frameArena, LightingTriangle, triangles);
    
 	Die;
    
-	For(e, world->entities)
+	For(e, entityManager->entities)
 	{
 		//TriangleMesh *mesh = GetMesh(assetHandler, e->meshId);
 		
@@ -1873,7 +1873,7 @@ static void CalculateLightingSolution(World *world, AssetHandler *assetHandler)
 	wholeScreen.yMax = globalLightingImageHeight;
    
 	CastRaysCache(globalLightingBitmap, wholeScreen, light);
-	//CastRaysCacheWide(bitmap, wholeScreen, *world);
+	//CastRaysCacheWide(bitmap, wholeScreen, *entityManager);
 }
 
 #if 0
@@ -2127,7 +2127,7 @@ void LightingMain(RenderCommands *renderComands, WorkHandler *workHandler, Input
             
 				rayWork->clipRect = rect;
 				rayWork->bitmap = bitmap;
-				rayWork->world = globalWorld;
+				rayWork->entityManager = globalWorld;
             
 				Work work;
 				work.callback = RayCastWorker;

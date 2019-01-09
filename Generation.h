@@ -3,6 +3,49 @@
 
 #if 0
 
+struct RockCorner
+{
+	u32 color;
+	v3 p;
+	union
+	{
+		RockCorner *adjacentCorners[2];
+		struct
+		{
+			RockCorner *prev;
+			RockCorner *next;
+		};
+	};
+   
+	
+};
+
+struct RockCornerListElement
+{
+	RockCorner data;
+	RockCornerListElement *next;
+   
+};
+
+struct RockCornerList
+{
+	RockCornerListElement *list;
+	RockCornerListElement *freeList;
+};
+
+static u32 globalCornerIndex = 0;
+
+static RockCorner CreateRockCorner(v3 p, u32 colorSeed)
+{
+	RockCorner ret;
+	ret.p = p;
+	ret.color = GrayFromU32(colorSeed);
+   
+	//ret.prev = NULL;
+	//ret.next = NULL;
+	return ret;
+}
+
 static TriangleMesh GenerateMeshForFlatTile(AssetHandler *assetHandler, AABB aabb, Arena* arena)
 {
 	TriangleMesh ret;
