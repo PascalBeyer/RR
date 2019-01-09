@@ -282,105 +282,113 @@ static void ColorPickersHandleEvents(Editor *editor, KeyStateMessage message, In
 	}
 }
 
-static v3i AdjustForCamera(Camera cam, UnitInstruction intendedDir)
+static v3i AdjustForCamera(Camera cam, KeyEnum key)
 {
 	v3 camV = B3(cam.orientation);
-	if (Abs(camV.x) > Abs(camV.y))
+   //v3 _camV = QuaternionToMatrix3(cam.orientation) * V3(0, 0, 1); these are indeed equal
+   
+   f32 x = camV.x;
+   f32 y = camV.y;
+   
+	if (Abs(x) > Abs(y)) // which one matters more
 	{
-		if (camV.x > 0.0f)
-		{
-			switch (intendedDir)
-			{
-            case Unit_MoveUp:
+		if(x > 0)
+      {
+         // we are looking in V3(1, 0, 0) direction.
+         switch(key)
+         {
+            case Key_up:
             {
                return V3i(1, 0, 0);
             }break;
-            case Unit_MoveDown:
+            case Key_down:
             {
                return V3i(-1, 0, 0);
             }break;
-            case Unit_MoveLeft:
-            {
-               return V3i(0, -1, 0);
-            }break;
-            case Unit_MoveRight:
-            {
-               return V3i(0, 1, 0);
-            }break;
-			}
-		}
-		else
-		{
-			switch (intendedDir)
-			{
-            case Unit_MoveUp:
+            case Key_left:
             {
                return V3i(-1, 0, 0);
             }break;
-            case Unit_MoveDown:
+            case Key_right:
             {
                return V3i(1, 0, 0);
             }break;
-            case Unit_MoveLeft:
-            {
-               return V3i(0, 1, 0);
-            }break;
-            case Unit_MoveRight:
-            {
-               return V3i(0, -1, 0);
-            }break;
-			}
-		}
-	}
-	else
-	{
-		if (camV.y > 0.0f)
-		{
+         }
          
-			switch (intendedDir)
-			{
-            case Unit_MoveUp:
-            {
-               return V3i(0, 1, 0);
-            }break;
-            case Unit_MoveDown:
-            {
-               return V3i(0, -1, 0);
-            }break;
-            case Unit_MoveLeft:
-            {
-               return V3i(1, 0,  0);
-            }break;
-            case Unit_MoveRight:
+      }
+      else
+      {
+         // we are looking in V3(-1, 0, 0) direction.
+         switch(key)
+         {
+            case Key_up:
             {
                return V3i(-1, 0, 0);
             }break;
-			}
-		}
-		else
-		{
-			switch (intendedDir)
-			{
-            case Unit_MoveUp:
-            {
-               return V3i(0, -1, 0);
-            }break;
-            case Unit_MoveDown:
-            {
-               return V3i(0, 1, 0);
-            }break;
-            case Unit_MoveLeft:
-            {
-               return V3i(-1, 0, 0);
-            }break;
-            case Unit_MoveRight:
+            case Key_down:
             {
                return V3i(1, 0, 0);
             }break;
-			}
-         
-		}
+            
+            case Key_left:
+            {
+               return V3i(1, 0, 0);
+            }break;
+            case Key_right:
+            {
+               return V3i(-1, 0, 0);
+            }break;
+         }
+      }
 	}
+   else // y matters more
+   {
+      if(y > 0)
+      {
+         switch(key)
+         {
+            case Key_up:
+            {
+               return V3i(0, 1, 0);
+            }break;
+            case Key_down:
+            {
+               return V3i(0, -1, 0);
+            }break;
+            
+            case Key_left:
+            {
+               return V3i(-1, 0, 0);
+            }break;
+            case Key_right:
+            {
+               return V3i(1, 0, 0);
+            }break;
+         }
+      }
+      else
+      {
+         switch(key)
+         {
+            case Key_up:
+            {
+               return V3i(0, -1, 0);
+            }break;
+            case Key_down:
+            {
+               return V3i(0, 1, 0);
+            }break;
+            case Key_left:
+            {
+               return V3i(1, 0, 0);
+            }break;
+            case Key_right:
+            {
+               return V3i(-1, 0, 0);
+            }break;
+         }
+      }
+   }
    
 	return V3i();
 }
@@ -661,7 +669,7 @@ static void EditorHandleEvents(Editor *editor, World *world, AssetHandler *asset
                }break;
                case Key_left:
                {
-                  v3i inc = AdjustForCamera(*cam, Unit_MoveLeft);
+                  v3i inc = AdjustForCamera(*cam, Key_left);
                   For(editor->hotEntityInfos)
                   {
                      Entity *mesh = GetEntity(world, it->placedSerial);
@@ -670,7 +678,7 @@ static void EditorHandleEvents(Editor *editor, World *world, AssetHandler *asset
                }break;
                case Key_right:
                {
-                  v3i inc = AdjustForCamera(*cam, Unit_MoveRight);
+                  v3i inc = AdjustForCamera(*cam, Key_right);
                   For(editor->hotEntityInfos)
                   {
                      Entity *mesh = GetEntity(world, it->placedSerial);
@@ -690,7 +698,7 @@ static void EditorHandleEvents(Editor *editor, World *world, AssetHandler *asset
                      break;
                   }
                   
-                  v3i inc = AdjustForCamera(*cam, Unit_MoveUp);
+                  v3i inc = AdjustForCamera(*cam, Key_up);
                   For(editor->hotEntityInfos)
                   {
                      Entity *mesh = GetEntity(world, it->placedSerial);
@@ -710,7 +718,7 @@ static void EditorHandleEvents(Editor *editor, World *world, AssetHandler *asset
                      break;
                   }
                   
-                  v3i inc = AdjustForCamera(*cam, Unit_MoveDown);
+                  v3i inc = AdjustForCamera(*cam, Key_down);
                   For(editor->hotEntityInfos)
                   {
                      Entity *mesh = GetEntity(world, it->placedSerial);

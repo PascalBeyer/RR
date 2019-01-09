@@ -25,12 +25,6 @@
 static bool running;
 #include "OpenGL.h"
 
-struct windowDimension
-{
-	int height;
-	int width;
-};
-
 //sound
 #define DIRECT_SOUND_CREATE(name) HRESULT WINAPI name(LPCGUID pcGuidDevice, LPDIRECTSOUND *ppDS, LPUNKNOWN pUnkOuter)
 typedef DIRECT_SOUND_CREATE(direct_sound_create);
@@ -254,19 +248,7 @@ static void initializeImageBuffer(BITMAPINFO *info, ImageBuffer *buffer, int wid
 	//MEM_COMMIT = System should actually pay attension to them
 }
 
-static windowDimension win32GetWindowDimension(HWND &window)
-{
-	windowDimension ret;
-	RECT clientRect;
-	GetClientRect(window, &clientRect);
-   
-	ret.height = clientRect.bottom - clientRect.top;
-	ret.width = clientRect.right - clientRect.left;
-   
-	return ret;
-}
-
-static void displayImageBuffer(HDC deviceContext)//BITMAPINFO *info, HDC deviceContext, int windowWidth, int windowHeight, ImageBuffer *buffer)
+static void displayImageBuffer(HDC deviceContext)
 {
 #if 0
 	StretchDIBits(deviceContext,
@@ -276,70 +258,7 @@ static void displayImageBuffer(HDC deviceContext)//BITMAPINFO *info, HDC deviceC
                  info,
                  DIB_RGB_COLORS, SRCCOPY);
 #else
-	/*glViewport(0, 0, windowWidth, windowHeight);
-   
- glBindTexture(GL_TEXTURE_2D, globalTextureHandle);
- glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, buffer->width, buffer->height, 0, GL_BGRA_EXT, GL_UNSIGNED_BYTE, buffer->memory);
- 
- glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
- glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
- glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
- glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
- 
- glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
- 
- glEnable(GL_TEXTURE_2D);
- 
- glClearColor(1.0f, 0.0f, 1.0f, 0.0f);
- glClear(GL_COLOR_BUFFER_BIT);
- 
- glMatrixMode(GL_TEXTURE);
- glLoadIdentity();
- glMatrixMode(GL_MODELVIEW);
- glLoadIdentity();
- glMatrixMode(GL_PROJECTION);
- float a = 2.0f / (float)buffer->width;
- float b = 2.0f / (float)buffer->height;
- float projM[] =
- {
-  a, 0, 0, 0,
-  0, b, 0, 0,
-  0, 0, 1, 0,
-  -1, -1, 0, 1,
- };
- glLoadMatrixf(projM);
- 
- v2 minP = v2();
- v2 maxP = v2(buffer->width, buffer->height);
- 
- glBegin(GL_TRIANGLES);
- 
- //Lower Triangle
- glTexCoord2f(0.0f, 1.0f);
- glVertex2f(minP.x, minP.y);
- 
- glTexCoord2f(1.0f, 1.0f);
- glVertex2f(maxP.x, minP.y);
- 
- glTexCoord2f(1.0f, 0.0f);
- glVertex2f(maxP.x, maxP.y);
- 
- //upper Triangle
- glTexCoord2f(0.0f, 1.0f);
- glVertex2f(minP.x, minP.y);
- 
- glTexCoord2f(0.0f, 0.0f);
- glVertex2f(minP.x, maxP.y);
- 
- glTexCoord2f(1.0f, 0.0f);
- glVertex2f(maxP.x, maxP.y);
- 
- glEnd();
- 
- */
-   
-	//OpenGLDisplayImageBuffer(info, deviceContext, windowWidth, windowHeight, buffer);
-   
+	
 	TimedBlock;
    
 	SwapBuffers(deviceContext);
@@ -494,8 +413,6 @@ LPARAM lParam)
          
          PAINTSTRUCT paint;
          HDC deviceContext = BeginPaint(window, &paint);
-         windowDimension dim;
-         dim = win32GetWindowDimension(window);
          
          //displayImageBuffer(&globalInfo, deviceContext, dim.width, dim.height, &globalImageBuffer);
          

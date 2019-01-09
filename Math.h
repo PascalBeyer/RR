@@ -1006,8 +1006,8 @@ static m4x4 Projection(float aspectWidthOverHeight, float focalLength)
 		{
 			{ a * c,	 0,			0,			0 },
 			{ 0,		-b * c,		0,			0 },
-			{ 0,		0,			d,			e },
-			{ 0,		0,			1.0f,		0 }
+			{ 0,	  	0, 		  d,		    e },
+			{ 0,	  	0,		  1.0f,	  	0 }
 		}
 	};
    
@@ -1229,7 +1229,6 @@ static m4x4 InvOrId(m4x4 mat)
    
    
 	return ret;
-   
 }
 
 static m4x4 ScaleMatrix(f32 f)
@@ -1325,35 +1324,17 @@ static v3 B1(Quaternion a)
    f32 b2 = a.x * a.x;
    f32 c2 = a.y * a.y;
    f32 d2 = a.z * a.z;
-	f32 ad = a.w * a.z;
+	
+   f32 ac = a.w * a.y;
+   f32 ad = a.w * a.z;
 	f32 bc = a.x * a.y;
-   f32 ac = a.w * a.y;
    f32 bd = a.x * a.z;
+	
+	f32 a11 = a2 + b2 - c2 - d2;
+	f32 a12 = 2 * (bc - ad);
+	f32 a13 = 2 * (bd + ac);
    
-   f32 a11 = a2 + b2 - c2 - d2;
-   f32 a21 = 2 * (bc + ad);
-   f32 a31 = 2 * (bd - ac);
-   
-   return V3(a11, a21, a31);
-}
-
-static v3 B3(Quaternion a)
-{
-   f32 a2 = a.w * a.w; 
-   f32 b2 = a.x * a.x;
-   f32 c2 = a.y * a.y;
-   f32 d2 = a.z * a.z;
-   
-   f32 ac = a.w * a.y;
-   f32 bd = a.x * a.z;
-   f32 ab = a.w * a.x;
-   f32 cd = a.y * a.z;
-   
-   f32 a13 = 2 * (bd + ac);
-   f32 a23 = 2 * (cd - ab);
-   f32 a33 = a2 - b2 - c2 + d2;
-   
-   return V3(a13, a23, a33);
+   return {a11, a12, a13};
 }
 
 static v3 B2(Quaternion a)
@@ -1362,17 +1343,36 @@ static v3 B2(Quaternion a)
    f32 b2 = a.x * a.x;
    f32 c2 = a.y * a.y;
    f32 d2 = a.z * a.z;
-   
-	f32 ad = a.w * a.z;
-	f32 bc = a.x * a.y;
+	
    f32 ab = a.w * a.x;
+   f32 ad = a.w * a.z;
+	f32 bc = a.x * a.y;
    f32 cd = a.y * a.z;
+	
+	f32 a21 = 2 * (bc + ad);
+	f32 a22 = a2 - b2 + c2 - d2;
+	f32 a23 = 2 * (cd - ab);
    
-   f32 a12 = 2 * (bc - ad);
-   f32 a22 = a2 - b2 + c2 - d2;
-   f32 a32 = 2 * (cd + ab);
+   return {a21, a22, a23};
+}
+
+static v3 B3(Quaternion a)
+{
+   f32 a2 = a.w * a.w; 
+   f32 b2 = a.x * a.x;
+   f32 c2 = a.y * a.y;
+   f32 d2 = a.z * a.z;
+	
+   f32 ab = a.w * a.x;
+   f32 ac = a.w * a.y;
+	f32 bd = a.x * a.z;
+   f32 cd = a.y * a.z;
+	
+	f32 a31 = 2 * (bd - ac);
+	f32 a32 = 2 * (cd + ab);
+	f32 a33 = a2 - b2 - c2 + d2;
    
-   return V3(a12, a22, a32);
+   return {a31, a32, a33};
 }
 
 static m3x3 QuaternionToMatrix3(Quaternion a)
@@ -1382,6 +1382,7 @@ static m3x3 QuaternionToMatrix3(Quaternion a)
    f32 b2 = a.x * a.x;
    f32 c2 = a.y * a.y;
    f32 d2 = a.z * a.z;
+   
 	f32 ab = a.w * a.x;
    f32 ac = a.w * a.y;
    f32 ad = a.w * a.z;
@@ -1414,10 +1415,16 @@ static m3x3 QuaternionToMatrix3(Quaternion a)
 	return ret;
 }
 
-
 static m4x4 CameraTransform(Quaternion q, v3 P)
 {
-	m4x4 R = QuaternionToMatrix4(q);
+   
+   //
+   // The general map should be Quaternion -> Basis, mapping q to the -> ROW <- vectors
+   // of the associated Matrix, so this should be not transposed,
+   //
+	//m4x4 R = Transpose(QuaternionToMatrix4(q));
+   
+   m4x4 R = QuaternionToMatrix4(q);
 	R = Translate(R, -(R*P));
 	return(R);
 }

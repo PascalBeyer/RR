@@ -33,7 +33,6 @@ Asset system has to handle materials. // no, well maybe
 Get PNG loader
 make font into asset, would also make the draw String call way better, also solves the problem where I do not currently know where it is supposed to be stored
 
-
 Tweekers:
 make tweek search the file, if no loaded tweeker variable is found. maybe write out the tweekerfile instead of writing out all tweeker values.
 make tweeker work based on filenames as well I.e. tweek editor meshSelectColor instead of having to use editorMeshSelectColor
@@ -79,7 +78,7 @@ render numbers in path //done ?
 clear, and let cubes fall, that go of the stage. // done?
 QuatTree for Entity phisical stuff? // done?
 carrying does not work, as its kind of a hack. // done?
-stones jump to interpolation offset, and somehow look really ugly.. // done?
+stones jump to interpolation offset, and somehow look really ugly... // done?
 units should stop in pathcreator mode, maybe I should not check for collision, and just let eveything go to shit in the execute. that sounds fun // done?
 do we have initiative? does stuff bump into each other and then back? I like that, that should look really "errory / errorish / ???" // done?
 probably make the tree update based on create / restore / delete calls // done?

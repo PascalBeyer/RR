@@ -56,7 +56,8 @@ static bool LoadLevelV3(u8 *at, World *world, AssetHandler *assetHandler, Editor
 {
 	Level *level = &world->loadedLevel;
    
-	level->lightSource = PullOff(v3);
+	level->lightSource.pos = PullOff(v3);
+   level->lightSource.orientation = QuaternionId();
    
 	level->camera.pos = PullOff(v3);
    PullOff(v3);
@@ -102,17 +103,26 @@ static bool LoadLevelV3(u8 *at, World *world, AssetHandler *assetHandler, Editor
 	return true;
 }
 
-static bool LoadLevelV4(u8 *at, World *world, AssetHandler *assetHandler, Editor *editor, Arena *currentStateArena)
+static bool LoadLevelV4(u32 version, u8 *at, World *world, AssetHandler *assetHandler, Editor *editor, Arena *currentStateArena)
 {
 	Level *level = &world->loadedLevel;
    
-	level->lightSource = PullOff(v3);
+	level->lightSource = PullOff(LightSource);
    
 	level->camera.pos = PullOff(v3);
-   PullOff(v3);
-   PullOff(v3);
-   PullOff(v3);
-   level->camera.orientation = QuaternionId();
+   
+   if(version < 5)
+   {
+      PullOff(v3);
+      PullOff(v3);
+      PullOff(v3);
+      level->camera.orientation = QuaternionId();
+   }
+   else 
+   {
+      level->camera.orientation = PullOff(Quaternion);
+   }
+   
 	level->camera.aspectRatio = PullOff(f32);
 	level->camera.focalLength = PullOff(f32);
    
@@ -181,7 +191,11 @@ static bool LoadLevel(String fileName, World *world, Arena *currentStateArena, A
       }break;
       case 4:
       {
-         return LoadLevelV4(at, world, assetHandler, editor, currentStateArena);
+         return LoadLevelV4(4, at, world, assetHandler, editor, currentStateArena);
+      }break;
+      case 5:
+      {
+         return LoadLevelV4(version, at, world, assetHandler, editor, currentStateArena);
       }break;
       InvalidDefaultCase;
 	}

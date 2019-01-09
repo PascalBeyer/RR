@@ -1,6 +1,6 @@
 
 
-debugCam false
+debugCam true 
 selectedPoint (0.00000,0.00000)
 consoleTextFieldColor (1.00000,0.40784,0.43570,1.00000)
 consoleCommandTextColor (1.00000,0.62239,0.86968,1.00000)
@@ -22,7 +22,7 @@ consoleSelectionColor (1.00000,0.03315,0.03315,0.57870)
 cameraMoveSpeed 0.10000
 DrawMeshOutlines false
 cameraStartingPos (3.00000,3.00000,-4.00000)
-drawCamera false
+drawCamera true 
 editorPanelColor (1.00000,0.35836,0.32851,0.96296)
 editorPanelValueColor (1.00000,0.22616,0.22616,0.78240)
 editorBorderWidth 0.00499
@@ -44,3 +44,4 @@ renderCycleThreshhold 1000
 debugDisplayBarSize 0.02999
 drawEntityTree false
 
+k false

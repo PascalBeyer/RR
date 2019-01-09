@@ -206,10 +206,8 @@ static void PushRenderSetup(RenderGroup *rg, Camera camera, LightSource lightSou
 	{
       case Setup_Projective:
       {
-         m4x4 proj = Projection(commands->aspectRatio, camera.focalLength);
-         m4x4 cameraTransform = CameraTransform(camera.orientation, camera.pos);
-         setup->projection = proj;
-         setup->cameraTransform = cameraTransform;
+         setup->projection = Projection(commands->aspectRatio, camera.focalLength);
+         setup->cameraTransform = CameraTransform(camera.orientation, camera.pos);;
          
       }break;
       case Setup_Orthogonal:

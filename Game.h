@@ -49,7 +49,7 @@
 #include "Lighting.h"
 
 //#include "MovementHandler.h"
-#include "Editor.h" // todo rank this once we know more.
+#include "Editor.h"
 
 #include "Level.h"
 
@@ -204,8 +204,9 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
    
 	Camera *cam = debugCam ? &world->debugCamera : &world->camera;
    
-	f32 aspectRatio = world->camera.aspectRatio;
+	f32 aspectRatio = world->camera.aspectRatio; // todo, this does not really belong in the camera.
 	f32 focalLength = world->camera.focalLength;
+   f32 dt = input.dt;
    
 	//reset
 	For(world->entities)
@@ -213,7 +214,6 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
 		it->frameColor = V4(1, 1, 1, 1);
 	}
    
-	static f32 timeScale = 1.0f;
 	// HandleInput
 	{
 		KeyMessageBuffer buffer = input.buffer;
@@ -271,8 +271,6 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
 		}
 	}
    
-	f32 dt = timeScale * input.dt;
-	
    //update
 	switch (state->mode)
 	{
@@ -390,10 +388,12 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
       
 		PushDebugPointCuboid(rg, camPos);
       
-		PushLine(rg, camera->pos, camera->pos + camM * V3(1, 0, 0), 0xFFFF0000);
-		PushLine(rg, camera->pos, camera->pos + camM * V3(0, 1, 0), 0xFF00FF00);
-		PushLine(rg, camera->pos, camera->pos + camM * V3(0, 0, 1), 0xFF0000FF);
+		PushLine(rg, camera->pos, camera->pos + B1(camera->orientation), 0xFFFF0000); // blue
+		PushLine(rg, camera->pos, camera->pos + B2(camera->orientation), 0xFF00FF00); // green
+		PushLine(rg, camera->pos, camera->pos + B3(camera->orientation), 0xFF0000FF); // red
       
+      
+#if 0
 		m4x4 proj = Projection(aspectRatio, focalLength) * CameraTransform(camera->orientation, camera->pos);
 		m4x4 inv = InvOrId(proj);
 		m4x4 id = proj * inv;
@@ -408,6 +408,7 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
 		v3 pp3 = i12(ScreenZeroToOneToInGame(*camera, V2(0.0f, 1.0f)));
 		v3 pp4 = i12(ScreenZeroToOneToInGame(*camera, V2(1.0f, 1.0f)));
 		PushQuadrilateral(rg, pp1, pp2, pp3, pp4, V4(0.5f, 0.0f, 1.0f, 0.0f));
+#endif
 	}
    
 	Tweekable(b32, drawEntityTree, 1);
@@ -438,10 +439,9 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
 	
    {
       static float t = 0.0f;
-      t += dt;
+      t += exe->simData.timeScale * dt;
       m4x4Array boneStates = CalculateBoneTransforms(&mesh->skeleton, animation, t);
-      //PushAnimatedMeshImmidiet(rg, mesh, {1, 0, 0, 0}, V3(), 1.0f, V4(0.1f, 0.1f, 0.1f, 0.1f), boneStates);
-      PushAnimatedMesh(rg, mesh, QuaternionId(), V3(0, 0, 0), 1.0f, V4(1.0f, 1.0f, 1.0f, 1.0f), boneStates);
+      PushAnimatedMesh(rg, mesh, AxisAngleToQuaternion(-PI/2.0f, V3(1, 0, 0)), V3(0, 0, -5), 1.0f, V4(1.0f, 1.0f, 1.0f, 1.0f), boneStates);
    }
 	//AnimationTestStuff(rg, &ret, dt);
 	

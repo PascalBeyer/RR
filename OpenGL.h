@@ -842,7 +842,7 @@ static OpenGLContext OpenGLInit(bool modernContext)
    u32 amountOfMultiSamples = Min(info.amountOfMultiSamples, 4u);
    
    FrameBuffer renderBuffer;
-#if 0 // to work around renderdoc not working...
+#if 1 // to work around renderdoc not working...
    {
       renderBuffer.width = 1280;
       renderBuffer.height = 720;
@@ -1285,7 +1285,7 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             Quaternion q = meshHeader->orientation;
             
             // todo slow
-            m4x4 objectTransform = Identity(); //Translate(QuaternionToMatrix(q) * ScaleMatrix(scale), pos);
+            m4x4 objectTransform = Translate(QuaternionToMatrix4(q) * ScaleMatrix(scale), pos);
             
             v4 lightP = currentSetup.cameraTransform * V4(currentSetup.lightSource.pos, 1.0f);
             

@@ -661,7 +661,6 @@ static void RenderEditor(RenderGroup *rg, AssetHandler *assetHandler, Editor edi
             
             PushTriangleMesh(rg, e->meshId, e->orientation, V3(e->physicalPos), e->scale, e->color * V4(0.5f, 1.0f, 1.0f, 1.0f));
          }
-         
       }break;
       
       case EditorState_PlacingNewMesh:

@@ -380,7 +380,7 @@ static TriangleMesh ReadObj(char *fileName, Arena *arena)
       u32 vertexArrayLength = 0;
       
 		BeginArray(frameArena, ReadOBJIndex, indices);
-		while (string.length && line[0] == 'f')
+		while (line.length && line[0] == 'f')
 		{
 			Eat1(&line);
          

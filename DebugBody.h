@@ -581,7 +581,7 @@ static void WriteSingleTweeker(Tweeker tweeker)
 			{
 				head.data[i] = ' ';
 			}
-			WriteEntireFile("DebugVariables.txt", *file);
+			Assert(WriteEntireFile("src/DebugVariables.txt", *file));
 			ConsoleOutput("Saved to file.");
 		}
 		else
@@ -609,11 +609,11 @@ static void WriteSingleTweeker(Tweeker tweeker)
 			memcpy(destInsertLine,	toAdd.data, toAdd.length * sizeof(*toAdd.data));
 			memcpy(destTail,		tailMem,	tailLength * sizeof(Char));
          
-			WriteEntireFile("DebugVariables.txt", newFile);
+			Assert(WriteEntireFile("src/DebugVariables.txt", newFile));
          
 			//todo : hack
 			FreeFile(*globalDebugState.tweekerFile);
-			*globalDebugState.tweekerFile = LoadFile("DebugVariables.txt");
+			*globalDebugState.tweekerFile = LoadFile("src/DebugVariables.txt");
          
 			ConsoleOutput("Saved to file."); // todo  somehow there no failing right now
 		}
@@ -629,7 +629,7 @@ static void WriteSingleTweeker(Tweeker tweeker)
 	memcpy(newFile.memory, file->memory, file->fileSize);
 	memcpy((u8 *)newFile.memory + file->fileSize, toAdd.data, toAdd.length * sizeof(*toAdd.data));
    
-	WriteEntireFile("DebugVariables.txt", newFile); 
+	Assert(WriteEntireFile("src/DebugVariables.txt", newFile)); 
    
 	//todo : hack
 	FreeFile(*globalDebugState.tweekerFile);

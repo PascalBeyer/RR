@@ -169,10 +169,18 @@ DefineArray(EntityCopyData);
 
 DefineDynamicArray(EntityInterpolation);
 
+
+struct LightSource
+{
+   v3 pos;
+   Quaternion orientation;
+   v3 color;
+};
+
 struct Level
 {
 	Camera camera;
-	v3 lightSource;
+   LightSource lightSource;
 	EntityCopyDataArray entities;
 	String name;
 	u32 blocksNeeded;
@@ -326,13 +334,6 @@ static void RemoveAllEntities(TileOctTree *tree)
 }
 #endif
 
-struct LightSource
-{
-   v3 pos;
-   Quaternion orientation;
-   v3 color;
-};
-
 struct World
 {
 	Level loadedLevel;
@@ -356,6 +357,7 @@ struct World
 	u32 dudeMeshId;
 };
 
+// todo remove me.
 static Level EmptyLevel()
 {
 	Level ret;
@@ -365,7 +367,8 @@ static Level EmptyLevel()
 	ret.camera.focalLength = 1.0f;
 	ret.blocksNeeded = 10000;
    
-	ret.lightSource = V3(20, 0, -20);
+	ret.lightSource.pos = V3(20, 0, -20);
+   ret.lightSource.orientation = QuaternionId();
 	ret.name = {};
 	ret.entities = {};
    
