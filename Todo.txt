@@ -70,6 +70,8 @@ check that convertNewAssets is not leaking // done ?
 make a DynamicFlags entry in the Entity flags enum, which is just all of them or ed together // we have EntityFlag_FrameResetFlag now, so done?
 add lightPos to the level // done?
 we were just making AssetTypes.h continue that. // done
+right now It feels like levels are baked in things, we need to untangle that e.g. remove entityManager from LoadLevel.// done?
+make levels assets, // for now they are not, as i do not see the purpose
 
 Asset:
 Get PNG loader
@@ -112,6 +114,7 @@ how do you bright up colors? (brightness/ negative colors?)
 Euler thing
 UndoRedo has error with scale pushing one even if nothing selected
 direction keys do not record undos right now.
+panel should hide forever if tab was pressed and then only come back with tab
 
 Execute:
 undo does not really have to be a thing, if I do a Least commom multiple system.
@@ -128,9 +131,11 @@ Animation player (save in skeleton?, save in world?)
 do weight averageing in the loading.
 I feel like skeletons and meshes should be parralel. And so should bones and bone names
 
-make levels assets, 
-the whole what gameState are we in situation should be way clearer, should be handled in some sort of handler
-like this it feels like it is all over the place.
+the whole what gameState are we in situation should be way clearer 
 
-right now It feels like levels are baked in things, we need to untangle that e.g. remove entityManager from LoadLevel.
+move the camera out of the entity manager
+save level helper does not work right now.
+LoadLevelHelper should call GetLevel(AssetHandler *assetHandler, String name);
 
+get rid of most/all dynamic allocations in AssetLoading
+we should probably make initEntityManager and load level one call

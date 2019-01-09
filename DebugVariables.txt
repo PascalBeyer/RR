@@ -1,6 +1,6 @@
 
 
-debugCam true 
+debugCam false
 selectedPoint (0.00000,0.00000)
 consoleTextFieldColor (1.00000,0.40784,0.43570,1.00000)
 consoleCommandTextColor (1.00000,0.62239,0.86968,1.00000)

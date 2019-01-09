@@ -256,8 +256,7 @@ static bool ConvertNewAssets(AssetHandler *handler, Arena *currentStateArena)
 	return imported;
 }
 
-// todo load everything always only for a frame?
-// todo get rid of workingArena
+// todo loading everything only for a frame?
 static AssetHandler CreateAssetHandler(Arena *arena)
 {
 	AssetHandler ret;
@@ -343,7 +342,6 @@ static AnimationInfo *GetAnimationInfo(AssetHandler *handler, u32 id)
    
 	return info.animationInfo;
 }
-
 
 static Bitmap *GetTexture(AssetHandler *handler, u32 id)
 {

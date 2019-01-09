@@ -25,13 +25,13 @@
 #include "SIMD.h"
 #include "Random.h"
 #include "Input.h"
+#include "Camera.h"
+#include "Entity.h"
 
 #include "AssetTypes.h"
 
 #include "Animation.h"
-#include "Camera.h"
 
-#include "Entity.h"
 #include "AssetHandler.h"
 
 #include "Generation.h"
@@ -156,7 +156,8 @@ static GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHa
 	ret.currentStateArena = InitArena(PushData(constantArena, u8, constantArenaRestCapacity), constantArenaRestCapacity);
    
    // todo load this together with level
-	ret.entityManager = InitEntityManager(ret.currentStateArena, (u32)screenWidth, (u32)screenHeight);
+   Level level = LoadLevel(CreateString("bridge"), ret.currentStateArena, &ret.assetHandler);
+	ret.entityManager = InitEntityManager(ret.currentStateArena, level);
 	ret.executeData = InitExecute();
    
 	ChangeExecuteState(&ret.entityManager, &ret.executeData, Execute_PathCreator);
@@ -176,7 +177,7 @@ static GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHa
 	}
 #endif
 	
-	LoadLevel(CreateString("bridge"), ret.currentStateArena, &ret.assetHandler);
+	
    
 	SwitchGameMode(&ret, Game_Editor);
 	
@@ -237,7 +238,7 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
             }break;
             case Game_Editor:
             {
-               EditorHandleEvents(editor, entityManager, cam, assetHandler, message, input, currentStateArena);
+               EditorHandleEvents(editor, entityManager, cam, assetHandler, message, input, currentStateArena, &exe->simData);
             }break;
             InvalidDefaultCase;
             

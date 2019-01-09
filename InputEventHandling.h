@@ -469,8 +469,9 @@ static v3i AdjustForCamera(Camera cam, KeyEnum key)
 	return V3i();
 }
 
-static void EditorHandleEvents(Editor *editor, EntityManager *entityManager, Camera *cam, AssetHandler *assetHandler, KeyStateMessage message, Input input, Arena *currentStateArena)
+static void EditorHandleEvents(Editor *editor, EntityManager *entityManager, Camera *cam, AssetHandler *assetHandler, KeyStateMessage message, Input input, Arena *currentStateArena, SimData *sim)
 {
+   // todo tempoary, SimData should not be active at the same time as editor, but is right now.
 	For(editor->elements)
 	{
 		switch (it->type)
@@ -818,15 +819,15 @@ static void EditorHandleEvents(Editor *editor, EntityManager *entityManager, Cam
                   
                   if ((message.flag & KeyState_ControlDown))
                   {
-                     if (!entityManager->loadedLevel.name.amount) break;
+                     if (!entityManager->levelName.amount) break;
                      
                      For(entityManager->entities)
                      {
                         it->initialPos = it->physicalPos;
                      }
                      
-                     char *fileName = FormatCString("level/%s.level", entityManager->loadedLevel.name);
-                     if (WriteLevel(fileName, *entityManager, assetHandler))
+                     char *fileName = FormatCString("level/%s.level", entityManager->levelName);
+                     if (WriteLevel(fileName, EditorStateToLevel(entityManager, sim), assetHandler))
                      {
                         ConsoleOutput("Saved!");
                      }

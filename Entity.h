@@ -53,6 +53,8 @@ struct EntityInterpolation
 	v3i dir;
 };
 
+DefineDynamicArray(EntityInterpolation);
+
 enum UnitInstruction
 {
 	Unit_Wait,
@@ -61,9 +63,7 @@ enum UnitInstruction
 	Unit_MoveLeft,
 	Unit_MoveRight,
 };
-
 DefineDynamicArray(UnitInstruction);
-
 
 struct Entity
 {
@@ -94,7 +94,6 @@ struct Entity
 };
 
 typedef Entity* EntityPtr;
-
 DefineDynamicArray(Entity);
 DefineDynamicArray(EntityPtr);
 DefineArray(Entity);
@@ -162,15 +161,8 @@ struct EntityCopyData
    
 	u32 meshId;
 };
-
-static v3 GetRenderPos(EntityCopyData e)
-{
-	return V3(e.physicalPos) + e.offset;
-}
-
 DefineArray(EntityCopyData);
 
-DefineDynamicArray(EntityInterpolation);
 
 struct LightSource
 {
@@ -179,16 +171,25 @@ struct LightSource
    v3 color;
 };
 
+// todo right now I do not see a reason why this should be an asset, so where should it live?
 struct Level
 {
+   String name;
+   
 	Camera camera;
    LightSource lightSource;
 	EntityCopyDataArray entities;
-	String name;
 	u32 blocksNeeded;
    
-	u32 amountOfDudes;
+	//u32 amountOfDudes; right now not used.
 };
+
+
+static v3 GetRenderPos(EntityCopyData e)
+{
+	return V3(e.physicalPos) + e.offset;
+}
+
 
 struct AABBi
 {
@@ -336,14 +337,18 @@ static void RemoveAllEntities(TileOctTree *tree)
 }
 #endif
 
+
+
 struct EntityManager
 {
-	Level loadedLevel;
+   String levelName;
    
 	Camera camera;
 	Camera debugCamera;
    LightSource lightSource;
    
+   // todo make some sort of bucketed array.
+   // todo make an array thing for each entity type
 	EntityDynamicArray entities;
    
 	u32 entitySerializer;
@@ -357,18 +362,6 @@ struct EntityManager
 	u32 blockMeshId;
 	u32 dudeMeshId;
 };
-
-static EntityManager InitEntityManager(Arena *currentStateArena, u32 screenWidth, u32 screenHeight)
-{
-	EntityManager ret = {};
-   
-	ret.entityTree = InitOctTree(currentStateArena, 100);
-	ret.entities = EntityCreateDynamicArray();
-	
-	ret.entitySerialMap = u32CreateDynamicArray();
-	
-	return ret;
-}
 
 static Entity *GetEntity(EntityManager *entityManager, u32 serialNumber)
 {
@@ -682,7 +675,6 @@ static void RemoveEntity(EntityManager *entityManager, u32 serial)
 
 static void UnloadLevel(EntityManager *entityManager)
 {
-	entityManager->loadedLevel = {};
 	entityManager->at = 0;
 	entityManager->camera.orientation = QuaternionId();
    entityManager->camera.pos = V3(0, 0, -5);
@@ -697,9 +689,6 @@ static void UnloadLevel(EntityManager *entityManager)
 
 static void ResetEntityManager(EntityManager *entityManager)
 {
-	entityManager->camera = entityManager->loadedLevel.camera;
-	entityManager->debugCamera = entityManager->camera;
-	
 	entityManager->at = 0;
 	entityManager->t = 0.0f;
    
@@ -794,6 +783,7 @@ static Entity CreateGoal(EntityManager *entityManager, u32 meshId, v3i pos, f32 
 	return *CreateEntityInternal(entityManager, meshId, scale, orientation, pos, offset, color, Entity_Goal, flags);
 }
 
+// this seems pretty bad in retrospect
 static Entity CreateEntity(EntityManager *entityManager, EntityType type, u32 meshId, v3i pos, f32 scale, Quaternion orientation, v3 offset, v4 color, u64 flags)
 {
 	switch (type)
@@ -830,6 +820,30 @@ static Entity CreateEntity(EntityManager *entityManager, EntityType type, u32 me
    
 	return {};
 }
+
+static EntityManager InitEntityManager(Arena *currentStateArena, Level level)
+{
+	EntityManager ret;
+   
+   ret.levelName = CopyString(level.name, currentStateArena);
+   ret.camera = level.camera;
+   ret.debugCamera = level.camera;
+   ret.lightSource = level.lightSource;
+   ret.entitySerializer = 0;
+	ret.entityTree = InitOctTree(currentStateArena, 100); // todo hardcoded.
+	ret.entities = EntityCreateDynamicArray(level.entities.amount);
+   ret.entitySerialMap = u32CreateDynamicArray(level.entities.amount);
+   u32 at = 0;
+   f32 t = 0.0f;
+   
+   For(level.entities)
+   {
+      CreateEntity(&ret, it->type, it->meshId, it->physicalPos, it->scale, it->orientation, it->offset, it->color, it->flags);
+   }
+   
+	return ret;
+}
+
 
 static v3i GetAdvanceForOneStep(UnitInstruction step)
 {

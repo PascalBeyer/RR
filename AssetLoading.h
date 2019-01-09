@@ -2556,27 +2556,27 @@ static void WriteTexture(char *fileName, Bitmap bitmap)
    WriteEntireFile(fileName, file);
 }
 
-static bool WriteLevel(char *fileName, EntityManager entityManager, AssetHandler *assetHandler)
+static bool WriteLevel(char *fileName, Level level, AssetHandler *assetHandler)
 {
 	u8 *mem = PushData(frameArena, u8, 0);
    
 	*PushStruct(frameArena, u32) = 5; // Version number, do not remove
    
-	*PushStruct(frameArena, LightSource) = entityManager.lightSource;
+	*PushStruct(frameArena, LightSource) = level.lightSource;
    
-	*PushStruct(frameArena, v3) = entityManager.loadedLevel.camera.pos;
-	*PushStruct(frameArena, Quaternion) = entityManager.loadedLevel.camera.orientation;
-	*PushStruct(frameArena, f32) = entityManager.loadedLevel.camera.aspectRatio;
-	*PushStruct(frameArena, f32) = entityManager.loadedLevel.camera.focalLength;
+	*PushStruct(frameArena, v3)         = level.camera.pos;
+	*PushStruct(frameArena, Quaternion) = level.camera.orientation;
+	*PushStruct(frameArena, f32)        = level.camera.aspectRatio;
+	*PushStruct(frameArena, f32)        = level.camera.focalLength;
    
-	*PushStruct(frameArena, u32) = entityManager.entities.amount;
+	*PushStruct(frameArena, u32) = level.entities.amount;
    
-	For(entityManager.entities)
+	For(level.entities)
 	{
 		*PushStruct(frameArena, Quaternion) = it->orientation;
 		*PushStruct(frameArena, v3i) = it->physicalPos;
-		*PushStruct(frameArena, v3) = it->offset;
-		*PushStruct(frameArena, v4) = it->color;
+		*PushStruct(frameArena, v3)  = it->offset;
+		*PushStruct(frameArena, v4)  = it->color;
 		*PushStruct(frameArena, f32) = it->scale;
 		*PushStruct(frameArena, u32) = it->type;
 		*PushStruct(frameArena, u64) = it->flags;
@@ -2611,15 +2611,15 @@ static EntityCopyData EntityToData(Entity e)
 
 static Level LoadLevel(String fileName, Arena *currentStateArena, AssetHandler *assetHandler)
 {
-   File file = LoadFile(FormatCString("level/%s.level", fileName));
+   File file = LoadFile(FormatCString("level/%s.level", fileName), frameArena);
 	if (!file.fileSize) return {};
-	defer(FreeFile(file));
    
 	u8 *at = (u8 *)file.memory;
 	u32 version = PullOff(u32);
    
    Level level;
    
+   level.name = fileName; // would be weird if this breaks
    level.lightSource = PullOff(LightSource);
    
 	level.camera.pos = PullOff(v3);
@@ -2658,7 +2658,6 @@ static Level LoadLevel(String fileName, Arena *currentStateArena, AssetHandler *
       at += nameLength * sizeof(Char);
       
       it->meshId = RegisterAsset(assetHandler, Asset_Mesh, name);
-      
 	}
    
 	level.blocksNeeded = 10000;

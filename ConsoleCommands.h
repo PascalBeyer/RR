@@ -237,16 +237,43 @@ static void ConvertHelper(StringArray args)
 
 static void SaveLevelHelper(StringArray args)
 {
+   if(gameState.mode != Game_Editor)
+   {
+      ConsoleOutputError("Saving Levels only allowed in Editor.");
+      return;
+   }
+   
+   if(args[0] == "")
+   {
+      ConsoleOutputError("Empty Name not allowed.");
+      return;
+   }
+   
 	char *fileName = FormatCString("level/%s.level", args[0]);
    
-	WriteLevel(fileName, gameState.entityManager, &gameState.assetHandler);
-	gameState.entityManager.loadedLevel.name = CopyString(args[0], gameState.currentStateArena); // todo leak
+   // TODO
+	WriteLevel(fileName, EditorStateToLevel(&gameState.entityManager, &gameState.executeData.simData), &gameState.assetHandler);
+	gameState.entityManager.levelName = CopyString(args[0], gameState.currentStateArena); // todo leak
 	ConsoleOutputError("Done!");
 }
 
 static void LoadLevelHelper(StringArray args)
 {
-	if (LoadLevel(args[0], gameState.currentStateArena, &gameState.assetHandler))
+   if(gameState.mode != Game_Editor)
+   {
+      ConsoleOutputError("Loading Levels only allowed in Editor.");
+      return;
+   }
+   
+   if(args[0] == "")
+   {
+      ConsoleOutputError("Empty Name not allowed.");
+      return;
+   }
+   
+   Level level = LoadLevel(args[0], gameState.currentStateArena, &gameState.assetHandler);
+   
+	if (!level.name.amount)
 	{
 		SwitchGameMode(&gameState, Game_Editor);
 		ConsoleOutput("Loaded level %s!", args[0]);
@@ -301,7 +328,7 @@ static void AddMeshHelper(StringArray args)
 
 static void SaveCameraHelper(StringArray args)
 {
-	gameState.entityManager.loadedLevel.camera = gameState.entityManager.camera;
+	gameState.entityManager.camera = gameState.editor.camera;
 }
 
 

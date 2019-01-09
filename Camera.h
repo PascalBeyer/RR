@@ -105,17 +105,6 @@ struct Triangle
 
 DefineArray(Triangle);
 
-inline bool v3InAABB(v3 pos, AABB aabb)
-{
-	return
-		aabb.minDim.x <= pos.x &&
-		aabb.minDim.y <= pos.y &&
-		aabb.minDim.z <= pos.z &&
-		aabb.maxDim.x >= pos.x &&
-		aabb.maxDim.y >= pos.y &&
-		aabb.maxDim.z >= pos.z;
-}
-
 static u32 GrayFromU32(u32 i)
 {
 	u32 c = i & 0xFF;
@@ -123,7 +112,7 @@ static u32 GrayFromU32(u32 i)
 	return ret;
 }
 
-
+#if 0
 static void UpdateCamGame(Input *input, Camera *camera)
 {
 	Tweekable(f32, screenScrollBorder, 0.05f);
@@ -140,7 +129,7 @@ static void UpdateCamGame(Input *input, Camera *camera)
    
 }
 
-#if 0
+
 static void UpdateCamFocus(Input *input, Camera *camera, DEBUGKeyTracker *tracker)
 {
 	v3 focusPoint = V3(ScreenZeroToOneToInGame(*camera, V2(0.5f, 0.5f)), 0.0f);

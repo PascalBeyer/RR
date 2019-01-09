@@ -105,6 +105,7 @@ struct WeightData
 DefineArray(WeightData);
 DefineArray(WeightDataArray);
 
+// todo where should these sort of mathy types live?
 struct AABB
 {
 	v3 minDim;
@@ -138,6 +139,18 @@ static b32 PointInAABB(AABB target, v3 point)
       target.maxDim.y + 0.001f >= point.y &&
       target.maxDim.z + 0.001f >= point.z
       );
+}
+
+
+inline bool v3InAABB(v3 pos, AABB aabb)
+{
+	return
+		aabb.minDim.x <= pos.x &&
+		aabb.minDim.y <= pos.y &&
+		aabb.minDim.z <= pos.z &&
+		aabb.maxDim.x >= pos.x &&
+		aabb.maxDim.y >= pos.y &&
+		aabb.maxDim.z >= pos.z;
 }
 
 
@@ -262,3 +275,5 @@ DefineArray(TriangleMesh);
 DefineDynamicArray(TriangleMesh);
 
 static void RegisterTriangleMesh(TriangleMesh *mesh);
+
+

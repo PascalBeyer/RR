@@ -203,6 +203,8 @@ DefineDynamicArray(EditorAction);
 
 struct Editor
 {
+   Camera camera;
+   
 	EditorUIElementDynamicArray elements;
 	EditorSelectDynamicArray hotEntityInfos;
 	EditorState state = EditorState_Default;
@@ -725,8 +727,6 @@ static void EditorSelectNothing(Editor *editor)
 	Clear(&editor->hotEntityInfos);
 }
 
-static bool WriteLevel(char *fileName, EntityManager entityManager, AssetHandler *assetHandler);
-
 static EditorSelect EntityToEditorSelect(Entity *e)
 {
 	EditorSelect toAdd;
@@ -1197,6 +1197,22 @@ static void ResetEditor(Editor *editor)
 	editor->elements.amount = 0;
 	editor->panel.visible = false;
    
+}
+
+static Level EditorStateToLevel(EntityManager *entityManager, SimData *sim)
+{
+   Level level;
+   level.camera        = entityManager->camera;
+   level.lightSource   = entityManager->lightSource;
+   level.blocksNeeded  = sim->blocksNeeded;
+   level.entities      = PushArray(frameArena, EntityCopyData, entityManager->entities.amount);
+   
+   for(u32 i = 0; i < entityManager->entities.amount; i++)
+   {
+      level.entities[i] = EntityToData(entityManager->entities[i]);
+   }
+   
+   return level;
 }
 
 static void NewLevel(EntityManager *entityManager, Editor *editor, Arena *currentStateArena)
