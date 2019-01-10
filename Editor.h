@@ -9,6 +9,8 @@ enum PickerSelectionTag
 	PickerSelecting_Header,
 };
 
+// :ColorPicker
+
 struct ColorPicker
 {
 	v2 pos = {0.5f, 0.5f};
@@ -34,59 +36,203 @@ struct ColorPicker
 	b32 isTweeker;
 	Tweeker *tweeker; // for now, rethink this
 };
-enum EditorUIElementEnum
+DefineDynamicArray(ColorPicker);
+
+// todo: i don't think it matters here, but I really have to get these color things straight.
+static ColorPicker CreateColorPicker(v4 *initialColor)
 {
-	EditorUI_ColorPicker,
+   // WARINIG : the factors DO NOT commute with the interpolation, do they?
    
-};
-
-struct EditorUIElement
-{
-	EditorUIElementEnum type;
-	union
-	{
-		ColorPicker picker;
-	};
-};
-
-DefineDynamicArray(EditorUIElement);
-
-
-enum EditorState
-{
-	EditorState_Default					= 0x0,
-	EditorState_Scaling					= 0x1,
-	EditorState_Rotating				= 0x2,
-	EditorState_Moving					= 0x3,
-	EditorState_DragingPanel			= 0x4,
-	EditorState_PickingColor			= 0x5,
-	EditorState_AlteringValue			= 0x6,
-	EditorState_PlacingNewMesh			= 0x7,
-	EditorState_DeleteSelection			= 0x8,
+   // calculating bar pos and picker pos : colors in the bar are of the form 0xFF00abFF or 0xFFabFF00, or something like that (2F, 20, 2 something)
+   ColorPicker ret;
    
-	EditorState_OrbitingCamera			= 0x100,
+   ret.isTweeker = false;
+   Tweekable(f32, pickerBorder);
+   Tweekable(f32, pickerWidth);
+   Tweekable(f32, pickerHeight);
+   Tweekable(f32, pickerSliderHeight);
+   Tweekable(f32, pickerHeaderSize);
    
-};
+   ret.border = pickerBorder;
+   ret.width = pickerWidth;
+   ret.height = pickerHeight;
+   ret.sliderHeight = pickerSliderHeight;
+   ret.headerSize = pickerSliderHeight;
+   
+   ret.headerPos = ret.pos - V2(0.0f, ret.headerSize + ret.border);
+   ret.sliderPos = ret.pos + V2(0.0f, ret.border + ret.height);
+   ret.killRectPos = V2(ret.headerPos.x + ret.width - ret.headerSize, ret.headerPos.y);
+   
+   ret.pickedColor = initialColor;
+   u32 c = Pack4x8(*initialColor);
+   u32 a = (c >> 24) & 0xFF;
+   u32 b = (c >> 16) & 0xFF;
+   u32 g = (c >> 8) & 0xFF;
+   u32 r = (c >> 0) & 0xFF;
+   
+   u32 max = Max(Max(g, b), r);
+   
+   if (max == 0)
+   {
+      ret.pickerPos = V2(ret.width, ret.height);
+      ret.sliderColor = (0xFF << 24) | (0xFF << 16) | (0u << 8) | 0u;
+      ret.sliderSelectedColorPos = 0.0f;
+      return ret;
+   }
+   
+   f32 yfac = (f32)(0xFF - max) / 255.0f;
+   b *= 0xFF;
+   g *= 0xFF;
+   r *= 0xFF;
+   b /= max;
+   g /= max;
+   r /= max;
+   
+   u32 min = Min(Min(g, b), r);
+   u32 addedInX = min;
+   f32 xfac = (f32)addedInX / 255.0f;
+   
+   if (min == 0xFF)
+   {
+      ret.pickerPos = V2(0, 0);
+      ret.sliderColor = (0xFF << 24) | (0xFF << 16) | (0u << 8) | 0u;
+      ret.sliderSelectedColorPos = 0.0f;
+      return ret;
+   }
+   
+   //work in u32, for percision 
+   u32 bs = (b - addedInX) * 0xFF / (0xFF - addedInX); // added in X = 0xFF? 
+   u32 rs = (r - addedInX) * 0xFF / (0xFF - addedInX);
+   u32 gs = (g - addedInX) * 0xFF / (0xFF - addedInX);
+   
+   ret.pickerPos = V2( (1.0f - xfac) * ret.width, yfac * ret.height);
+   ret.sliderColor = (0xFF << 24) | (bs << 16) | (gs << 8) | rs;
+   
+   f32 scale = 1.0f / 6.0f;
+   f32 scaledWidth = scale * ret.width;
+   
+   if (bs == 0xFF)
+   {
+      if (rs > 0) // purple to blue
+      {
+         f32 factor = (f32)rs / 255.0f;
+         ret.sliderSelectedColorPos = (5.0f + factor) * scaledWidth;
+      }
+      else // blue to cyan
+      {
+         f32 factor = (f32)gs / 255.0f;
+         ret.sliderSelectedColorPos = (0.0f + factor) * scaledWidth;
+      }
+   }
+   else if(gs == 0xFF)
+   {
+      if (bs > 0) // cyan to green
+      {
+         f32 factor = (f32)bs / 255.0f;
+         ret.sliderSelectedColorPos = (1.0f + factor) * scaledWidth;
+      }
+      else // green to yellow
+      {
+         f32 factor = (f32)rs / 255.0f;
+         ret.sliderSelectedColorPos = (2.0f + factor) * scaledWidth;
+      }
+   }
+   else if(rs == 0xFF)
+   {
+      if (gs > 0) // yellow to red
+      {
+         f32 factor = (f32)gs / 255.0f;
+         ret.sliderSelectedColorPos = (3.0f + factor) * scaledWidth;
+      }
+      else // red to purple
+      {
+         f32 factor = (f32)bs / 255.0f;
+         ret.sliderSelectedColorPos = (4.0f + factor) * scaledWidth;
+      }
+   }
+   else
+   {
+      Die;
+      ret.sliderSelectedColorPos = 0.0f;
+   }
+   return ret;
+}
+DefineArray(ColorPicker);
 
-static String EditorStateToString(EditorState state)
+
+static void UpdateColorPicker(ColorPicker *picker, Input input)
 {
-	switch (state)
-	{
-      case EditorState_Default:					return CreateString("Default");
-      case EditorState_Scaling:					return CreateString("Scaling");
-      case EditorState_Rotating:					return CreateString("Rotating");
-      case EditorState_Moving:					return CreateString("Moving");
-      case EditorState_DragingPanel:				return CreateString("DraggingPanel");
-      case EditorState_PickingColor:				return CreateString("PickingColor");
-      case EditorState_AlteringValue:				return CreateString("AlteringValue"); 
-      case EditorState_PlacingNewMesh:			return CreateString("PlacingNewValue");
-      case EditorState_DeleteSelection:			return CreateString("DeleteSelection");
-      case EditorState_OrbitingCamera:			return CreateString("OrbitingCamera");
+   Tweekable(f32, pickerBorder);
+   Tweekable(f32, pickerWidth);
+   Tweekable(f32, pickerHeight);
+   Tweekable(f32, pickerSliderHeight);
+   Tweekable(f32, pickerHeaderSize);
+   
+   // todo remove this, once we can drag the window
+   picker->border = pickerBorder;
+   picker->width = pickerWidth;
+   picker->height = pickerHeight;
+   picker->sliderHeight = pickerSliderHeight;
+   picker->headerSize = pickerHeaderSize;
+   
+   if (picker->selecting == PickerSelecting_Header)
+   {
+      picker->pos += input.mouseZeroToOneDelta;
+      v2 sliderPos = picker->pos + V2(0.0f, picker->border + picker->height);
+      picker->sliderPos = sliderPos;
       
-	}
-	return CreateString("EditorState_Unknown");
+   }
+   
+   if (picker->selecting == PickerSelecting_ColorPicker)
+   {
+      picker->pickerPos.x = Clamp(input.mouseZeroToOne.x, picker->pos.x, picker->pos.x + picker->width) - picker->pos.x;
+      picker->pickerPos.y = Clamp(input.mouseZeroToOne.y, picker->pos.y, picker->pos.y + picker->height) - picker->pos.y;
+   }
+   
+   u32 colors[7] =
+   {
+      0xFFFF0000, // blue
+      0xFFFFFF00, // cyan
+      0xFF00FF00, // green
+      0xFF00FFFF, // yellow
+      0xFF0000FF, // red
+      0xFFFF00FF, // purple
+      0xFFFF0000, // blue
+   };
+   
+   f32 scale = 1.0f / 6.0f;
+   f32 scaledWidth = scale * picker->width;
+   if (picker->selecting == PickerSelecting_Slider)
+   {
+      MapRangeToRangeCapped(input.mouseZeroToOne.x, picker->sliderPos.x, picker->sliderPos.x + picker->width, 0.0f, 1.0f);
+      picker->sliderSelectedColorPos = Clamp(input.mouseZeroToOne.x - picker->sliderPos.x, 0.0f, picker->width);
+      u32 index = (u32)(picker->sliderSelectedColorPos / (scaledWidth));
+      Assert(index < ArrayCount(colors));
+      u32 secondIndex = index + 1;
+      if (index == 6) secondIndex = index;
+      
+      picker->sliderColor = Pack3x8(LerpVector3(Unpack3x8(colors[index]), index * scaledWidth, Unpack3x8(colors[secondIndex]), secondIndex * scaledWidth, picker->sliderSelectedColorPos));
+   }
+   
+   v3 ul = V3(1.0f, 1.0f, 1.0f);
+   v3 ur = Unpack3x8(picker->sliderColor);
+   v3 bottom = V3(0.0f, 0.0f, 0.0f);
+   
+   f32 xfac = MapRangeToRangeCapped(picker->pickerPos.x, 0.0f, picker->width, 0.0f, 1.0f);
+   f32 yfac = MapRangeToRangeCapped(picker->pickerPos.y, 0.0f, picker->height, 0.0f, 1.0f);
+   
+   v3 interpWithWhite = LerpVector3(ul, ur, xfac);
+   v3 color = LerpVector3(interpWithWhite, bottom, yfac);
+   
+   *picker->pickedColor = V4(1.0f, color);
+   
+   //todo if we use this in some other context, we either have to make everything tweekers, or have to re-formalize this.
+   //picker->tweeker.vec4 = picker->pickedColor;
+   //Tweek(picker->tweeker);
 }
 
+
+// :EditorPanel
 
 struct TweekerPointer
 {
@@ -135,154 +281,6 @@ struct EditorPanel
 	TweekerPointerDynamicArray values;
 };
 
-// todo we do not have to initialize this everywhere we do, but what evs.
-struct EditorSelect
-{
-	u32 placedSerial;
-	Quaternion initialOrientation;
-	f32 initialScale;
-	v3i initialPhysicalPos;
-	v3 initialOffset;
-	v4 initialColor;
-};
-
-struct EditorEntityUndoRedoData
-{
-	u32 placedSerial;
-	u32 meshId;
-	Quaternion orientation;
-	f32 scale;
-	v3i physicalPos;
-	v3 offset;
-	v4 color;
-   
-	EntityType type;
-	u64 flags;
-};
-
-
-DefineDynamicArray(EntityCopyData);
-
-typedef EntityCopyDataDynamicArray EditorClipBoard;
-
-DefineDynamicArray(EditorSelect);
-
-enum EditorActionType
-{
-	EditorAction_None,
-	EditorAction_AlterMesh,
-	EditorAction_DeleteMesh,
-	EditorAction_PlaceMesh,
-   
-	EditorAction_AlterTile,
-   
-	EditorAction_BeginBundle,
-	EditorAction_EndBundle,
-   
-	EditorAction_Count,
-   
-};
-
-struct EditorAction
-{
-	EditorActionType type;
-   
-	union
-	{
-		EditorEntityUndoRedoData preModifyMesh;
-	};
-	union
-	{
-		EditorEntityUndoRedoData postModifyMesh;
-	};
-	
-};
-
-
-DefineDynamicArray(EditorAction);
-
-struct Editor
-{
-   Camera camera;
-   
-	EditorUIElementDynamicArray elements;
-	EditorSelectDynamicArray hotEntityInfos;
-	EditorState state = EditorState_Default;
-   
-	EditorClipBoard clipBoard;
-	EditorActionDynamicArray undoRedoBuffer;
-	u32 undoRedoAt;
-   
-	EditorPanel panel;
-   
-	b32 snapToTileMap;
-   
-	v3 focusPoint;
-};
-
-struct EulerAngle
-{
-	f32 XRotation;
-	f32 YRotation;
-	f32 ZRotation;
-};
-
-static EulerAngle QuaternionToEulerAngle(Quaternion q)
-{
-	EulerAngle ret;
-   
-	// roll (x-axis rotation)
-	f32 sinr_cosp = 2.0f * (q.w * q.x + q.y * q.z);
-	f32 cosr_cosp = 1.0f - 2.0f * (q.x * q.x + q.y * q.y);
-	ret.XRotation = atan2f(sinr_cosp, cosr_cosp);
-   
-	// pitch (y-axis rotation)
-	f32 sinp = 2.0f * (q.w * q.y - q.z * q.x);
-	if (fabs(sinp) >= 1)
-	{
-		ret.YRotation = copysignf(PI / 2, sinp); // use 90 degrees if out of range
-	}
-	else
-	{
-		ret.YRotation = asinf(sinp);
-	}
-   
-	// yaw (z-axis rotation)
-	f32 siny_cosp = 2.0f * (q.w * q.z + q.x * q.y);
-	f32 cosy_cosp = 1.0f - 2.0f * (q.y * q.y + q.z * q.z);
-	ret.ZRotation = atan2f(siny_cosp, cosy_cosp);
-   
-	return ret;
-}
-
-static Quaternion EulerAngleToQuaternion(EulerAngle angle)
-{
-   
-	f32 cr = cosf(angle.XRotation * 0.5f);
-	f32 sr = sinf(angle.XRotation * 0.5f);
-	f32 cp = cosf(angle.YRotation * 0.5f);
-	f32 sp = sinf(angle.YRotation * 0.5f);
-	f32 cy = cosf(angle.ZRotation * 0.5f);
-	f32 sy = sinf(angle.ZRotation * 0.5f);
-   
-	Quaternion q;
-	q.w = cy * cp * cr + sy * sp * sr;
-	q.x = cy * cp * sr - sy * sp * cr;
-	q.y = sy * cp * sr + cy * sp * cr;
-	q.z = sy * cp * cr - cy * sp * sr;
-	return q;
-}
-
-static v3 GetAveragePosForSelection(Editor *editor, EntityManager *entityManager)
-{
-	v3 averagePos = V3();
-	For(editor->hotEntityInfos)
-	{
-		averagePos += GetRenderPos(*GetEntity(entityManager, it->placedSerial));
-	}
-	averagePos /= (f32)editor->hotEntityInfos.amount;
-	return averagePos;
-}
 
 static f32 HeightForTweekerPanel(TweekerType type, f32 editorBorderWidth, f32 editorPanelFontSize)
 {
@@ -338,466 +336,386 @@ static f32 HeightForTweekerPanel(TweekerType type, f32 editorBorderWidth, f32 ed
 }
 
 
-static Editor InitEditor(Arena *constantArena)
+enum EditorState
 {
-	Editor ret;
-	ret.elements = EditorUIElementCreateDynamicArray();
-	ret.clipBoard = EntityCopyDataCreateDynamicArray();
+	EditorState_Default					= 0x0,
+	EditorState_Scaling					= 0x1,
+	EditorState_Rotating		   		= 0x2,
+	EditorState_Moving		 			= 0x3,
+	EditorState_DragingPanel   			= 0x4,
+	EditorState_PickingColor	   		= 0x5,
+	EditorState_AlteringValue		  	= 0x6,
+	EditorState_PlacingNewMesh		 	= 0x7,
+	EditorState_DeleteSelection			= 0x8,
    
-	ret.undoRedoBuffer = EditorActionCreateDynamicArray();
-	ret.undoRedoAt = 0xFFFFFFFF;
-	
-	ret.hotEntityInfos = EditorSelectCreateDynamicArray();
-	ret.state = EditorState_Default;
+	EditorState_OrbitingCamera		 	= 0x100,
    
-	Tweekable(v2, initialEditorPanelPos, V2(0.75f, 0.2f));
-	
-	ret.panel.pos = initialEditorPanelPos;
-	ret.panel.visible = false;
-	ret.panel.values = TweekerPointerCreateDynamicArray();
-	ret.panel.textInput.string = PushArray(constantArena, Char, 50);
-	ret.panel.textInput.string.length = 0;
-	ret.panel.textInput.maxLength = 50;
-	ret.panel.hotValue = 0xFFFFFFFF;
-   
-	ret.focusPoint = V3();
-   
-	return ret;
-}
+};
 
-
-// todo: i don't think it matters here, but I really have to get these color things straight.
-static ColorPicker CreateColorPicker(v4 *initialColor)
+static String EditorStateToString(EditorState state)
 {
-	// WARINIG : the factors DO NOT commute with the interpolation, do they?
-   
-	// calculating bar pos and picker pos : colors in the bar are of the form 0xFF00abFF or 0xFFabFF00, or something like that (2F, 20, 2 something)
-	ColorPicker ret;
-   
-	ret.isTweeker = false;
-	Tweekable(f32, pickerBorder);
-	Tweekable(f32, pickerWidth);
-	Tweekable(f32, pickerHeight);
-	Tweekable(f32, pickerSliderHeight);
-	Tweekable(f32, pickerHeaderSize);
-   
-	ret.border = pickerBorder;
-	ret.width = pickerWidth;
-	ret.height = pickerHeight;
-	ret.sliderHeight = pickerSliderHeight;
-	ret.headerSize = pickerSliderHeight;
-   
-	ret.headerPos = ret.pos - V2(0.0f, ret.headerSize + ret.border);
-	ret.sliderPos = ret.pos + V2(0.0f, ret.border + ret.height);
-	ret.killRectPos = V2(ret.headerPos.x + ret.width - ret.headerSize, ret.headerPos.y);
-   
-	ret.pickedColor = initialColor;
-	u32 c = Pack4x8(*initialColor);
-	u32 a = (c >> 24) & 0xFF;
-	u32 b = (c >> 16) & 0xFF;
-	u32 g = (c >> 8) & 0xFF;
-	u32 r = (c >> 0) & 0xFF;
-   
-	u32 max = Max(Max(g, b), r);
-	
-	if (max == 0)
+	switch (state)
 	{
-		ret.pickerPos = V2(ret.width, ret.height);
-		ret.sliderColor = (0xFF << 24) | (0xFF << 16) | (0u << 8) | 0u;
-		ret.sliderSelectedColorPos = 0.0f;
-		return ret;
-	}
-   
-	f32 yfac = (f32)(0xFF - max) / 255.0f;
-	b *= 0xFF;
-	g *= 0xFF;
-	r *= 0xFF;
-	b /= max;
-	g /= max;
-	r /= max;
-   
-	u32 min = Min(Min(g, b), r);
-	u32 addedInX = min;
-	f32 xfac = (f32)addedInX / 255.0f;
-   
-	if (min == 0xFF)
-	{
-		ret.pickerPos = V2(0, 0);
-		ret.sliderColor = (0xFF << 24) | (0xFF << 16) | (0u << 8) | 0u;
-		ret.sliderSelectedColorPos = 0.0f;
-		return ret;
-	}
-   
-	//work in u32, for percision 
-	u32 bs = (b - addedInX) * 0xFF / (0xFF - addedInX); // added in X = 0xFF? 
-	u32 rs = (r - addedInX) * 0xFF / (0xFF - addedInX);
-	u32 gs = (g - addedInX) * 0xFF / (0xFF - addedInX);
-	
-	ret.pickerPos = V2( (1.0f - xfac) * ret.width, yfac * ret.height);
-	ret.sliderColor = (0xFF << 24) | (bs << 16) | (gs << 8) | rs;
-   
-	f32 scale = 1.0f / 6.0f;
-	f32 scaledWidth = scale * ret.width;
-   
-	if (bs == 0xFF)
-	{
-		if (rs > 0) // purple to blue
-		{
-			f32 factor = (f32)rs / 255.0f;
-			ret.sliderSelectedColorPos = (5.0f + factor) * scaledWidth;
-		}
-		else // blue to cyan
-		{
-			f32 factor = (f32)gs / 255.0f;
-			ret.sliderSelectedColorPos = (0.0f + factor) * scaledWidth;
-		}
-	}
-	else if(gs == 0xFF)
-	{
-		if (bs > 0) // cyan to green
-		{
-			f32 factor = (f32)bs / 255.0f;
-			ret.sliderSelectedColorPos = (1.0f + factor) * scaledWidth;
-		}
-		else // green to yellow
-		{
-			f32 factor = (f32)rs / 255.0f;
-			ret.sliderSelectedColorPos = (2.0f + factor) * scaledWidth;
-		}
-	}
-	else if(rs == 0xFF)
-	{
-		if (gs > 0) // yellow to red
-		{
-			f32 factor = (f32)gs / 255.0f;
-			ret.sliderSelectedColorPos = (3.0f + factor) * scaledWidth;
-		}
-		else // red to purple
-		{
-			f32 factor = (f32)bs / 255.0f;
-			ret.sliderSelectedColorPos = (4.0f + factor) * scaledWidth;
-		}
-	}
-	else
-	{
-		Die;
-		ret.sliderSelectedColorPos = 0.0f;
-	}
-	return ret;
-}
-
-
-static void WriteSingleTweeker(Tweeker tweeker);
-
-// todo: could save these up and then on access do the mem copy. Not sure if worth the complexity
-// todo unordered remove (just move the last guy)
-static void ArrayRemove(EditorUIElementDynamicArray *arr, EditorUIElement *elem)
-{
-	u32 index = (u32)(elem - arr->data);
-	
-	if (index < arr->amount)
-	{
-		void *to = elem;
-		void *from = (elem + 1);
-      
-		u32 amount = arr->amount - index;
-		memcpy(to, from, amount * sizeof(EditorUIElement));
-		
-		arr->amount--;
-	}
-	else
-	{
-		Die;
-	}
-}
-
-static void UpdateColorPicker(ColorPicker *picker, Input input)
-{
-	Tweekable(f32, pickerBorder);
-	Tweekable(f32, pickerWidth);
-	Tweekable(f32, pickerHeight);
-	Tweekable(f32, pickerSliderHeight);
-	Tweekable(f32, pickerHeaderSize);
-   
-	// todo remove this, once we can drag the window
-	picker->border = pickerBorder;
-	picker->width = pickerWidth;
-	picker->height = pickerHeight;
-	picker->sliderHeight = pickerSliderHeight;
-	picker->headerSize = pickerHeaderSize;
-   
-	if (picker->selecting == PickerSelecting_Header)
-	{
-		picker->pos += input.mouseZeroToOneDelta;
-		v2 sliderPos = picker->pos + V2(0.0f, picker->border + picker->height);
-		picker->sliderPos = sliderPos;
+      case EditorState_Default:					return CreateString("Default");
+      case EditorState_Scaling:					return CreateString("Scaling");
+      case EditorState_Rotating:					return CreateString("Rotating");
+      case EditorState_Moving:					return CreateString("Moving");
+      case EditorState_DragingPanel:				return CreateString("DraggingPanel");
+      case EditorState_PickingColor:				return CreateString("PickingColor");
+      case EditorState_AlteringValue:				return CreateString("AlteringValue"); 
+      case EditorState_PlacingNewMesh:			return CreateString("PlacingNewValue");
+      case EditorState_DeleteSelection:			return CreateString("DeleteSelection");
+      case EditorState_OrbitingCamera:			return CreateString("OrbitingCamera");
       
 	}
-   
-	if (picker->selecting == PickerSelecting_ColorPicker)
-	{
-		picker->pickerPos.x = Clamp(input.mouseZeroToOne.x, picker->pos.x, picker->pos.x + picker->width) - picker->pos.x;
-		picker->pickerPos.y = Clamp(input.mouseZeroToOne.y, picker->pos.y, picker->pos.y + picker->height) - picker->pos.y;
-	}
-   
-	u32 colors[7] =
-	{
-		0xFFFF0000, // blue
-		0xFFFFFF00, // cyan
-		0xFF00FF00, // green
-		0xFF00FFFF, // yellow
-		0xFF0000FF, // red
-		0xFFFF00FF, // purple
-		0xFFFF0000, // blue
-	};
-   
-	f32 scale = 1.0f / 6.0f;
-	f32 scaledWidth = scale * picker->width;
-	if (picker->selecting == PickerSelecting_Slider)
-	{
-		MapRangeToRangeCapped(input.mouseZeroToOne.x, picker->sliderPos.x, picker->sliderPos.x + picker->width, 0.0f, 1.0f);
-		picker->sliderSelectedColorPos = Clamp(input.mouseZeroToOne.x - picker->sliderPos.x, 0.0f, picker->width);
-		u32 index = (u32)(picker->sliderSelectedColorPos / (scaledWidth));
-		Assert(index < ArrayCount(colors));
-		u32 secondIndex = index + 1;
-		if (index == 6) secondIndex = index;
-      
-		picker->sliderColor = Pack3x8(LerpVector3(Unpack3x8(colors[index]), index * scaledWidth, Unpack3x8(colors[secondIndex]), secondIndex * scaledWidth, picker->sliderSelectedColorPos));
-	}
-   
-	v3 ul = V3(1.0f, 1.0f, 1.0f);
-	v3 ur = Unpack3x8(picker->sliderColor);
-	v3 bottom = V3(0.0f, 0.0f, 0.0f);
-   
-	f32 xfac = MapRangeToRangeCapped(picker->pickerPos.x, 0.0f, picker->width, 0.0f, 1.0f);
-	f32 yfac = MapRangeToRangeCapped(picker->pickerPos.y, 0.0f, picker->height, 0.0f, 1.0f);
-   
-	v3 interpWithWhite = LerpVector3(ul, ur, xfac);
-	v3 color = LerpVector3(interpWithWhite, bottom, yfac);
-   
-	*picker->pickedColor = V4(1.0f, color);
-   
-	//todo if we use this in some other context, we either have to make everything tweekers, or have to re-formalize this.
-	//picker->tweeker.vec4 = picker->pickedColor;
-	//Tweek(picker->tweeker);
+	return CreateString("EditorState_Unknown");
 }
 
-static v3i SnapToTileMap(v3 pos)
+enum EditorActionType
 {
-	return V3i((i32)pos.x, (i32)pos.y, (i32)pos.z);
-}
+	EditorAction_None,
+	EditorAction_AlterMesh,
+	EditorAction_DeleteMesh,
+	EditorAction_PlaceMesh,
+   
+	EditorAction_AlterTile,
+   
+	EditorAction_BeginBundle,
+	EditorAction_EndBundle,
+   
+	EditorAction_Count,
+   
+};
 
-static v3i RoundToTileMap(v3 pos)
+struct EditorAction
 {
-	return V3i((i32)floorf(pos.x + 0.5f), (i32)floorf(pos.y + 0.5f), (i32)floorf(pos.z + 0.5f));
-}
+	EditorActionType type;
+   
+   u32 serial;
+   
+	// we could store only one, by altering it if we redo/undo
+   EntityCopyData preModifyMesh;
+   EntityCopyData postModifyMesh;
+	
+	
+};
+DefineDynamicArray(EditorAction);
 
-static void UpdateColorPickers(Editor *editor, Input input)
+
+typedef EntityCopyDataDynamicArray EditorClipBoard;
+
+struct EditorLevelInfo
 {
-	For(editor->elements)
-	{
-		switch (it->type)
-		{
-         case EditorUI_ColorPicker:
-         {
-            UpdateColorPicker(&it->picker, input);
-         }break;
-         default:
-         {
-            Die;
-         }break;
-         
-		}
-      
-	}
-}
+   String name;
+   Camera camera;
+   LightSource lightSource;
+   u32 blocksNeeded;
+};
+
+struct Editor
+{
+   EditorState state = EditorState_Default;
+   
+   Camera camera;
+	v3 focusPoint;
+   
+   EditorLevelInfo levelInfo;
+   
+   EntityManager entityManager;
+   
+   u32DynamicArray hotEntitySerials;
+	EntityCopyDataDynamicArray hotEntityInitialStates;
+   
+	EditorClipBoard clipBoard;
+   
+	EditorActionDynamicArray undoRedoBuffer;
+	u32 undoRedoAt;
+   
+	b32 snapToTileMap; // todo if there are more flags, we could bundle em here
+   
+   EditorPanel panel;
+   ColorPickerDynamicArray colorPickers;
+};
 
 static void EditorGoToNone(Editor *editor)
 {
-	editor->state = EditorState_Default;
-#if 0
-	For(editor->hotEntityInfos)
-	{
-		Entity *e = GetEntities(level, it->placedSerial);
-		it->initialPos			= e->pos;
-		it->initialScale		= e->scale;
-		it->initialOrientation	= e->orientation;
-		it->initialColor		= e->color;
-	}
-#endif
+   editor->state = EditorState_Default;
 }
 
-static Entity *GetHotEntity(EntityManager *entityManager, AssetHandler *handler, v2 mousePosZeroToOne)
+static bool EditorHasSelection(Editor *editor)
 {
-	v3 camP = entityManager->camera.pos; // todo camera or debugCamera? Maybe we should again unify them
-	v3 camD = ScreenZeroToOneToDirecion(entityManager->camera, mousePosZeroToOne);
-   
-	f32 minDist = F32MAX;
-   
-	Entity *ret = NULL;
-   
-	For(entityManager->entities)
-	{
-      
-		MeshInfo *info = GetMeshInfo(handler, it->meshId);
-      
-		if (!info) continue; // probably not on screen, if never rendered
-      
-		m4x4 mat = QuaternionToMatrix4(Inverse(it->orientation)); // todo save these?
-		v3 rayP = mat * (camP - GetRenderPos(*it));
-		v3 rayD = mat * camD; 
-		// better rayCast system, right now this loads every mesh, to find out the aabb....
-      
-		AABB aabb = info->aabb;
-      
-		aabb.maxDim *= it->scale;
-		aabb.minDim *= it->scale;
-		f32 curIntersectionMin = MAXF32;
-      
-		f32 x = rayP.x;
-		f32 dx = rayD.x;
-		f32 y = rayP.y;
-		f32 dy = rayD.y;
-		f32 z = rayP.z;
-		f32 dz = rayD.z;
-      
-		f32 aabbMinX = aabb.minDim.x;
-		f32 aabbMaxX = aabb.maxDim.x; 
-		f32 aabbMinY = aabb.minDim.y;
-		f32 aabbMaxY = aabb.maxDim.y;
-		f32 aabbMinZ = aabb.minDim.z;
-		f32 aabbMaxZ = aabb.maxDim.z;
-      
-		f32 t1x = (aabbMaxX - x) / dx;
-		if (dx > 0 && t1x <= curIntersectionMin)
-		{
-			curIntersectionMin = t1x;
-		}
-      
-		f32 t2x = (aabbMinX - x) / dx;
-		if (dx < 0 && t2x <= curIntersectionMin)
-		{
-			curIntersectionMin = t2x;
-		}
-      
-		f32 t1y = (aabbMaxY - y) / dy;
-		if (dy > 0 && t1y <= curIntersectionMin)
-		{
-			curIntersectionMin = t1y;
-		}
-      
-		f32 t2y = (aabbMinY - y) / dy;
-		if (dy < 0 && t2y <= curIntersectionMin)
-		{
-			curIntersectionMin = t2y;
-		}
-      
-		f32 t1z = (aabbMaxZ - z) / dz;
-		if (dz > 0 && t1z <= curIntersectionMin)
-		{
-			curIntersectionMin = t1z;
-		}
-      
-		f32 t2z = (aabbMinZ - z) / dz;
-		if (dz < 0 && t2z <= curIntersectionMin)
-		{
-			curIntersectionMin = t2z;
-		}
-		v3 curExit = rayD * curIntersectionMin + rayP;
-      
-      
-		if (PointInAABB(aabb, curExit))
-		{
-			f32 dist = Dist(curExit, rayP);
-			if (dist < minDist)
-			{
-				minDist = dist;
-				ret = it;
-			}
-		}
-	}
-   
-	return ret;
+   return (editor->hotEntitySerials.amount > 0);
+}
+
+static void ResetEditorPanel(Editor *editor)
+{
+   editor->panel.values.amount = 0;
+   editor->panel.visible = false;
 }
 
 static void EditorSelectNothing(Editor *editor) 
 {
-	editor->panel.values.amount = 0;
-	editor->panel.visible = false;
-	Clear(&editor->hotEntityInfos);
+   editor->hotEntitySerials.amount = 0;
+   editor->hotEntityInitialStates.amount = 0;
+   ResetEditorPanel(editor);
 }
 
-static EditorSelect EntityToEditorSelect(Entity *e)
+static void NewLevel(Editor *editor)
 {
-	EditorSelect toAdd;
-	toAdd.initialColor = e->color;
-	toAdd.initialPhysicalPos = e->physicalPos;
-	toAdd.initialOffset = e->offset;
-	toAdd.initialOrientation = e->orientation;
-	toAdd.initialScale = e->scale;
-	toAdd.placedSerial = e->serialNumber;
-	return toAdd;
-};
-
-static bool EditorHasSelection(Editor *editor)
-{
-	return (editor->hotEntityInfos.amount > 0);
+   EditorSelectNothing(editor);
+   EditorGoToNone(editor);
+   ResetEditorPanel(editor);
+   
+   editor->undoRedoBuffer.amount = 0;
+   editor->undoRedoAt = 0xFFFFFFFF;
+   
+   editor->focusPoint = V3();
+   
+   EntityManager *entityManager = &editor->entityManager;
+   
+   entityManager->at = 0;
+	entityManager->camera.orientation = QuaternionId();
+   entityManager->camera.pos = V3(0, 0, -5);
+   entityManager->camera.focalLength = 1.0f;
+   entityManager->camera.aspectRatio = 16.0f / 9.0f;
+   
+	entityManager->entities.amount = 0; // this before ResetTree, makes the reset faster
+	ResetTree(entityManager, &entityManager->entityTree);
+	entityManager->entitySerialMap.amount = 0;
+	entityManager->entitySerializer = 0;
+	entityManager->debugCamera = entityManager->camera;
 }
 
-static void ResetHotMeshes(Editor *editor, EntityManager *entityManager)
+
+static v3 GetAveragePosForSelection(Editor *editor)
 {
-	For(editor->hotEntityInfos)
+	v3 averagePos = V3();
+	For(editor->hotEntitySerials)
 	{
-		Entity *e = GetEntity(entityManager, it->placedSerial);
-		e->physicalPos = it->initialPhysicalPos;
-		e->offset = it->initialOffset;
-		e->scale = it->initialScale;
-		e->orientation = it->initialOrientation;
-		e->color = it->initialColor;
+      Entity *e = GetEntity(&editor->entityManager, *it);
+		averagePos += GetRenderPos(*e);
 	}
+	averagePos /= (f32)editor->hotEntitySerials.amount;
+	return averagePos;
+}
+
+static void EditorLoadLevel(Editor *editor, Arena *currentStateArena, Level *level)
+{
+   editor->entityManager = InitEntityManager(currentStateArena, level);
+   
+   EditorSelectNothing(editor);
+   EditorGoToNone(editor);
+   editor->undoRedoBuffer.amount = 0;
+   editor->camera = level->camera;
+   editor->focusPoint = V3(ScreenZeroToOneToInGame(editor->camera, V2(0.5f, 0.5f)), 0.0f);
+   
+   ResetEditorPanel(editor);
+}
+
+// should the editor be a thing you load when you open it or instanciate?
+static Editor InitEditor(Arena *constantArena)
+{
+   Editor ret;
+   
+   ret.state = EditorState_Default;
+   
+   ret.colorPickers   = ColorPickerCreateDynamicArray();
+   ret.clipBoard      = EntityCopyDataCreateDynamicArray();
+   
+   ret.undoRedoBuffer = EditorActionCreateDynamicArray();
+   ret.undoRedoAt     = 0xFFFFFFFF;
+   
+   ret.hotEntitySerials = u32CreateDynamicArray();
+   ret.hotEntityInitialStates = EntityCopyDataCreateDynamicArray();
+   
+   Tweekable(v2, initialEditorPanelPos, V2(0.75f, 0.2f));
+   
+   ret.panel.pos = initialEditorPanelPos;
+   ret.panel.visible = false;
+   ret.panel.values = TweekerPointerCreateDynamicArray();
+   ret.panel.textInput.string = PushArray(constantArena, Char, 50);
+   ret.panel.textInput.string.length = 0;
+   ret.panel.textInput.maxLength = 50;
+   ret.panel.hotValue = 0xFFFFFFFF;
+   
+   ret.focusPoint = V3();
+   
+   return ret;
+}
+
+static void WriteSingleTweeker(Tweeker tweeker);
+
+static void UpdateColorPickers(Editor *editor, Input input)
+{
+   For(editor->colorPickers)
+   {
+      UpdateColorPicker(it, input);
+   }
+}
+
+static v3i SnapToTileMap(v3 pos)
+{
+   return V3i((i32)pos.x, (i32)pos.y, (i32)pos.z);
+}
+
+static v3i RoundToTileMap(v3 pos)
+{
+   return V3i((i32)floorf(pos.x + 0.5f), (i32)floorf(pos.y + 0.5f), (i32)floorf(pos.z + 0.5f));
+}
+
+static Entity *GetHotEntity(EntityManager *entityManager, AssetHandler *handler, v2 mousePosZeroToOne)
+{
+   v3 camP = entityManager->camera.pos; // todo camera or debugCamera? Maybe we should again unify them
+   v3 camD = ScreenZeroToOneToDirecion(entityManager->camera, mousePosZeroToOne);
+   
+   f32 minDist = F32MAX;
+   
+   Entity *ret = NULL;
+   
+   For(entityManager->entities)
+   {
+      
+      MeshInfo *info = GetMeshInfo(handler, it->meshId);
+      
+      if (!info) continue; // probably not on screen, if never rendered
+      
+      m4x4 mat = QuaternionToMatrix4(Inverse(it->orientation)); // todo save these?
+      v3 rayP = mat * (camP - GetRenderPos(*it));
+      v3 rayD = mat * camD; 
+      // better rayCast system, right now this loads every mesh, to find out the aabb....
+      
+      AABB aabb = info->aabb;
+      
+      aabb.maxDim *= it->scale;
+      aabb.minDim *= it->scale;
+      f32 curIntersectionMin = MAXF32;
+      
+      f32 x = rayP.x;
+      f32 dx = rayD.x;
+      f32 y = rayP.y;
+      f32 dy = rayD.y;
+      f32 z = rayP.z;
+      f32 dz = rayD.z;
+      
+      f32 aabbMinX = aabb.minDim.x;
+      f32 aabbMaxX = aabb.maxDim.x; 
+      f32 aabbMinY = aabb.minDim.y;
+      f32 aabbMaxY = aabb.maxDim.y;
+      f32 aabbMinZ = aabb.minDim.z;
+      f32 aabbMaxZ = aabb.maxDim.z;
+      
+      f32 t1x = (aabbMaxX - x) / dx;
+      if (dx > 0 && t1x <= curIntersectionMin)
+      {
+         curIntersectionMin = t1x;
+      }
+      
+      f32 t2x = (aabbMinX - x) / dx;
+      if (dx < 0 && t2x <= curIntersectionMin)
+      {
+         curIntersectionMin = t2x;
+      }
+      
+      f32 t1y = (aabbMaxY - y) / dy;
+      if (dy > 0 && t1y <= curIntersectionMin)
+      {
+         curIntersectionMin = t1y;
+      }
+      
+      f32 t2y = (aabbMinY - y) / dy;
+      if (dy < 0 && t2y <= curIntersectionMin)
+      {
+         curIntersectionMin = t2y;
+      }
+      
+      f32 t1z = (aabbMaxZ - z) / dz;
+      if (dz > 0 && t1z <= curIntersectionMin)
+      {
+         curIntersectionMin = t1z;
+      }
+      
+      f32 t2z = (aabbMinZ - z) / dz;
+      if (dz < 0 && t2z <= curIntersectionMin)
+      {
+         curIntersectionMin = t2z;
+      }
+      v3 curExit = rayD * curIntersectionMin + rayP;
+      
+      
+      if (PointInAABB(aabb, curExit))
+      {
+         f32 dist = Dist(curExit, rayP);
+         if (dist < minDist)
+         {
+            minDist = dist;
+            ret = it;
+         }
+      }
+   }
+   
+   return ret;
+}
+
+// todo when we make an afford to go data oriented, stuff like this will havet to go through an api.
+static void ApplyEntityDataToEntity(Entity *e, EntityCopyData *data)
+{
+   e->orientation = data->orientation;
+   e->physicalPos = data->physicalPos;
+   e->offset	  = data->offset;
+   e->color       = data->color;
+   e->scale	   = data->scale;
+   
+   e->type		= data->type;
+   e->flags	   = data->flags;
+   
+   e->meshId      = data->meshId;
+}
+
+static void ResetHotMeshes(Editor *editor)
+{
+   for(u32 i = 0; i < editor->hotEntitySerials.amount; i++)
+   {
+      Entity *e = GetEntity(&editor->entityManager, editor->hotEntitySerials[i]);
+      EntityCopyData *data = editor->hotEntityInitialStates + i;
+      ApplyEntityDataToEntity(e, data);
+   }
 }
 
 // kills all redos
 static void AddActionToUndoRedoBuffer(Editor *editor, EditorAction toAdd)
 {
-	editor->undoRedoBuffer.amount = ++editor->undoRedoAt;
-	
-	ArrayAdd(&editor->undoRedoBuffer, toAdd);
+   editor->undoRedoBuffer.amount = ++editor->undoRedoAt;
    
-	Assert((editor->undoRedoAt + 1) == editor->undoRedoBuffer.amount);
+   ArrayAdd(&editor->undoRedoBuffer, toAdd);
+   
+   Assert((editor->undoRedoAt + 1) == editor->undoRedoBuffer.amount);
 }
 
-static void EditorPerformUndo(Editor *editor, EntityManager *entityManager)
+static void EditorPerformUndo(Editor *editor)
 {
-	if (editor->undoRedoAt == 0xFFFFFFFF) return;
-	EditorAction toReverse = editor->undoRedoBuffer[editor->undoRedoAt--];
-	switch (toReverse.type)
-	{
+   if (editor->undoRedoAt == 0xFFFFFFFF) return;
+   EntityManager *entityManager = &editor->entityManager;
+   
+   EditorAction toReverse = editor->undoRedoBuffer[editor->undoRedoAt--];
+   
+   switch (toReverse.type)
+   {
       case EditorAction_AlterMesh:
       {
-         EditorEntityUndoRedoData data = toReverse.preModifyMesh;
-         u32 serial = toReverse.preModifyMesh.placedSerial;
-         Assert(toReverse.preModifyMesh.placedSerial == toReverse.postModifyMesh.placedSerial);
-         Entity *mesh = GetEntity(entityManager, toReverse.preModifyMesh.placedSerial);
+         EntityCopyData *data = &toReverse.preModifyMesh;
+         Entity *e = GetEntity(entityManager, toReverse.serial);
          
-         mesh->color			= data.color;
-         mesh->physicalPos	= data.physicalPos;
-         mesh->offset		= data.offset;
-         mesh->orientation	= data.orientation;
-         mesh->scale			= data.scale;
-         mesh->type			= data.type;
-         mesh->flags			= data.flags;
+         ApplyEntityDataToEntity(e, data);
       }break;
       case EditorAction_DeleteMesh: 
       {
-         EditorEntityUndoRedoData data = toReverse.preModifyMesh;
-         u32 serial = toReverse.preModifyMesh.placedSerial;
+         EntityCopyData data = toReverse.preModifyMesh;
+         u32 serial = toReverse.serial;
          RestoreEntity(entityManager, serial, data.meshId, data.scale, data.orientation, data.physicalPos, data.offset, data.color, data.type, data.flags);
       }break;
       case EditorAction_PlaceMesh:
       {
-         EditorEntityUndoRedoData data = toReverse.postModifyMesh;
-         RemoveEntity(entityManager, data.placedSerial);
+         RemoveEntity(entityManager, toReverse.serial);
       }break;
       case EditorAction_BeginBundle:
       {
@@ -807,52 +725,45 @@ static void EditorPerformUndo(Editor *editor, EntityManager *entityManager)
       {
          while (editor->undoRedoBuffer[editor->undoRedoAt].type != EditorAction_BeginBundle)
          {
-            EditorPerformUndo(editor, entityManager);
+            EditorPerformUndo(editor);
          }
-         editor->undoRedoAt--;
+         editor->undoRedoAt--; // for the BeginBundle
       }break;
       
       InvalidDefaultCase;
-	}
+   }
 }
 
 
-static void EditorPerformRedo(Editor *editor, EntityManager *entityManager)
+static void EditorPerformRedo(Editor *editor)
 {
-	if (editor->undoRedoAt == (editor->undoRedoBuffer.amount - 1)) return;
-	EditorAction toReverse = editor->undoRedoBuffer[++editor->undoRedoAt];
-	switch (toReverse.type)
-	{
+   if (editor->undoRedoAt == (editor->undoRedoBuffer.amount - 1)) return;
+   EditorAction toReverse = editor->undoRedoBuffer[++editor->undoRedoAt];
+   
+   EntityManager *entityManager = &editor->entityManager;
+   
+   switch (toReverse.type)
+   {
       case EditorAction_AlterMesh:
       {
-         EditorEntityUndoRedoData data = toReverse.postModifyMesh;
-         u32 serial = toReverse.postModifyMesh.placedSerial;
-         Assert(toReverse.postModifyMesh.placedSerial == toReverse.postModifyMesh.placedSerial);
-         Entity *e = GetEntity(entityManager, toReverse.postModifyMesh.placedSerial);
-         e->color = data.color;
-         e->physicalPos = data.physicalPos;
-         e->offset = data.offset;
-         e->orientation = data.orientation;
-         e->scale = data.scale;
-         e->type = data.type;
-         e->flags = data.flags;
+         EntityCopyData *data = &toReverse.postModifyMesh;
+         Entity *e = GetEntity(entityManager, toReverse.serial);
+         ApplyEntityDataToEntity(e, data);
       }break;
       case EditorAction_DeleteMesh:
       {
-         EditorEntityUndoRedoData data = toReverse.preModifyMesh;
-         u32 serial = toReverse.preModifyMesh.placedSerial;
-         RemoveEntity(entityManager, serial);
+         RemoveEntity(entityManager, toReverse.serial);
       }break;
       case EditorAction_PlaceMesh:
       {
-         EditorEntityUndoRedoData data = toReverse.postModifyMesh;
-         RestoreEntity(entityManager, data.placedSerial, data.meshId, data.scale, data.orientation, data.physicalPos, data.offset, data.color, data.type, data.flags);
+         EntityCopyData data = toReverse.postModifyMesh;
+         RestoreEntity(entityManager, toReverse.serial, data.meshId, data.scale, data.orientation, data.physicalPos, data.offset, data.color, data.type, data.flags);
       }break;
       case EditorAction_BeginBundle:
       {
          while (editor->undoRedoBuffer[editor->undoRedoAt].type != EditorAction_EndBundle)
          {
-            EditorPerformRedo(editor, entityManager);
+            EditorPerformRedo(editor);
          }
       }break;
       case EditorAction_EndBundle:
@@ -861,98 +772,58 @@ static void EditorPerformRedo(Editor *editor, EntityManager *entityManager)
       }break;
       
       InvalidDefaultCase;
-	}
+   }
 }
 
-
-static EditorEntityUndoRedoData PreModifyToEditorSelect(EditorSelect select, Editor *editor, EntityManager *entityManager)
+static void PushAlterMeshModifies(Editor *editor)
 {
-	Entity *e = GetEntity(entityManager, select.placedSerial);
-	EditorEntityUndoRedoData ret;
-	ret.meshId			= e->meshId;
-	ret.placedSerial	= e->serialNumber;
-	ret.flags			= e->flags;
-	ret.type			= e->type;
-	ret.orientation		= select.initialOrientation;
-	ret.physicalPos		= select.initialPhysicalPos;
-	ret.offset			= select.initialOffset;
-	ret.scale			= select.initialScale;
-	ret.color			= select.initialColor;
-	
-	return ret;
+   EntityManager *entityManager = &editor->entityManager;
+   for(u32 i = 0; i < editor->hotEntitySerials.amount; i++)
+   {
+      Entity *e = GetEntity(entityManager, editor->hotEntitySerials[i]);
+      EntityCopyData *data = editor->hotEntityInitialStates + i;
+      
+      EditorAction toAdd;
+      toAdd.type = EditorAction_AlterMesh;
+      toAdd.serial = e->serialNumber;
+      toAdd.preModifyMesh  = *data;
+      toAdd.postModifyMesh = EntityToData(*e);
+      AddActionToUndoRedoBuffer(editor, toAdd);
+   }
 }
 
-static EditorEntityUndoRedoData PostModifyToEditorSelect(EditorSelect select, Editor *editor, EntityManager *entityManager)
+static void EditorPushUndo(Editor *editor)
 {
-	Entity *e = GetEntity(entityManager, select.placedSerial);
-	EditorEntityUndoRedoData ret;
-	ret.color			= e->color;
-	ret.placedSerial	= e->serialNumber;
-	ret.orientation		= e->orientation;
-	ret.physicalPos		= e->physicalPos;
-	ret.offset			= e->offset;
-	ret.scale			= e->scale;
-	ret.meshId			= e->meshId;
-	ret.flags			= e->flags;
-	ret.type			= e->type;
-	return ret;
-}
-
-static void PushAlterMeshModifies(Editor *editor, EntityManager *entityManager)
-{
-	For(editor->hotEntityInfos)
-	{
-		EditorAction toAdd;
-		toAdd.type = EditorAction_AlterMesh;
-		toAdd.preModifyMesh = PreModifyToEditorSelect(*it, editor, entityManager);
-		toAdd.postModifyMesh = PostModifyToEditorSelect(*it, editor, entityManager);
-		AddActionToUndoRedoBuffer(editor, toAdd);
-	}
-}
-
-static void EditorPushUndo(Editor *editor, EntityManager *entityManager)
-{
-	Assert(editor->hotEntityInfos.amount);
+   Assert(editor->hotEntitySerials.amount);
    
-	if (editor->hotEntityInfos.amount > 1)
-	{
-		EditorAction toAdd;
-		toAdd.type = EditorAction_BeginBundle;
-		AddActionToUndoRedoBuffer(editor, toAdd);
-	}
+   if (editor->hotEntitySerials.amount > 1)
+   {
+      EditorAction toAdd;
+      toAdd.type = EditorAction_BeginBundle;
+      AddActionToUndoRedoBuffer(editor, toAdd);
+   }
    
-	
-	switch (editor->state)
-	{
+   
+   switch (editor->state)
+   {
       case EditorState_Scaling:
-      {
-         PushAlterMeshModifies(editor, entityManager);
-      }break;
       case EditorState_Rotating:
-      {
-         PushAlterMeshModifies(editor, entityManager);
-      }break;
       case EditorState_Moving:
-      {
-         PushAlterMeshModifies(editor, entityManager);
-      }break;
       case EditorState_PickingColor:
-      {
-         PushAlterMeshModifies(editor, entityManager);
-      }break;
       case EditorState_AlteringValue:
       {
-         PushAlterMeshModifies(editor, entityManager);
+         PushAlterMeshModifies(editor);
       }break;
       case EditorState_PlacingNewMesh:
       {
-         For(editor->hotEntityInfos)
+         // we assume that this is called right after we place the entities.
+         // and that we selected them
+         for(u32 i = 0; i < editor->hotEntitySerials.amount; i++)
          {
             EditorAction toAdd;
             toAdd.type = EditorAction_PlaceMesh;
-            Entity *mesh = GetEntity(entityManager, it->placedSerial);
-            
-            toAdd.postModifyMesh = PostModifyToEditorSelect(*it, editor, entityManager);
+            toAdd.serial = editor->hotEntitySerials[i];
+            toAdd.postModifyMesh = editor->hotEntityInitialStates[i];
             
             AddActionToUndoRedoBuffer(editor, toAdd);
          }
@@ -960,13 +831,15 @@ static void EditorPushUndo(Editor *editor, EntityManager *entityManager)
       case EditorState_DeleteSelection: 
       {
          // to be called when the selection did not get cleared yet.
-         For(editor->hotEntityInfos)
+         for(u32 i = 0; i < editor->hotEntitySerials.amount; i++)
          {
             EditorAction toAdd;
             toAdd.type = EditorAction_DeleteMesh;
-            Entity *mesh = GetEntity(entityManager, it->placedSerial);
+            toAdd.serial = editor->hotEntitySerials[i];
+            EntityManager *manager = &editor->entityManager;
+            Entity *e = GetEntity(manager, toAdd.serial);
             
-            toAdd.preModifyMesh = PreModifyToEditorSelect(*it, editor, entityManager);
+            toAdd.preModifyMesh = EntityToData(*e);
             
             AddActionToUndoRedoBuffer(editor, toAdd);
          }
@@ -978,33 +851,24 @@ static void EditorPushUndo(Editor *editor, EntityManager *entityManager)
          Die;
       }break;
       
-	}
+   }
    
-	if (editor->hotEntityInfos.amount > 1)
-	{
-		EditorAction toAdd;
-		toAdd.type = EditorAction_EndBundle;
-		AddActionToUndoRedoBuffer(editor, toAdd);
-	}
+   if (editor->hotEntitySerials.amount > 1)
+   {
+      EditorAction toAdd;
+      toAdd.type = EditorAction_EndBundle;
+      AddActionToUndoRedoBuffer(editor, toAdd);
+   }
 }
 
-static void ResetEditorPanel(Editor *editor)
+static void ResetSelectionInitials(Editor *editor)
 {
-	editor->panel.values.amount = 0;
-	editor->panel.visible = false;
-}
-
-static void ResetSelectionInitials(Editor *editor, EntityManager *entityManager)
-{
-	For(editor->hotEntityInfos)
-	{
-		Entity *e = GetEntity(entityManager, it->placedSerial);
-		it->initialPhysicalPos = e->physicalPos;
-		it->initialOffset = e->offset;
-		it->initialOrientation = e->orientation;
-		it->initialScale = e->scale;
-		it->initialColor = e->color;
-	}
+   for(u32 i = 0; i < editor->hotEntitySerials.amount; i++)
+   {
+      u32 serial = editor->hotEntitySerials[i];
+      Entity *e = GetEntity(&editor->entityManager, serial);
+      editor->hotEntityInitialStates[i] = EntityToData(*e);
+   }
 }
 
 static void EditorUpdateCamFocus(Editor *editor, Camera *cam, Input input)
@@ -1016,42 +880,45 @@ static void EditorUpdateCamFocus(Editor *editor, Camera *cam, Input input)
    
    Quaternion c = cam->orientation;
    
-	v2 mouseDelta = input.mouseDelta;
+   v2 mouseDelta = input.mouseDelta;
    
-	f32 rotSpeed = 0.001f * 3.141592f;
+   f32 rotSpeed = 0.001f * 3.141592f;
    
-	f32 mouseCXRot =  mouseDelta.y * rotSpeed;
-	f32 mouseZRot  = -mouseDelta.x * rotSpeed;
+   f32 mouseCXRot =  mouseDelta.y * rotSpeed;
+   f32 mouseZRot  = -mouseDelta.x * rotSpeed;
    
    Quaternion rotX = AxisAngleToQuaternion(mouseCXRot, V3(1, 0, 0));
    Quaternion rotZ = AxisAngleToQuaternion(mouseZRot,  V3(0, 0, 1));
    Quaternion rot = rotX * c * rotZ;
    
-	v3 delta = cam->pos - editor->focusPoint;
-   // this somehow works, think about why tomorrow!
-   Quaternion conj = Inverse(c) * Inverse(rotX) * c * Inverse(rotZ);
-	cam->pos = editor->focusPoint +  QuaternionToMatrix3(conj) * delta;
+   v3 delta = cam->pos - editor->focusPoint;
    
-	cam->orientation = rot;
+   // todo really understand how this is the right math
+   Quaternion conj = Inverse(c) * Inverse(rotX) * c * Inverse(rotZ);
+   cam->pos = editor->focusPoint +  QuaternionToMatrix3(conj) * delta;
+   
+   cam->orientation = rot;
 }
 
-static void FrameColorSelection(Editor *editor, EntityManager *entityManager, v4 editorMeshSelectColor)
+static void FrameColorSelection(Editor *editor, v4 editorMeshSelectColor)
 {
-	For(editor->hotEntityInfos)
-	{
-		GetEntity(entityManager, it->placedSerial)->frameColor *= editorMeshSelectColor;
-	}
+   EntityManager *entityManager = &editor->entityManager;
+   For(editor->hotEntitySerials)
+   {
+      GetEntity(entityManager, *it)->frameColor *= editorMeshSelectColor;
+   }
 }
 
 // todo maybe make all this matrix stuff more consitent
-static void UpdateEditor(Editor *editor, EntityManager *entityManager, Camera *cam, Input input)
+static void UpdateEditor(Editor *editor, Input input)
 {
-	//Camera *cam = &entityManager->camera;
-	
-	UpdateColorPickers(editor, input);
+   EntityManager *entityManager = &editor->entityManager;
+   Camera *cam = &editor->camera;
    
-	switch (editor->state)
-	{
+   UpdateColorPickers(editor, input);
+   
+   switch (editor->state)
+   {
       case EditorState_DeleteSelection:
       {
          return;
@@ -1062,24 +929,24 @@ static void UpdateEditor(Editor *editor, EntityManager *entityManager, Camera *c
          return;
       }break;
       
-	}
+   }
    
-	if (!EditorHasSelection(editor))
-	{
-		return;
-	}
+   if (!EditorHasSelection(editor))
+   {
+      return;
+   }
    
-	Tweekable(v4, editorMeshSelectColor, V4(1.0f, 0.4f, 0.5f, 0.1f));
+   Tweekable(v4, editorMeshSelectColor, V4(1.0f, 0.4f, 0.5f, 0.1f));
    
-	switch (editor->state)
-	{
+   switch (editor->state)
+   {
       case EditorState_Default:
       {
-         FrameColorSelection(editor, entityManager, editorMeshSelectColor);
+         FrameColorSelection(editor, editorMeshSelectColor);
       }break;
       case EditorState_Rotating:
       {
-         v3 averagePos = GetAveragePosForSelection(editor, entityManager);
+         v3 averagePos = GetAveragePosForSelection(editor);
          
          //todo not sure about all this being in the z= 0 plane
          v2 oldP = ScreenZeroToOneToInGame(*cam, input.mouseZeroToOne - input.mouseZeroToOneDelta);
@@ -1091,9 +958,9 @@ static void UpdateEditor(Editor *editor, EntityManager *entityManager, Camera *c
          Quaternion q = AxisAngleToQuaternion(angle, V3(0, 0, 1));
          m4x4 mat = QuaternionToMatrix4(q);
          
-         For(editor->hotEntityInfos)
+         For(editor->hotEntitySerials)
          {
-            Entity *e = GetEntity(entityManager, it->placedSerial);
+            Entity *e = GetEntity(entityManager, *it);
             
             v4 relPos = V4(GetRenderPos(*e) - averagePos, 1.0f);
             e->orientation = q * e->orientation;
@@ -1107,7 +974,7 @@ static void UpdateEditor(Editor *editor, EntityManager *entityManager, Camera *c
          v2 mouseD = input.mouseZeroToOneDelta;
          if (mouseD == V2()) break;
          
-         v3 averagePos = GetAveragePosForSelection(editor, entityManager);
+         v3 averagePos = GetAveragePosForSelection(editor);
          
          m4x4 proj = Projection(cam->aspectRatio, cam->focalLength) * CameraTransform(cam->orientation, cam->pos);
          v4 projectiveMidPoint = V4(averagePos, 1.0f);
@@ -1121,9 +988,9 @@ static void UpdateEditor(Editor *editor, EntityManager *entityManager, Camera *c
          f32 dot = 3.0f * Dot(mouseD, d); // scale speed
          f32 exp = expf(dot);
          
-         For(editor->hotEntityInfos)
+         For(editor->hotEntitySerials)
          {
-            Entity *mesh = GetEntity(entityManager, it->placedSerial);
+            Entity *mesh = GetEntity(entityManager, *it);
             v3 delta = GetRenderPos(*mesh) - averagePos;
             v3 newPos = exp * delta + averagePos;
             
@@ -1135,7 +1002,7 @@ static void UpdateEditor(Editor *editor, EntityManager *entityManager, Camera *c
       case EditorState_Moving:
       {	
          // todo speed, but whatever
-         v3 averagePos = GetAveragePosForSelection(editor, entityManager);
+         v3 averagePos = GetAveragePosForSelection(editor);
          v3 oldP = ScreenZeroToOneToScreenInGame(*cam, input.mouseZeroToOne - input.mouseZeroToOneDelta);
          v3 newP = ScreenZeroToOneToScreenInGame(*cam, input.mouseZeroToOne);
          v3 camPos = cam->pos;
@@ -1152,20 +1019,20 @@ static void UpdateEditor(Editor *editor, EntityManager *entityManager, Camera *c
          v3 nI = camPos + nP.x * (newP - camPos);
          v3 realDelta = nI - oI;
          
-         For(editor->hotEntityInfos)
+         For(editor->hotEntitySerials)
          {
-            Entity *mesh = GetEntity(entityManager, it->placedSerial);
+            Entity *e = GetEntity(entityManager, *it);
             
-            v3 pos = GetRenderPos(*mesh) + realDelta;
+            v3 pos = GetRenderPos(*e) + realDelta;
             
-            mesh->physicalPos = RoundToTileMap(pos);
-            mesh->offset = pos - V3(mesh->physicalPos);
+            e->physicalPos = RoundToTileMap(pos);
+            e->offset = pos - V3(e->physicalPos);
          }
          
       }break;
       case EditorState_DragingPanel:
       {
-         FrameColorSelection(editor, entityManager, editorMeshSelectColor);
+         FrameColorSelection(editor, editorMeshSelectColor);
          editor->panel.pos += input.mouseZeroToOneDelta;
       }break;
       case EditorState_PickingColor:
@@ -1174,37 +1041,25 @@ static void UpdateEditor(Editor *editor, EntityManager *entityManager, Camera *c
       }break;
       case EditorState_AlteringValue:
       {
-         FrameColorSelection(editor, entityManager, editorMeshSelectColor);
+         FrameColorSelection(editor, editorMeshSelectColor);
       }break;
       
       default:
       {
          Die;
       }break;
-	}
+   }
 }
 
 
-static void ResetEditor(Editor *editor)
+static Level EditorStateToLevel(Editor *editor)
 {
-	EditorSelectNothing(editor);
-	EditorGoToNone(editor);
-   
-	editor->undoRedoBuffer.amount = 0;
-	editor->undoRedoAt = 0xFFFFFFFF;
-   
-	editor->focusPoint = V3();
-	editor->elements.amount = 0;
-	editor->panel.visible = false;
-   
-}
-
-static Level EditorStateToLevel(EntityManager *entityManager, SimData *sim)
-{
+   EntityManager *entityManager = &editor->entityManager;
+   EditorLevelInfo *info = &editor->levelInfo;
    Level level;
    level.camera        = entityManager->camera;
    level.lightSource   = entityManager->lightSource;
-   level.blocksNeeded  = sim->blocksNeeded;
+   level.blocksNeeded  = info->blocksNeeded;
    level.entities      = PushArray(frameArena, EntityCopyData, entityManager->entities.amount);
    
    for(u32 i = 0; i < entityManager->entities.amount; i++)
@@ -1215,13 +1070,6 @@ static Level EditorStateToLevel(EntityManager *entityManager, SimData *sim)
    return level;
 }
 
-static void NewLevel(EntityManager *entityManager, Editor *editor, Arena *currentStateArena)
-{
-	UnloadLevel(entityManager);
-	ResetEditor(editor);
-}
-
 
 
 #endif // !RR_EDITOR
-

@@ -84,8 +84,7 @@ static void TweekHelper(StringArray args)
 			ColorPicker picker = CreateColorPicker(&toTweek->vec4);
 			picker.tweeker = toTweek;
 			picker.isTweeker = true;
-			EditorUIElement elem = { EditorUI_ColorPicker, picker };
-			ArrayAdd(&gameState.editor.elements, elem);
+			ArrayAdd(&gameState.editor.colorPickers, picker);
 		}
       
 		ConsoleOutput("Current Tweeker Value is: %s", TweekerToString(*toTweek)); 
@@ -251,10 +250,13 @@ static void SaveLevelHelper(StringArray args)
    
 	char *fileName = FormatCString("level/%s.level", args[0]);
    
-   // TODO
-	WriteLevel(fileName, EditorStateToLevel(&gameState.entityManager, &gameState.executeData.simData), &gameState.assetHandler);
-	gameState.entityManager.levelName = CopyString(args[0], gameState.currentStateArena); // todo leak
-	ConsoleOutputError("Done!");
+   Level level = EditorStateToLevel(&gameState.editor);
+	if(!WriteLevel(fileName, level, &gameState.assetHandler))
+   {
+      ConsoleOutputError("An error accured while trying to save the level.!");
+   }
+   gameState.entityManager.levelName = CopyString(args[0], gameState.currentStateArena); // todo leak
+   ConsoleOutputError("Done!");
 }
 
 static void LoadLevelHelper(StringArray args)
@@ -273,40 +275,44 @@ static void LoadLevelHelper(StringArray args)
    
    Level level = LoadLevel(args[0], gameState.currentStateArena, &gameState.assetHandler);
    
-	if (!level.name.amount)
-	{
-		SwitchGameMode(&gameState, Game_Editor);
-		ConsoleOutput("Loaded level %s!", args[0]);
-		return;
-	}
+   if (!level.name.amount)
+   {
+      ConsoleOutputError("Tried to load \"level/%s.level\", no such file or directory!", args[0]);
+   }
    
-	ConsoleOutputError("Tried to load \"level/%s.level\", no such file or directory!", args[0]);
+   
+   ConsoleOutput("Loaded level %s!", args[0]);
+   return;
+   
 }
 
 static void NewLevelHelper(StringArray args)
 {
-	UnloadLevel(&gameState.entityManager);
-	ResetEntityManager(&gameState.entityManager);
-	ResetEditor(&gameState.editor);
-	
+   if(gameState.mode != Game_Editor)
+   {
+      ConsoleOutputError("Loading Levels only allowed in Editor.");
+      return;
+   }
    
-	ConsoleOutput("New Level! Save with 'saveLevel' command.");
+   NewLevel(&gameState.editor);
+   
+   ConsoleOutput("New Level! Save with 'saveLevel' command.");
 }
 
 static void AddMeshHelper(StringArray args)
 {
-	if (gameState.editor.state != EditorState_Default)
-	{
+   if (gameState.editor.state != EditorState_Default)
+   {
 		ConsoleOutputError("Editor is in a mode other then 'Default'. This is not 'yet' allowed.");
 		return;
-	}
+   }
    
-	b32 succsess = true;
-	String name = FormatString("%s.mesh", args[0]);
-	u32 id = RegisterAsset(&gameState.assetHandler, Asset_Mesh, name, &succsess);
+   b32 succsess = true;
+   String name = FormatString("%s.mesh", args[0]);
+   u32 id = RegisterAsset(&gameState.assetHandler, Asset_Mesh, name, &succsess);
    
-	if (succsess)
-	{
+   if (succsess)
+   {
 		TriangleMesh *mesh = GetMesh(&gameState.assetHandler, id);
 		EntityCopyData data;
 		data.color = V4(1, 1, 1, 1);
@@ -323,18 +329,18 @@ static void AddMeshHelper(StringArray args)
       
 		gameState.editor.state = EditorState_PlacingNewMesh;
 		EditorSelectNothing(&gameState.editor);
-	}
+   }
 }
 
 static void SaveCameraHelper(StringArray args)
 {
-	gameState.entityManager.camera = gameState.editor.camera;
+   gameState.entityManager.camera = gameState.editor.camera;
 }
 
 
 static void SetLightHelper(StringArray args)
 {
-	gameState.entityManager.lightSource.orientation = gameState.entityManager.camera.orientation;
+   gameState.entityManager.lightSource.orientation = gameState.entityManager.camera.orientation;
    gameState.entityManager.lightSource.pos = gameState.entityManager.camera.pos;
 }
 

@@ -2609,7 +2609,7 @@ static EntityCopyData EntityToData(Entity e)
    
 }
 
-static Level LoadLevel(String fileName, Arena *currentStateArena, AssetHandler *assetHandler)
+static Level LoadLevel(String fileName, Arena *arena, AssetHandler *assetHandler)
 {
    File file = LoadFile(FormatCString("level/%s.level", fileName), frameArena);
 	if (!file.fileSize) return {};
@@ -2619,7 +2619,7 @@ static Level LoadLevel(String fileName, Arena *currentStateArena, AssetHandler *
    
    Level level;
    
-   level.name = fileName; // would be weird if this breaks
+   level.name = CopyString(fileName, arena);
    level.lightSource = PullOff(LightSource);
    
 	level.camera.pos = PullOff(v3);
@@ -2641,7 +2641,7 @@ static Level LoadLevel(String fileName, Arena *currentStateArena, AssetHandler *
    
 	u32 meshAmount = PullOff(u32);
    
-	level.entities = PushArray(currentStateArena, EntityCopyData, meshAmount);
+	level.entities = PushArray(arena, EntityCopyData, meshAmount);
    
 	For(level.entities)
 	{

@@ -302,60 +302,47 @@ static void ExecuteHandleEvents(EntityManager *entityManager, AssetHandler *asse
 static void ColorPickersHandleEvents(Editor *editor, KeyStateMessage message, Input input)
 {
    
-	For(editor->elements)
-	{
-		switch (it->type)
-		{
-         case EditorUI_ColorPicker:
+   For(picker, editor->colorPickers)
+   {
+      if (!message.key == Key_leftMouse)
+      {
+         break;
+      }
+      
+      if ((message.flag & KeyState_PressedThisFrame))
+      {
+         if (PointInRectangle(picker->sliderPos, picker->width, picker->sliderHeight, input.mouseZeroToOne))
          {
-            ColorPicker *picker = &it->picker;
-            if (!message.key == Key_leftMouse)
-            {
-               break;
-            }
-            
-            if ((message.flag & KeyState_PressedThisFrame))
-            {
-               if (PointInRectangle(picker->sliderPos, picker->width, picker->sliderHeight, input.mouseZeroToOne))
-               {
-                  picker->selecting = (message.flag & KeyState_Down) ? PickerSelecting_Slider : PickerSelecting_Nothing;
-                  return;
-               }
-               if (PointInRectangle(picker->pos, picker->width, picker->height, input.mouseZeroToOne))
-               {
-                  picker->selecting = (message.flag & KeyState_Down) ? PickerSelecting_ColorPicker : PickerSelecting_Nothing;
-                  return;
-               }
-               if (PointInRectangle(picker->killRectPos, picker->headerSize, picker->headerSize, input.mouseZeroToOne))
-               {
-                  if (picker->isTweeker)
-                  {
-                     WriteSingleTweeker(*picker->tweeker);
-                  }
-                  ArrayRemove(&editor->elements, it);
-                  return;
-               }
-               if (PointInRectangle(picker->headerPos, picker->width, picker->headerSize, input.mouseZeroToOne))
-               {
-                  picker->selecting = (message.flag & KeyState_Down) ? PickerSelecting_Header : PickerSelecting_Nothing;
-                  return;
-               }
-               
-            }
-            if (message.flag & KeyState_ReleasedThisFrame)
-            {
-               picker->selecting = PickerSelecting_Nothing;
-            }
-            
+            picker->selecting = (message.flag & KeyState_Down) ? PickerSelecting_Slider : PickerSelecting_Nothing;
             return;
-         }break;
-         default:
+         }
+         if (PointInRectangle(picker->pos, picker->width, picker->height, input.mouseZeroToOne))
          {
-            Die;
-         }break;
+            picker->selecting = (message.flag & KeyState_Down) ? PickerSelecting_ColorPicker : PickerSelecting_Nothing;
+            return;
+         }
+         if (PointInRectangle(picker->killRectPos, picker->headerSize, picker->headerSize, input.mouseZeroToOne))
+         {
+            if (picker->isTweeker)
+            {
+               WriteSingleTweeker(*picker->tweeker);
+            }
+            
+            UnorderedRemove(&editor->colorPickers, (u32)(picker-- - editor->colorPickers.data));
+            return;
+         }
+         if (PointInRectangle(picker->headerPos, picker->width, picker->headerSize, input.mouseZeroToOne))
+         {
+            picker->selecting = (message.flag & KeyState_Down) ? PickerSelecting_Header : PickerSelecting_Nothing;
+            return;
+         }
          
-		}
-	}
+      }
+      if (message.flag & KeyState_ReleasedThisFrame)
+      {
+         picker->selecting = PickerSelecting_Nothing;
+      }
+   }
 }
 
 static v3i AdjustForCamera(Camera cam, KeyEnum key)
@@ -469,74 +456,62 @@ static v3i AdjustForCamera(Camera cam, KeyEnum key)
 	return V3i();
 }
 
-static void EditorHandleEvents(Editor *editor, EntityManager *entityManager, Camera *cam, AssetHandler *assetHandler, KeyStateMessage message, Input input, Arena *currentStateArena, SimData *sim)
+static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeyStateMessage message, Input input, Arena *currentStateArena)
 {
-   // todo tempoary, SimData should not be active at the same time as editor, but is right now.
-	For(editor->elements)
-	{
-		switch (it->type)
-		{
-         case EditorUI_ColorPicker:
-         {
-            ColorPicker *picker = &it->picker;
-            if (!message.key == Key_leftMouse)
-            {
-               break;
-            }
-            
-            if ((message.flag & KeyState_PressedThisFrame))
-            {
-               if (PointInRectangle(picker->sliderPos, picker->width, picker->sliderHeight, input.mouseZeroToOne))
-               {
-                  picker->selecting = PickerSelecting_Slider;
-                  return;
-               }
-               if (PointInRectangle(picker->pos, picker->width, picker->height, input.mouseZeroToOne))
-               {
-                  picker->selecting = PickerSelecting_ColorPicker;
-                  return;
-               }
-               if (PointInRectangle(picker->killRectPos, picker->headerSize, picker->headerSize, input.mouseZeroToOne))
-               {
-                  if (picker->isTweeker)
-                  {
-                     WriteSingleTweeker(*picker->tweeker);
-                  }
-                  ArrayRemove(&editor->elements, it);
-                  return;
-               }
-               if (PointInRectangle(picker->headerPos, picker->width, picker->headerSize, input.mouseZeroToOne))
-               {
-                  picker->selecting = PickerSelecting_Header;
-                  return;
-               }
-               
-            }
-            if (message.flag & KeyState_ReleasedThisFrame)
-            {
-               picker->selecting = PickerSelecting_Nothing;
-            }
-            
-            break;
-         }break;
-         default:
-         {
-            Die;
-         }break;
-         
-		}
-      
-	}
    
-	if (message.flag & KeyState_Down)
+   EntityManager *entityManager = &editor->entityManager;
+   Camera *cam = &editor->camera;
+   
+	For(picker, editor->colorPickers)
 	{
-		switch (editor->state)
-		{
+		
+      if (!message.key == Key_leftMouse)
+      {
+         break;
+      }
+      
+      if ((message.flag & KeyState_PressedThisFrame))
+      {
+         if (PointInRectangle(picker->sliderPos, picker->width, picker->sliderHeight, input.mouseZeroToOne))
+         {
+            picker->selecting = PickerSelecting_Slider;
+            return;
+         }
+         if (PointInRectangle(picker->pos, picker->width, picker->height, input.mouseZeroToOne))
+         {
+            picker->selecting = PickerSelecting_ColorPicker;
+            return;
+         }
+         if (PointInRectangle(picker->killRectPos, picker->headerSize, picker->headerSize, input.mouseZeroToOne))
+         {
+            if (picker->isTweeker)
+            {
+               WriteSingleTweeker(*picker->tweeker);
+            }
+            UnorderedRemove(&editor->colorPickers, (u32)(picker-- - editor->colorPickers.data));
+            return;
+         }
+         if (PointInRectangle(picker->headerPos, picker->width, picker->headerSize, input.mouseZeroToOne))
+         {
+            picker->selecting = PickerSelecting_Header;
+            return;
+         }
+         
+      }
+      if (message.flag & KeyState_ReleasedThisFrame)
+      {
+         picker->selecting = PickerSelecting_Nothing;
+      }
+   }
+   
+   if (message.flag & KeyState_PressedThisFrame)
+   {
+      switch (editor->state)
+      {
          case EditorState_PickingColor:
          {
-            EditorPushUndo(editor, entityManager);
-            
-            ResetSelectionInitials(editor, entityManager);
+            EditorPushUndo(editor);
+            ResetSelectionInitials(editor);
             EditorGoToNone(editor);
          }break;
          case EditorState_Default:
@@ -580,8 +555,8 @@ static void EditorHandleEvents(Editor *editor, EntityManager *entityManager, Cam
                            }break;
                            case Tweeker_EntityType:
                            {
-                              if (editor->hotEntityInfos.amount != 1) break;
-                              Entity *e = GetEntity(entityManager, editor->hotEntityInfos[0].placedSerial);
+                              if (editor->hotEntitySerials.amount != 1) break;
+                              Entity *e = GetEntity(entityManager, editor->hotEntitySerials[0]);
                               
                               if (PointInRectangle(pos, 0.5f * widthWithoutBoarder, height, input.mouseZeroToOne))
                               {
@@ -668,7 +643,7 @@ static void EditorHandleEvents(Editor *editor, EntityManager *entityManager, Cam
                                  editor->panel.hotValue = (u32)(it - p->values.data);
                                  
                                  ColorPicker picker = CreateColorPicker(it->vec4);
-                                 ArrayAdd(&editor->elements, { EditorUI_ColorPicker, picker });
+                                 ArrayAdd(&editor->colorPickers,  picker);
                                  return;
                               }
                            }break;
@@ -691,21 +666,23 @@ static void EditorHandleEvents(Editor *editor, EntityManager *entityManager, Cam
                      if (!hotEntity) break;
                      
                      b32 allreadyIn = false;
-                     For(editor->hotEntityInfos)
+                     For(editor->hotEntitySerials)
                      {
-                        if (it->placedSerial == hotEntity->serialNumber)
+                        if (*it == hotEntity->serialNumber)
                         {
                            allreadyIn = true;
-                           u32 it_index = (u32)(it - editor->hotEntityInfos.data);
-                           UnorderedRemove(&editor->hotEntityInfos, it_index);
+                           u32 it_index = (u32)(it - editor->hotEntitySerials.data);
+                           UnorderedRemove(&editor->hotEntitySerials, it_index);
+                           UnorderedRemove(&editor->hotEntityInitialStates, it_index);
                         }
                      }
                      
                      if (allreadyIn) break;
                      
-                     EditorSelect toAdd = EntityToEditorSelect(hotEntity);
+                     EntityCopyData toAdd = EntityToData(*hotEntity);
                      
-                     ArrayAdd(&editor->hotEntityInfos, toAdd);
+                     ArrayAdd(&editor->hotEntityInitialStates, toAdd);
+                     ArrayAdd(&editor->hotEntitySerials, hotEntity->serialNumber);
                      
                      editor->panel.values.amount = 0;
                      editor->panel.visible = true;
@@ -713,16 +690,15 @@ static void EditorHandleEvents(Editor *editor, EntityManager *entityManager, Cam
                      break;
                   }
                   
-                  if (EditorHasSelection(editor))
-                  {
-                     EditorSelectNothing(editor);
-                  }
+                  // todo should this go inside if(hotEntity)?
+                  EditorSelectNothing(editor);
                   
                   if (hotEntity)
                   {
-                     EditorSelect toAdd = EntityToEditorSelect(hotEntity);
+                     EntityCopyData toAdd = EntityToData(*hotEntity);
                      
-                     ArrayAdd(&editor->hotEntityInfos, toAdd);
+                     ArrayAdd(&editor->hotEntityInitialStates, toAdd);
+                     ArrayAdd(&editor->hotEntitySerials, hotEntity->serialNumber);
                      editor->panel.visible = true;
                      
                      ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_b32, "SnapToTileMap", &editor->snapToTileMap));
@@ -746,18 +722,18 @@ static void EditorHandleEvents(Editor *editor, EntityManager *entityManager, Cam
                case Key_left:
                {
                   v3i inc = AdjustForCamera(*cam, Key_left);
-                  For(editor->hotEntityInfos)
+                  For(editor->hotEntitySerials)
                   {
-                     Entity *mesh = GetEntity(entityManager, it->placedSerial);
+                     Entity *mesh = GetEntity(entityManager, *it);
                      mesh->physicalPos += inc;
                   }
                }break;
                case Key_right:
                {
                   v3i inc = AdjustForCamera(*cam, Key_right);
-                  For(editor->hotEntityInfos)
+                  For(editor->hotEntitySerials)
                   {
-                     Entity *mesh = GetEntity(entityManager, it->placedSerial);
+                     Entity *mesh = GetEntity(entityManager, *it);
                      mesh->physicalPos += inc;
                   }
                   
@@ -766,18 +742,18 @@ static void EditorHandleEvents(Editor *editor, EntityManager *entityManager, Cam
                {
                   if (message.flag & KeyState_ControlDown)
                   {
-                     For(editor->hotEntityInfos)
+                     For(editor->hotEntitySerials)
                      {
-                        Entity *mesh = GetEntity(entityManager, it->placedSerial);
+                        Entity *mesh = GetEntity(entityManager, *it);
                         mesh->physicalPos += V3i(0, 0, -1);
                      }
                      break;
                   }
                   
                   v3i inc = AdjustForCamera(*cam, Key_up);
-                  For(editor->hotEntityInfos)
+                  For(editor->hotEntitySerials)
                   {
-                     Entity *mesh = GetEntity(entityManager, it->placedSerial);
+                     Entity *mesh = GetEntity(entityManager, *it);
                      mesh->physicalPos += inc;
                   }
                   
@@ -786,18 +762,18 @@ static void EditorHandleEvents(Editor *editor, EntityManager *entityManager, Cam
                {
                   if (message.flag & KeyState_ControlDown)
                   {
-                     For(editor->hotEntityInfos)
+                     For(editor->hotEntitySerials)
                      {
-                        Entity *mesh = GetEntity(entityManager, it->placedSerial);
+                        Entity *mesh = GetEntity(entityManager, *it);
                         mesh->physicalPos += V3i(0, 0, 1);
                      }
                      break;
                   }
                   
                   v3i inc = AdjustForCamera(*cam, Key_down);
-                  For(editor->hotEntityInfos)
+                  For(editor->hotEntitySerials)
                   {
-                     Entity *mesh = GetEntity(entityManager, it->placedSerial);
+                     Entity *mesh = GetEntity(entityManager, *it);
                      mesh->physicalPos += inc;
                   }
                   
@@ -805,29 +781,28 @@ static void EditorHandleEvents(Editor *editor, EntityManager *entityManager, Cam
                
                case Key_g:
                {
-                  ResetSelectionInitials(editor, entityManager);
+                  // we reset once we did an action
                   editor->state = EditorState_Moving;
                }break;
                case Key_r:
                {
-                  ResetSelectionInitials(editor, entityManager);
                   editor->state = EditorState_Rotating;
                }break;
                case Key_s:
                {
-                  ResetSelectionInitials(editor, entityManager);
-                  
                   if ((message.flag & KeyState_ControlDown))
                   {
-                     if (!entityManager->levelName.amount) break;
+                     if (!editor->levelInfo.name.amount) break;
                      
+                     // todo maybe not needed...
                      For(entityManager->entities)
                      {
                         it->initialPos = it->physicalPos;
                      }
                      
-                     char *fileName = FormatCString("level/%s.level", entityManager->levelName);
-                     if (WriteLevel(fileName, EditorStateToLevel(entityManager, sim), assetHandler))
+                     char *fileName = FormatCString("level/%s.level", editor->levelInfo.name);
+                     Level level = EditorStateToLevel(editor);
+                     if (WriteLevel(fileName, level, assetHandler))
                      {
                         ConsoleOutput("Saved!");
                      }
@@ -842,28 +817,18 @@ static void EditorHandleEvents(Editor *editor, EntityManager *entityManager, Cam
                }break;
                case Key_c:
                {
-                  if (!editor->hotEntityInfos) break;
+                  if (!editor->hotEntitySerials) break;
                   
                   if (message.flag & KeyState_ControlDown)
                   {
                      editor->clipBoard.amount = 0;
-                     v3 averagePos = GetAveragePosForSelection(editor, entityManager);
+                     v3 averagePos = GetAveragePosForSelection(editor);
                      v3i averageTile = SnapToTileMap(averagePos);
                      averageTile.z = 0;
-                     For(editor->hotEntityInfos)
-                     {
-                        Entity *mesh = GetEntity(entityManager, it->placedSerial);
-                        EntityCopyData data;
-                        data.color = mesh->color;
-                        data.meshId = mesh->meshId;
-                        data.orientation = mesh->orientation;
-                        data.physicalPos = mesh->physicalPos - averageTile;
-                        data.offset = mesh->offset;
-                        data.scale = mesh->scale;
-                        data.flags = mesh->flags;
-                        data.type = mesh->type;
-                        ArrayAdd(&editor->clipBoard, data);
-                     }
+                     // we are in default state, so initalstates are just the actual states
+                     Reserve(&editor->clipBoard, editor->hotEntityInitialStates.amount);
+                     memcpy(editor->clipBoard.data, editor->hotEntityInitialStates.data, editor->hotEntityInitialStates.amount * sizeof(EntityCopyData));
+                     editor->clipBoard.amount = editor->hotEntityInitialStates.amount;
                   }
                   
                }break;
@@ -886,7 +851,7 @@ static void EditorHandleEvents(Editor *editor, EntityManager *entityManager, Cam
                   if (message.flag & KeyState_ControlDown)
                   {
                      EditorSelectNothing(editor);
-                     EditorPerformUndo(editor, entityManager);
+                     EditorPerformUndo(editor);
                   }
                }break;
                case Key_y:
@@ -894,7 +859,7 @@ static void EditorHandleEvents(Editor *editor, EntityManager *entityManager, Cam
                   if (message.flag & KeyState_ControlDown)
                   {
                      EditorSelectNothing(editor);
-                     EditorPerformRedo(editor, entityManager);
+                     EditorPerformRedo(editor);
                   }
                }break;
                case Key_x:
@@ -944,7 +909,7 @@ static void EditorHandleEvents(Editor *editor, EntityManager *entityManager, Cam
                      break;
                   }
                   
-                  v3 averagePos = GetAveragePosForSelection(editor, entityManager);
+                  v3 averagePos = GetAveragePosForSelection(editor);
                   cam->pos = averagePos + cam->pos - editor->focusPoint;
                   editor->focusPoint = averagePos;
                   
@@ -968,14 +933,13 @@ static void EditorHandleEvents(Editor *editor, EntityManager *entityManager, Cam
             {
                case Key_leftMouse:
                {
-                  EditorPushUndo(editor, entityManager);
-                  ResetSelectionInitials(editor, entityManager);
+                  EditorPushUndo(editor);
+                  ResetSelectionInitials(editor);
                   EditorGoToNone(editor);
                }break;
                case Key_rightMouse:
                {
-                  ResetHotMeshes(editor, entityManager);
-                  ResetSelectionInitials(editor, entityManager);
+                  ResetHotMeshes(editor);
                   EditorGoToNone(editor);
                }break;
                
@@ -988,22 +952,21 @@ static void EditorHandleEvents(Editor *editor, EntityManager *entityManager, Cam
                case Key_leftMouse:
                {
                   if (editor->snapToTileMap)
-                  {
-                     For(editor->hotEntityInfos)
+                  {   // todo this is garbage.
+                     For(editor->hotEntitySerials)
                      {
-                        Entity *mesh = GetEntity(entityManager, it->placedSerial);
+                        Entity *mesh = GetEntity(entityManager, *it);
                         mesh->offset = V3();
                      }
                   }
                   
-                  EditorPushUndo(editor, entityManager);
-                  ResetSelectionInitials(editor, entityManager);
+                  EditorPushUndo(editor);
+                  ResetSelectionInitials(editor);
                   EditorGoToNone(editor);
                }break;
                case Key_rightMouse:
                {
-                  ResetHotMeshes(editor, entityManager);
-                  ResetSelectionInitials(editor, entityManager);
+                  ResetHotMeshes(editor);
                   EditorGoToNone(editor);
                }break;
                
@@ -1015,14 +978,13 @@ static void EditorHandleEvents(Editor *editor, EntityManager *entityManager, Cam
             {
                case Key_leftMouse:
                {
-                  EditorPushUndo(editor, entityManager);
-                  ResetSelectionInitials(editor, entityManager);
+                  EditorPushUndo(editor);
+                  ResetSelectionInitials(editor);
                   EditorGoToNone(editor);
                }break;
                case Key_rightMouse:
                {
-                  ResetHotMeshes(editor, entityManager);
-                  ResetSelectionInitials(editor, entityManager);
+                  ResetHotMeshes(editor);
                   EditorGoToNone(editor);
                }break;
                
@@ -1214,8 +1176,8 @@ static void EditorHandleEvents(Editor *editor, EntityManager *entityManager, Cam
                   t->string.length = 0;
                   editor->panel.hotValue = 0xFFFFFFFF;
                   
-                  EditorPushUndo(editor, entityManager);
-                  ResetSelectionInitials(editor, entityManager);
+                  EditorPushUndo(editor);
+                  ResetSelectionInitials(editor);
                   EditorGoToNone(editor);
                   break;
                }break;
@@ -1249,24 +1211,18 @@ static void EditorHandleEvents(Editor *editor, EntityManager *entityManager, Cam
                      v3i pos = it->physicalPos + clickedTile;
                      v3 offset = editor->snapToTileMap ? V3() : (it->offset + clickedOffset);
                      
-                     Entity mesh = CreateEntity(entityManager, it->type, it->meshId, pos, it->scale, it->orientation, offset, it->color, it->flags);
-                     EditorSelect add;
-                     add.initialOrientation = mesh.orientation;
-                     add.initialPhysicalPos = mesh.physicalPos;
-                     add.initialOffset = mesh.offset;
-                     add.initialScale = mesh.scale;
-                     add.initialColor = mesh.color;
-                     add.placedSerial = mesh.serialNumber;
-                     ArrayAdd(&editor->hotEntityInfos, add);
+                     Entity e = CreateEntity(entityManager, it->type,it->meshId, pos, it->scale, it->orientation, offset, it->color, it->flags);
+                     
+                     ArrayAdd(&editor->hotEntityInitialStates, EntityToData(e));
+                     ArrayAdd(&editor->hotEntitySerials, e.serialNumber);
                   }
                   
-                  EditorPushUndo(editor, entityManager); // needs them to be selected
-                  ResetSelectionInitials(editor, entityManager);
+                  EditorPushUndo(editor); // needs them to be selected
+                  ResetSelectionInitials(editor);
                   EditorGoToNone(editor);
                }break;
                case Key_rightMouse:
                {
-                  ResetSelectionInitials(editor, entityManager);
                   EditorGoToNone(editor);
                }break;
             }
@@ -1278,18 +1234,17 @@ static void EditorHandleEvents(Editor *editor, EntityManager *entityManager, Cam
                case Key_leftMouse:
                {
                   // needs the meshes to be selected, so not yet dead
-                  EditorPushUndo(editor, entityManager);
-                  For(editor->hotEntityInfos)
+                  EditorPushUndo(editor);
+                  For(editor->hotEntitySerials)
                   {
-                     RemoveEntity(entityManager, it->placedSerial);
+                     RemoveEntity(entityManager, *it);
                   }
+                  
                   EditorSelectNothing(editor);
-                  ResetSelectionInitials(editor, entityManager);
                   EditorGoToNone(editor);
                }break;
                case Key_rightMouse:
                {
-                  ResetSelectionInitials(editor, entityManager);
                   EditorGoToNone(editor);
                }break;
             }
@@ -1299,13 +1254,13 @@ static void EditorHandleEvents(Editor *editor, EntityManager *entityManager, Cam
             
          }break;
          InvalidDefaultCase;
-		}
-	}
+      }
+   }
    
-	if (message.flag & KeyState_Up)
-	{
-		switch (message.key)
-		{
+   if (message.flag & KeyState_Up)
+   {
+      switch (message.key)
+      {
          
          case Key_leftMouse:
          {
@@ -1327,8 +1282,8 @@ static void EditorHandleEvents(Editor *editor, EntityManager *entityManager, Cam
             }
             
          }break;
-		}
-	}
+      }
+   }
    
 }
 

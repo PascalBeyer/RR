@@ -640,9 +640,11 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor, Font font)
    
 }
 
-static void RenderEditor(RenderGroup *rg, AssetHandler *assetHandler, Editor editor, EntityManager *entityManager, Input input)
+static void RenderEditor(RenderGroup *rg, AssetHandler *assetHandler, Editor editor,  Input input)
 {
    PushDebugPointCuboid(rg, editor.focusPoint);
+   
+   EntityManager *entityManager = &editor.entityManager;
    
 	For(entityManager->entities)
 	{
@@ -655,9 +657,9 @@ static void RenderEditor(RenderGroup *rg, AssetHandler *assetHandler, Editor edi
       {
          if (!editor.snapToTileMap) break;
          
-         For(editor.hotEntityInfos)
+         For(editor.hotEntitySerials)
          {
-            Entity *e = GetEntity(entityManager, it->placedSerial);
+            Entity *e = GetEntity(entityManager, *it);
             
             PushTriangleMesh(rg, e->meshId, e->orientation, V3(e->physicalPos), e->scale, e->color * V4(0.5f, 1.0f, 1.0f, 1.0f));
          }
@@ -681,15 +683,15 @@ static void RenderEditor(RenderGroup *rg, AssetHandler *assetHandler, Editor edi
       }break;
 	}
    
-	if (!editor.hotEntityInfos.amount) return;
+	if (!editor.hotEntitySerials.amount) return;
    
-	v3 averagePos = GetAveragePosForSelection(&editor, entityManager);
+	v3 averagePos = GetAveragePosForSelection(&editor);
    
 	PushDebugPointCuboid(rg, V3(averagePos.xy, 0.0f));
    
-	For(editor.hotEntityInfos)
+	For(editor.hotEntitySerials)
 	{
-		Entity *e = GetEntity(entityManager, it->placedSerial);
+		Entity *e = GetEntity(entityManager, *it);
 		PushDebugPointCuboid(rg, V3(e->physicalPos), V4(1.0f, 0.3f, 0.6f, 0.1f));
 		AABB transformedAABB = GetMesh(assetHandler, e->meshId)->aabb;
       
@@ -748,21 +750,60 @@ static void RenderEditorUI(RenderGroup *rg, Editor editor, Font font)
    
 	RenderEditorPanel(rg, editor, font);
    
-	For(editor.elements)
+	For(editor.colorPickers)
 	{
-		switch (it->type)
-		{
-         case EditorUI_ColorPicker:
-         {
-            RenderColorPicker(rg, &it->picker);
-         }break;
-         default:
-         {
-            Die;
-         }break;
-         
-		}
-	}
+      RenderColorPicker(rg, it);
+   }
+}
+
+static void RenderEntityAABBOutline(RenderGroup *rg, AssetHandler *assetHandler, Entity *e, f32 t)
+{
+   MeshInfo *info = GetMeshInfo(assetHandler, e->meshId);
+   if (!info) return;
+   AABB transformedAABB = info->aabb;
+   
+   transformedAABB.minDim *= e->scale;
+   transformedAABB.maxDim *= e->scale;
+   
+   m4x4 mat = Translate(QuaternionToMatrix4(e->orientation), GetRenderPos(*e, t));
+   
+   v3 d1 = V3(transformedAABB.maxDim.x - transformedAABB.minDim.x, 0, 0);
+   v3 d2 = V3(0, transformedAABB.maxDim.y - transformedAABB.minDim.y, 0);
+   v3 d3 = V3(0, 0, transformedAABB.maxDim.z - transformedAABB.minDim.z);
+   
+   v3 p[8] =
+   {
+      mat * transformedAABB.minDim,			//0
+      
+      mat * (transformedAABB.minDim + d1),		//1
+      mat * (transformedAABB.minDim + d2),		//2
+      mat * (transformedAABB.minDim + d3),		//3
+      
+      mat * (transformedAABB.minDim + d1 + d2),	//4
+      mat * (transformedAABB.minDim + d2 + d3),	//5
+      mat * (transformedAABB.minDim + d3 + d1),	//6
+      
+      mat * transformedAABB.maxDim,			//7
+      
+   };
+   
+   //_upper_ square
+   PushLine(rg, p[0], p[1]);
+   PushLine(rg, p[1], p[4]);
+   PushLine(rg, p[4], p[2]);
+   PushLine(rg, p[2], p[0]);
+   
+   //_lower_ square
+   PushLine(rg, p[7], p[5]);
+   PushLine(rg, p[5], p[3]);
+   PushLine(rg, p[3], p[6]);
+   PushLine(rg, p[6], p[7]);
+   
+   //_connecting_ lines
+   PushLine(rg, p[0], p[3]);
+   PushLine(rg, p[2], p[5]);
+   PushLine(rg, p[1], p[6]);
+   PushLine(rg, p[4], p[7]);
 }
 
 static void RenderEntityQuadTree(RenderGroup *rg, TileOctTreeNode *node)

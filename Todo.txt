@@ -131,11 +131,23 @@ Animation player (save in skeleton?, save in world?)
 do weight averageing in the loading.
 I feel like skeletons and meshes should be parralel. And so should bones and bone names
 
-the whole what gameState are we in situation should be way clearer 
+
+save level helper does not work right now. //done?
+make DrawEntityAABB // done?
+LoadLevelHelper should call GetLevel(AssetHandler *assetHandler, String name); // done ? sort of
+make sure all Editor actions have the serial // done?
+
 
 move the camera out of the entity manager
-save level helper does not work right now.
-LoadLevelHelper should call GetLevel(AssetHandler *assetHandler, String name);
-
 get rid of most/all dynamic allocations in AssetLoading
 we should probably make initEntityManager and load level one call
+
+the whole what gameState are we in situation should be way clearer 
+Add occupied and free to the dynamic allocator
+
+rethink how the snap to tilemap system works
+make the panel load its values dynamically
+make like a moved blocks per arrows flag so we can record one undo for a bundle of block moves
+
+
+

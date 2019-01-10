@@ -1430,6 +1430,59 @@ static m4x4 CameraTransform(Quaternion q, v3 P)
 }
 
 
+struct EulerAngle
+{
+	f32 XRotation;
+	f32 YRotation;
+	f32 ZRotation;
+};
+
+static EulerAngle QuaternionToEulerAngle(Quaternion q)
+{
+	EulerAngle ret;
+   
+	// roll (x-axis rotation)
+	f32 sinr_cosp = 2.0f * (q.w * q.x + q.y * q.z);
+	f32 cosr_cosp = 1.0f - 2.0f * (q.x * q.x + q.y * q.y);
+	ret.XRotation = atan2f(sinr_cosp, cosr_cosp);
+   
+	// pitch (y-axis rotation)
+	f32 sinp = 2.0f * (q.w * q.y - q.z * q.x);
+	if (fabs(sinp) >= 1)
+	{
+		ret.YRotation = copysignf(PI / 2, sinp); // use 90 degrees if out of range
+	}
+	else
+	{
+		ret.YRotation = asinf(sinp);
+	}
+   
+	// yaw (z-axis rotation)
+	f32 siny_cosp = 2.0f * (q.w * q.z + q.x * q.y);
+	f32 cosy_cosp = 1.0f - 2.0f * (q.y * q.y + q.z * q.z);
+	ret.ZRotation = atan2f(siny_cosp, cosy_cosp);
+   
+	return ret;
+}
+
+static Quaternion EulerAngleToQuaternion(EulerAngle angle)
+{
+   
+	f32 cr = Cos(angle.XRotation * 0.5f);
+	f32 sr = Sin(angle.XRotation * 0.5f);
+	f32 cp = Cos(angle.YRotation * 0.5f);
+	f32 sp = Sin(angle.YRotation * 0.5f);
+	f32 cy = Cos(angle.ZRotation * 0.5f);
+	f32 sy = Sin(angle.ZRotation * 0.5f);
+   
+	Quaternion q;
+	q.w = cy * cp * cr + sy * sp * sr;
+	q.x = cy * cp * sr - sy * sp * cr;
+	q.y = sy * cp * sr + cy * sp * cr;
+	q.z = sy * cp * cr - cy * sp * sr;
+	return q;
+}
+
 
 #endif
 
