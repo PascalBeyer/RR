@@ -507,6 +507,10 @@ static void EditorLoadLevel(Editor *editor, Arena *currentStateArena, Level *lev
    EditorGoToNone(editor);
    editor->undoRedoBuffer.amount = 0;
    editor->camera = level->camera;
+   editor->levelInfo.camera = level->camera;
+   editor->levelInfo.name = CopyString(level->name, currentStateArena);
+   editor->levelInfo.lightSource = level->lightSource;
+   editor->levelInfo.blocksNeeded = level->blocksNeeded;
    editor->focusPoint = V3(ScreenZeroToOneToInGame(editor->camera, V2(0.5f, 0.5f)), 0.0f);
    
    ResetEditorPanel(editor);
@@ -563,10 +567,12 @@ static v3i RoundToTileMap(v3 pos)
    return V3i((i32)floorf(pos.x + 0.5f), (i32)floorf(pos.y + 0.5f), (i32)floorf(pos.z + 0.5f));
 }
 
-static Entity *GetHotEntity(EntityManager *entityManager, AssetHandler *handler, v2 mousePosZeroToOne)
+static Entity *GetHotEntity(Camera cam, EntityManager *entityManager, AssetHandler *handler, v2 mousePosZeroToOne)
 {
-   v3 camP = entityManager->camera.pos; // todo camera or debugCamera? Maybe we should again unify them
-   v3 camD = ScreenZeroToOneToDirecion(entityManager->camera, mousePosZeroToOne);
+   
+   
+   v3 camP = cam.pos; // todo camera or debugCamera? Maybe we should again unify them
+   v3 camD = ScreenZeroToOneToDirecion(cam, mousePosZeroToOne);
    
    f32 minDist = F32MAX;
    

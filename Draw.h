@@ -183,7 +183,7 @@ static void RenderSimulate(RenderGroup *rg, EntityManager *entityManager)
 
 static void RenderPlacingUnits(RenderGroup *rg, ExecuteData *exe, EntityManager *entityManager, AssetHandler *assetHandler, Input input)
 {
-	Entity *clickedE = GetHotEntity(entityManager, assetHandler, input.mouseZeroToOne);
+	Entity *clickedE = GetHotEntity(entityManager->camera, entityManager, assetHandler, input.mouseZeroToOne);
 	if (clickedE)
 	{
 		v3i pos = clickedE->physicalPos + V3i(0, 0, -1);

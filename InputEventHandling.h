@@ -8,7 +8,7 @@ static void PlacingUnitsHandleEvent(ExecuteData *exe, EntityManager *entityManag
          case Key_leftMouse:
          {
             // todo only ones that are in the tree, i.e. are gamePlay related
-            Entity *clickedE = GetHotEntity(entityManager, assetHandler, input.mouseZeroToOne); 
+            Entity *clickedE = GetHotEntity(entityManager->camera, entityManager, assetHandler, input.mouseZeroToOne); 
             if (clickedE)
             {
                v3i posToPlace = clickedE->physicalPos + V3i(0, 0, -1);
@@ -659,7 +659,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      return;
                   }
                   
-                  Entity *hotEntity = GetHotEntity(entityManager, assetHandler, input.mouseZeroToOne);
+                  Entity *hotEntity = GetHotEntity(editor->camera, entityManager, assetHandler, input.mouseZeroToOne);
                   
                   if (message.flag & KeyState_ShiftDown)
                   {
