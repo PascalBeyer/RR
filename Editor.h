@@ -401,6 +401,98 @@ struct EditorAction
 };
 DefineDynamicArray(EditorAction);
 
+struct EditorEntities
+{
+   // todo make some sort of bucketed array.
+	
+	EntityDynamicArray entities;
+   u32 entitySerializer;
+	u32DynamicArray entitySerialMap;
+};
+
+static Entity *GetEntity(EditorEntities *editorEntities, u32 serialNumber)
+{
+	u32 index = editorEntities->entitySerialMap[serialNumber];
+	Entity *ret = editorEntities->entities + index;
+	return ret;
+}
+
+static Entity *CreateEntity(EditorEntities *editorEntities, EntityType type, u32 meshID, v3i pos, f32 scale, Quaternion orientation, v3 offset, v4 color, u64 flags)
+{
+	Entity ret;
+	ret.meshId = meshID;
+	ret.scale = scale;
+	ret.orientation = orientation;
+	ret.physicalPos = pos;
+	ret.initialPos = pos;
+	ret.offset = offset;
+	ret.color = color;
+	ret.frameColor = V4(1, 1, 1, 1);
+	ret.serialNumber = editorEntities->entitySerializer++;
+	ret.type = type;
+	ret.flags = flags;
+	ret.interpolation = {};
+	
+	u32 arrayIndex = ArrayAdd(&editorEntities->entities, ret);
+   
+	Assert(ret.serialNumber == editorEntities->entitySerialMap.amount);
+	ArrayAdd(&editorEntities->entitySerialMap, arrayIndex);
+	
+	return editorEntities->entities + arrayIndex;
+};
+
+static void RestoreEntity(EditorEntities *editorEntities, u32 serial, u32 meshID, f32 scale, Quaternion orientation, v3i pos, v3 offset, v4 color, EntityType type, u64 flags)
+{
+	Entity ret;
+	ret.meshId = meshID;
+	ret.scale = scale;
+	ret.orientation = orientation;
+	ret.physicalPos = pos;
+	ret.offset = offset;
+	ret.color = color;
+	ret.frameColor = V4(1, 1, 1, 1);
+	ret.serialNumber = serial;
+	ret.type = type;
+	ret.flags = flags;
+	ret.interpolation = {};
+   
+	u32 arrayIndex = ArrayAdd(&editorEntities->entities, ret);
+   
+	Assert(editorEntities->entitySerialMap[serial] == 0xFFFFFFFF);
+	editorEntities->entitySerialMap[serial] = arrayIndex;
+}
+
+static void RemoveEntity(EditorEntities *editorEntities, u32 serial)
+{
+	u32 index = editorEntities->entitySerialMap[serial];
+	Entity *toRemove = editorEntities->entities + index;
+   
+	editorEntities->entitySerialMap[serial] = 0xFFFFFFFF;
+   
+	u32 lastIndex = editorEntities->entities.amount - 1;
+	if (index != lastIndex)
+	{
+		u32 serialNumberToChange = editorEntities->entities[lastIndex].serialNumber;
+		editorEntities->entitySerialMap[serialNumberToChange] = index;
+	}
+	UnorderedRemove(&editorEntities->entities, index);
+}
+
+static EditorEntities InitEditorEntities(Arena *currentStateArena, Level *level)
+{
+	EditorEntities ret;
+   
+   ret.entitySerializer = 0;
+	ret.entities = EntityCreateDynamicArray(level->entities.amount);
+   ret.entitySerialMap = u32CreateDynamicArray(level->entities.amount);
+   
+   For(level->entities)
+   {
+      CreateEntity(&ret, it->type, it->meshId, it->physicalPos, it->scale, it->orientation, it->offset, it->color, it->flags);
+   }
+   
+	return ret;
+}
 
 typedef EntityCopyDataDynamicArray EditorClipBoard;
 
@@ -421,7 +513,7 @@ struct Editor
    
    EditorLevelInfo levelInfo;
    
-   EntityManager entityManager;
+   EditorEntities editorEntities;
    
    u32DynamicArray hotEntitySerials;
 	EntityCopyDataDynamicArray hotEntityInitialStates;
@@ -471,19 +563,10 @@ static void NewLevel(Editor *editor)
    
    editor->focusPoint = V3();
    
-   EntityManager *entityManager = &editor->entityManager;
-   
-   entityManager->at = 0;
-	entityManager->camera.orientation = QuaternionId();
-   entityManager->camera.pos = V3(0, 0, -5);
-   entityManager->camera.focalLength = 1.0f;
-   entityManager->camera.aspectRatio = 16.0f / 9.0f;
-   
-	entityManager->entities.amount = 0; // this before ResetTree, makes the reset faster
-	ResetTree(entityManager, &entityManager->entityTree);
-	entityManager->entitySerialMap.amount = 0;
-	entityManager->entitySerializer = 0;
-	entityManager->debugCamera = entityManager->camera;
+   EditorEntities *editorEntities = &editor->editorEntities;
+	editorEntities->entities.amount = 0; // this before ResetTree, makes the reset faster
+	editorEntities->entitySerialMap.amount = 0;
+	editorEntities->entitySerializer = 0;
 }
 
 
@@ -492,7 +575,7 @@ static v3 GetAveragePosForSelection(Editor *editor)
 	v3 averagePos = V3();
 	For(editor->hotEntitySerials)
 	{
-      Entity *e = GetEntity(&editor->entityManager, *it);
+      Entity *e = GetEntity(&editor->editorEntities, *it);
 		averagePos += GetRenderPos(*e);
 	}
 	averagePos /= (f32)editor->hotEntitySerials.amount;
@@ -501,7 +584,7 @@ static v3 GetAveragePosForSelection(Editor *editor)
 
 static void EditorLoadLevel(Editor *editor, Arena *currentStateArena, Level *level)
 {
-   editor->entityManager = InitEntityManager(currentStateArena, level);
+   editor->editorEntities = InitEditorEntities(currentStateArena, level);
    
    EditorSelectNothing(editor);
    EditorGoToNone(editor);
@@ -567,7 +650,7 @@ static v3i RoundToTileMap(v3 pos)
    return V3i((i32)floorf(pos.x + 0.5f), (i32)floorf(pos.y + 0.5f), (i32)floorf(pos.z + 0.5f));
 }
 
-static Entity *GetHotEntity(Camera cam, EntityManager *entityManager, AssetHandler *handler, v2 mousePosZeroToOne)
+static Entity *GetHotEntity(Camera cam, EditorEntities *editorEntities, AssetHandler *handler, v2 mousePosZeroToOne)
 {
    
    
@@ -578,7 +661,7 @@ static Entity *GetHotEntity(Camera cam, EntityManager *entityManager, AssetHandl
    
    Entity *ret = NULL;
    
-   For(entityManager->entities)
+   For(editorEntities->entities)
    {
       
       MeshInfo *info = GetMeshInfo(handler, it->meshId);
@@ -681,7 +764,7 @@ static void ResetHotMeshes(Editor *editor)
 {
    for(u32 i = 0; i < editor->hotEntitySerials.amount; i++)
    {
-      Entity *e = GetEntity(&editor->entityManager, editor->hotEntitySerials[i]);
+      Entity *e = GetEntity(&editor->editorEntities, editor->hotEntitySerials[i]);
       EntityCopyData *data = editor->hotEntityInitialStates + i;
       ApplyEntityDataToEntity(e, data);
    }
@@ -700,7 +783,7 @@ static void AddActionToUndoRedoBuffer(Editor *editor, EditorAction toAdd)
 static void EditorPerformUndo(Editor *editor)
 {
    if (editor->undoRedoAt == 0xFFFFFFFF) return;
-   EntityManager *entityManager = &editor->entityManager;
+   EditorEntities *editorEntities = &editor->editorEntities;
    
    EditorAction toReverse = editor->undoRedoBuffer[editor->undoRedoAt--];
    
@@ -709,7 +792,7 @@ static void EditorPerformUndo(Editor *editor)
       case EditorAction_AlterMesh:
       {
          EntityCopyData *data = &toReverse.preModifyMesh;
-         Entity *e = GetEntity(entityManager, toReverse.serial);
+         Entity *e = GetEntity(editorEntities, toReverse.serial);
          
          ApplyEntityDataToEntity(e, data);
       }break;
@@ -717,11 +800,11 @@ static void EditorPerformUndo(Editor *editor)
       {
          EntityCopyData data = toReverse.preModifyMesh;
          u32 serial = toReverse.serial;
-         RestoreEntity(entityManager, serial, data.meshId, data.scale, data.orientation, data.physicalPos, data.offset, data.color, data.type, data.flags);
+         RestoreEntity(editorEntities, serial, data.meshId, data.scale, data.orientation, data.physicalPos, data.offset, data.color, data.type, data.flags);
       }break;
       case EditorAction_PlaceMesh:
       {
-         RemoveEntity(entityManager, toReverse.serial);
+         RemoveEntity(editorEntities, toReverse.serial);
       }break;
       case EditorAction_BeginBundle:
       {
@@ -746,24 +829,24 @@ static void EditorPerformRedo(Editor *editor)
    if (editor->undoRedoAt == (editor->undoRedoBuffer.amount - 1)) return;
    EditorAction toReverse = editor->undoRedoBuffer[++editor->undoRedoAt];
    
-   EntityManager *entityManager = &editor->entityManager;
+   EditorEntities *editorEntities = &editor->editorEntities;
    
    switch (toReverse.type)
    {
       case EditorAction_AlterMesh:
       {
          EntityCopyData *data = &toReverse.postModifyMesh;
-         Entity *e = GetEntity(entityManager, toReverse.serial);
+         Entity *e = GetEntity(editorEntities, toReverse.serial);
          ApplyEntityDataToEntity(e, data);
       }break;
       case EditorAction_DeleteMesh:
       {
-         RemoveEntity(entityManager, toReverse.serial);
+         RemoveEntity(editorEntities, toReverse.serial);
       }break;
       case EditorAction_PlaceMesh:
       {
          EntityCopyData data = toReverse.postModifyMesh;
-         RestoreEntity(entityManager, toReverse.serial, data.meshId, data.scale, data.orientation, data.physicalPos, data.offset, data.color, data.type, data.flags);
+         RestoreEntity(editorEntities, toReverse.serial, data.meshId, data.scale, data.orientation, data.physicalPos, data.offset, data.color, data.type, data.flags);
       }break;
       case EditorAction_BeginBundle:
       {
@@ -783,10 +866,10 @@ static void EditorPerformRedo(Editor *editor)
 
 static void PushAlterMeshModifies(Editor *editor)
 {
-   EntityManager *entityManager = &editor->entityManager;
+   EditorEntities *editorEntities = &editor->editorEntities;
    for(u32 i = 0; i < editor->hotEntitySerials.amount; i++)
    {
-      Entity *e = GetEntity(entityManager, editor->hotEntitySerials[i]);
+      Entity *e = GetEntity(editorEntities, editor->hotEntitySerials[i]);
       EntityCopyData *data = editor->hotEntityInitialStates + i;
       
       EditorAction toAdd;
@@ -842,7 +925,7 @@ static void EditorPushUndo(Editor *editor)
             EditorAction toAdd;
             toAdd.type = EditorAction_DeleteMesh;
             toAdd.serial = editor->hotEntitySerials[i];
-            EntityManager *manager = &editor->entityManager;
+            EditorEntities *manager = &editor->editorEntities;
             Entity *e = GetEntity(manager, toAdd.serial);
             
             toAdd.preModifyMesh = EntityToData(*e);
@@ -872,7 +955,7 @@ static void ResetSelectionInitials(Editor *editor)
    for(u32 i = 0; i < editor->hotEntitySerials.amount; i++)
    {
       u32 serial = editor->hotEntitySerials[i];
-      Entity *e = GetEntity(&editor->entityManager, serial);
+      Entity *e = GetEntity(&editor->editorEntities, serial);
       editor->hotEntityInitialStates[i] = EntityToData(*e);
    }
 }
@@ -908,17 +991,17 @@ static void EditorUpdateCamFocus(Editor *editor, Camera *cam, Input input)
 
 static void FrameColorSelection(Editor *editor, v4 editorMeshSelectColor)
 {
-   EntityManager *entityManager = &editor->entityManager;
+   EditorEntities *editorEntities = &editor->editorEntities;
    For(editor->hotEntitySerials)
    {
-      GetEntity(entityManager, *it)->frameColor *= editorMeshSelectColor;
+      GetEntity(editorEntities, *it)->frameColor *= editorMeshSelectColor;
    }
 }
 
 // todo maybe make all this matrix stuff more consitent
 static void UpdateEditor(Editor *editor, Input input)
 {
-   EntityManager *entityManager = &editor->entityManager;
+   EditorEntities *editorEntities = &editor->editorEntities;
    Camera *cam = &editor->camera;
    
    UpdateColorPickers(editor, input);
@@ -966,7 +1049,7 @@ static void UpdateEditor(Editor *editor, Input input)
          
          For(editor->hotEntitySerials)
          {
-            Entity *e = GetEntity(entityManager, *it);
+            Entity *e = GetEntity(editorEntities, *it);
             
             v4 relPos = V4(GetRenderPos(*e) - averagePos, 1.0f);
             e->orientation = q * e->orientation;
@@ -996,7 +1079,7 @@ static void UpdateEditor(Editor *editor, Input input)
          
          For(editor->hotEntitySerials)
          {
-            Entity *mesh = GetEntity(entityManager, *it);
+            Entity *mesh = GetEntity(editorEntities, *it);
             v3 delta = GetRenderPos(*mesh) - averagePos;
             v3 newPos = exp * delta + averagePos;
             
@@ -1013,8 +1096,8 @@ static void UpdateEditor(Editor *editor, Input input)
          v3 newP = ScreenZeroToOneToScreenInGame(*cam, input.mouseZeroToOne);
          v3 camPos = cam->pos;
          m3x3 camM = QuaternionToMatrix3(cam->orientation);
-         v3 camb1 = camM * V3(1, 0, 0);
-         v3 camb2 = camM * V3(0, 1, 0);
+         v3 camb1 = GetRow(camM, 0);
+         v3 camb2 = GetRow(camM, 1);
          v3 diff = camPos - averagePos;
          v3 oP = SolveLinearSystem((camPos - oldP), camb1, camb2, diff);
          v3 nP = SolveLinearSystem((camPos - newP), camb1, camb2, diff);
@@ -1027,7 +1110,7 @@ static void UpdateEditor(Editor *editor, Input input)
          
          For(editor->hotEntitySerials)
          {
-            Entity *e = GetEntity(entityManager, *it);
+            Entity *e = GetEntity(editorEntities, *it);
             
             v3 pos = GetRenderPos(*e) + realDelta;
             
@@ -1060,17 +1143,18 @@ static void UpdateEditor(Editor *editor, Input input)
 
 static Level EditorStateToLevel(Editor *editor)
 {
-   EntityManager *entityManager = &editor->entityManager;
+   EditorEntities *editorEntities = &editor->editorEntities;
    EditorLevelInfo *info = &editor->levelInfo;
    Level level;
-   level.camera        = entityManager->camera;
-   level.lightSource   = entityManager->lightSource;
-   level.blocksNeeded  = info->blocksNeeded;
-   level.entities      = PushArray(frameArena, EntityCopyData, entityManager->entities.amount);
    
-   for(u32 i = 0; i < entityManager->entities.amount; i++)
+   level.camera        = info->camera;
+   level.lightSource   = info->lightSource;
+   level.blocksNeeded  = info->blocksNeeded;
+   level.entities      = PushArray(frameArena, EntityCopyData, editorEntities->entities.amount);
+   
+   for(u32 i = 0; i < editorEntities->entities.amount; i++)
    {
-      level.entities[i] = EntityToData(entityManager->entities[i]);
+      level.entities[i] = EntityToData(editorEntities->entities[i]);
    }
    
    return level;

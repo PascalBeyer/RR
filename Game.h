@@ -192,27 +192,13 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
 	TimedBlock;
 	AssetHandler *assetHandler = &state->assetHandler;
 	Editor *editor = &state->editor;
-   EntityManager *entityManager= &state->entityManager;
 	SoundMixer *soundMixer = &state->soundMixer;
 	Arena *currentStateArena = state->currentStateArena;
 	Font font = state->font;
+	f32 dt = input.dt;
 	ExecuteData *exe = &state->executeData;
+   EntityManager *entityManager= &state->entityManager;
    
-	Tweekable(b32, debugCam);
-   
-	Camera *cam = debugCam ? &entityManager->debugCamera : &entityManager->camera;
-   
-	f32 aspectRatio = entityManager->camera.aspectRatio; // todo, this does not really belong in the camera.
-	f32 focalLength = entityManager->camera.focalLength;
-   f32 dt = input.dt;
-   
-	//reset
-	For(entityManager->entities)
-	{
-		it->frameColor = V4(1, 1, 1, 1);
-	}
-   
-   static f32 timeScale = 1.0f;
    
 	// HandleInput
 	{
@@ -281,11 +267,24 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
       case Game_Execute:
       {
          
+         //reset
+         For(entityManager->entities)
+         {
+            it->frameColor = V4(1, 1, 1, 1);
+         }
+         
+         Tweekable(b32, debugCam);
+         Camera *cam = debugCam ? &exe->debugCamera : &exe->camera;
+         
+         f32 aspectRatio = cam->aspectRatio; // todo, this does not really belong in the camera.
+         f32 focalLength = cam->focalLength;
+         
+         
          UpdateColorPickers(editor, input);
          GameExecuteUpdate(entityManager, exe, dt);
          
          // :ExecuteDraw
-         PushRenderSetup(rg, *cam, entityManager->lightSource, (Setup_Projective | Setup_ShadowMapping));
+         PushRenderSetup(rg, *cam, exe->lightSource, (Setup_Projective | Setup_ShadowMapping));
          
          
          Tweekable(b32, DrawMeshOutlines);
@@ -293,7 +292,7 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
          {
             For(entityManager->entities)
             {
-               RenderEntityAABBOutline(rg, assetHandler, it,entityManager->t);
+               RenderEntityAABBOutline(rg, assetHandler, it, exe->t);
             }
          }
          
@@ -321,7 +320,7 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
    if (drawCamera)
    {
       
-      Camera *camera = &entityManager->camera;
+      Camera *camera = &exe->camera;
       
 #if 0
       Input asd;
@@ -362,21 +361,7 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
 #endif
    }
    
-   
-   u32 animationid = RegisterAsset(assetHandler, Asset_Animation, "dude.animation");
-   KeyFramedAnimation *animation = GetAnimation(assetHandler, animationid);
-   u32 dude = RegisterAsset(assetHandler, Asset_Mesh, "dude.mesh");
-   TriangleMesh *mesh = GetMesh(assetHandler, dude);
-   
-   {
-      static float t = 0.0f;
-      t += dt;
-      m4x4Array boneStates = CalculateBoneTransforms(&mesh->skeleton, animation, t);
-      PushAnimatedMesh(rg, mesh, AxisAngleToQuaternion(-PI/2.0f, V3(1, 0, 0)), V3(0, 0, -5), 1.0f, V4(1.0f, 1.0f, 1.0f, 1.0f), boneStates);
-   }
-   
-   
-   PushRenderSetup(rg, *cam, entityManager->lightSource, Setup_OrthoZeroToOne); 
+   PushRenderSetup(rg, {}, {}, Setup_OrthoZeroToOne); 
    
    switch (state->mode)
    {

@@ -8,7 +8,7 @@ static void PlacingUnitsHandleEvent(ExecuteData *exe, EntityManager *entityManag
          case Key_leftMouse:
          {
             // todo only ones that are in the tree, i.e. are gamePlay related
-            Entity *clickedE = GetHotEntity(entityManager->camera, entityManager, assetHandler, input.mouseZeroToOne); 
+            Entity *clickedE = GetHotEntity(exe->camera, entityManager, assetHandler, input.mouseZeroToOne); 
             if (clickedE)
             {
                v3i posToPlace = clickedE->physicalPos + V3i(0, 0, -1);
@@ -42,7 +42,7 @@ static u32 GetHotUnit(EntityManager *entityManager, AssetHandler *assetHandler, 
 		if (it->type != Entity_Dude) continue;
 		Entity *e = it;
 		m4x4 mat = QuaternionToMatrix4(Inverse(e->orientation));
-		v3 rayP = mat * (camP - GetRenderPos(*e, entityManager->t));
+		v3 rayP = mat * (camP - GetRenderPos(*e));
 		v3 rayD = mat * camD;
       
 		MeshInfo *info = GetMeshInfo(assetHandler, e->meshId);
@@ -111,7 +111,7 @@ static u32 GetHotUnit(EntityManager *entityManager, AssetHandler *assetHandler, 
 
 static void PathCreatorHandleEvent(EntityManager *entityManager, ExecuteData *exe, AssetHandler *assetHandler, KeyStateMessage message, Input input)
 {
-	Camera cam = entityManager->camera;
+	Camera cam = exe->camera;
 	PathCreator *pathCreator = &exe->pathCreator;
 	if (message.flag & KeyState_PressedThisFrame)
 	{
@@ -459,7 +459,7 @@ static v3i AdjustForCamera(Camera cam, KeyEnum key)
 static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeyStateMessage message, Input input, Arena *currentStateArena)
 {
    
-   EntityManager *entityManager = &editor->entityManager;
+   EditorEntities *editorEntities = &editor->editorEntities;
    Camera *cam = &editor->camera;
    
 	For(picker, editor->colorPickers)
@@ -556,7 +556,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                            case Tweeker_EntityType:
                            {
                               if (editor->hotEntitySerials.amount != 1) break;
-                              Entity *e = GetEntity(entityManager, editor->hotEntitySerials[0]);
+                              Entity *e = GetEntity(editorEntities, editor->hotEntitySerials[0]);
                               
                               if (PointInRectangle(pos, 0.5f * widthWithoutBoarder, height, input.mouseZeroToOne))
                               {
@@ -659,7 +659,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      return;
                   }
                   
-                  Entity *hotEntity = GetHotEntity(editor->camera, entityManager, assetHandler, input.mouseZeroToOne);
+                  Entity *hotEntity = GetHotEntity(editor->camera, editorEntities, assetHandler, input.mouseZeroToOne);
                   
                   if (message.flag & KeyState_ShiftDown)
                   {
@@ -724,7 +724,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                   v3i inc = AdjustForCamera(*cam, Key_left);
                   For(editor->hotEntitySerials)
                   {
-                     Entity *mesh = GetEntity(entityManager, *it);
+                     Entity *mesh = GetEntity(editorEntities, *it);
                      mesh->physicalPos += inc;
                   }
                }break;
@@ -733,7 +733,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                   v3i inc = AdjustForCamera(*cam, Key_right);
                   For(editor->hotEntitySerials)
                   {
-                     Entity *mesh = GetEntity(entityManager, *it);
+                     Entity *mesh = GetEntity(editorEntities, *it);
                      mesh->physicalPos += inc;
                   }
                   
@@ -744,7 +744,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                   {
                      For(editor->hotEntitySerials)
                      {
-                        Entity *mesh = GetEntity(entityManager, *it);
+                        Entity *mesh = GetEntity(editorEntities, *it);
                         mesh->physicalPos += V3i(0, 0, -1);
                      }
                      break;
@@ -753,7 +753,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                   v3i inc = AdjustForCamera(*cam, Key_up);
                   For(editor->hotEntitySerials)
                   {
-                     Entity *mesh = GetEntity(entityManager, *it);
+                     Entity *mesh = GetEntity(editorEntities, *it);
                      mesh->physicalPos += inc;
                   }
                   
@@ -764,7 +764,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                   {
                      For(editor->hotEntitySerials)
                      {
-                        Entity *mesh = GetEntity(entityManager, *it);
+                        Entity *mesh = GetEntity(editorEntities, *it);
                         mesh->physicalPos += V3i(0, 0, 1);
                      }
                      break;
@@ -773,19 +773,20 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                   v3i inc = AdjustForCamera(*cam, Key_down);
                   For(editor->hotEntitySerials)
                   {
-                     Entity *mesh = GetEntity(entityManager, *it);
+                     Entity *mesh = GetEntity(editorEntities, *it);
                      mesh->physicalPos += inc;
                   }
-                  
                }break;
                
                case Key_g:
                {
                   // we reset once we did an action
+                  if (!editor->hotEntitySerials) break;
                   editor->state = EditorState_Moving;
                }break;
                case Key_r:
                {
+                  if (!editor->hotEntitySerials) break;
                   editor->state = EditorState_Rotating;
                }break;
                case Key_s:
@@ -795,7 +796,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      if (!editor->levelInfo.name.amount) break;
                      
                      // todo maybe not needed...
-                     For(entityManager->entities)
+                     For(editorEntities->entities)
                      {
                         it->initialPos = it->physicalPos;
                      }
@@ -813,6 +814,8 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      
                      break;
                   }
+                  
+                  if (!editor->hotEntitySerials) break;
                   editor->state = EditorState_Scaling;
                }break;
                case Key_c:
@@ -955,7 +958,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                   {   // todo this is garbage.
                      For(editor->hotEntitySerials)
                      {
-                        Entity *mesh = GetEntity(entityManager, *it);
+                        Entity *mesh = GetEntity(editorEntities, *it);
                         mesh->offset = V3();
                      }
                   }
@@ -1199,7 +1202,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
             {
                case Key_leftMouse:
                {
-                  v2 clickedP = ScreenZeroToOneToInGame(entityManager->camera, input.mouseZeroToOne);
+                  v2 clickedP = ScreenZeroToOneToInGame(editor->camera, input.mouseZeroToOne);
                   
                   v3i clickedTile = SnapToTileMap(i12(clickedP));
                   v3 clickedOffset = V3(clickedTile) - V3(clickedP, 0.0f);
@@ -1211,10 +1214,10 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      v3i pos = it->physicalPos + clickedTile;
                      v3 offset = editor->snapToTileMap ? V3() : (it->offset + clickedOffset);
                      
-                     Entity e = CreateEntity(entityManager, it->type,it->meshId, pos, it->scale, it->orientation, offset, it->color, it->flags);
+                     Entity *e = CreateEntity(editorEntities, it->type,it->meshId, pos, it->scale, it->orientation, offset, it->color, it->flags);
                      
-                     ArrayAdd(&editor->hotEntityInitialStates, EntityToData(e));
-                     ArrayAdd(&editor->hotEntitySerials, e.serialNumber);
+                     ArrayAdd(&editor->hotEntityInitialStates, EntityToData(*e));
+                     ArrayAdd(&editor->hotEntitySerials, e->serialNumber);
                   }
                   
                   EditorPushUndo(editor); // needs them to be selected
@@ -1237,7 +1240,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                   EditorPushUndo(editor);
                   For(editor->hotEntitySerials)
                   {
-                     RemoveEntity(entityManager, *it);
+                     RemoveEntity(editorEntities, *it);
                   }
                   
                   EditorSelectNothing(editor);

@@ -273,13 +273,14 @@ static void LoadLevelHelper(StringArray args)
       return;
    }
    
-   Level level = LoadLevel(args[0], gameState.currentStateArena, &gameState.assetHandler);
+   Level level = LoadLevel(args[0], frameArena, &gameState.assetHandler);
+   Clear(gameState.currentStateArena);
+   EditorLoadLevel(&gameState.editor, gameState.currentStateArena, &level);
    
    if (!level.name.amount)
    {
       ConsoleOutputError("Tried to load \"level/%s.level\", no such file or directory!", args[0]);
    }
-   
    
    ConsoleOutput("Loaded level %s!", args[0]);
    return;
@@ -334,14 +335,14 @@ static void AddMeshHelper(StringArray args)
 
 static void SaveCameraHelper(StringArray args)
 {
-   gameState.entityManager.camera = gameState.editor.camera;
+   gameState.editor.levelInfo.camera = gameState.editor.camera;
 }
 
 
 static void SetLightHelper(StringArray args)
 {
-   gameState.entityManager.lightSource.orientation = gameState.entityManager.camera.orientation;
-   gameState.entityManager.lightSource.pos = gameState.entityManager.camera.pos;
+   gameState.editor.levelInfo.lightSource.orientation = gameState.editor.camera.orientation;
+   gameState.editor.levelInfo.lightSource.pos         = gameState.editor.camera.pos;
 }
 
 

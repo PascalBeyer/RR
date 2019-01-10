@@ -1,4 +1,103 @@
 
+
+// todo copy and paste of editor.h, they will differ eventrually, because this shout utilize the entity tree.
+static Entity *GetHotEntity(Camera cam, EntityManager *entityManager, AssetHandler *handler, v2 mousePosZeroToOne)
+{
+   
+   
+   v3 camP = cam.pos; // todo camera or debugCamera? Maybe we should again unify them
+   v3 camD = ScreenZeroToOneToDirecion(cam, mousePosZeroToOne);
+   
+   f32 minDist = F32MAX;
+   
+   Entity *ret = NULL;
+   
+   For(entityManager->entities)
+   {
+      
+      MeshInfo *info = GetMeshInfo(handler, it->meshId);
+      
+      if (!info) continue; // probably not on screen, if never rendered
+      
+      m4x4 mat = QuaternionToMatrix4(Inverse(it->orientation)); // todo save these?
+      v3 rayP = mat * (camP - GetRenderPos(*it));
+      v3 rayD = mat * camD; 
+      // better rayCast system, right now this loads every mesh, to find out the aabb....
+      
+      AABB aabb = info->aabb;
+      
+      aabb.maxDim *= it->scale;
+      aabb.minDim *= it->scale;
+      f32 curIntersectionMin = MAXF32;
+      
+      f32 x = rayP.x;
+      f32 dx = rayD.x;
+      f32 y = rayP.y;
+      f32 dy = rayD.y;
+      f32 z = rayP.z;
+      f32 dz = rayD.z;
+      
+      f32 aabbMinX = aabb.minDim.x;
+      f32 aabbMaxX = aabb.maxDim.x; 
+      f32 aabbMinY = aabb.minDim.y;
+      f32 aabbMaxY = aabb.maxDim.y;
+      f32 aabbMinZ = aabb.minDim.z;
+      f32 aabbMaxZ = aabb.maxDim.z;
+      
+      f32 t1x = (aabbMaxX - x) / dx;
+      if (dx > 0 && t1x <= curIntersectionMin)
+      {
+         curIntersectionMin = t1x;
+      }
+      
+      f32 t2x = (aabbMinX - x) / dx;
+      if (dx < 0 && t2x <= curIntersectionMin)
+      {
+         curIntersectionMin = t2x;
+      }
+      
+      f32 t1y = (aabbMaxY - y) / dy;
+      if (dy > 0 && t1y <= curIntersectionMin)
+      {
+         curIntersectionMin = t1y;
+      }
+      
+      f32 t2y = (aabbMinY - y) / dy;
+      if (dy < 0 && t2y <= curIntersectionMin)
+      {
+         curIntersectionMin = t2y;
+      }
+      
+      f32 t1z = (aabbMaxZ - z) / dz;
+      if (dz > 0 && t1z <= curIntersectionMin)
+      {
+         curIntersectionMin = t1z;
+      }
+      
+      f32 t2z = (aabbMinZ - z) / dz;
+      if (dz < 0 && t2z <= curIntersectionMin)
+      {
+         curIntersectionMin = t2z;
+      }
+      v3 curExit = rayD * curIntersectionMin + rayP;
+      
+      
+      if (PointInAABB(aabb, curExit))
+      {
+         f32 dist = Dist(curExit, rayP);
+         if (dist < minDist)
+         {
+            minDist = dist;
+            ret = it;
+         }
+      }
+   }
+   
+   return ret;
+}
+
+
+
 enum ExecuteState
 {
 	Execute_None,
@@ -28,6 +127,13 @@ struct SimData
 struct ExecuteData
 {
 	u32 state;
+   
+	Camera camera;
+	Camera debugCamera;
+   LightSource lightSource;
+   
+	u32 at; // execute data?
+	f32 t;
    
 	PathCreator pathCreator;
 	SimData simData;
@@ -161,7 +267,7 @@ static void AdvanceGameState(EntityManager *entityManager, ExecuteData *exe, b32
 	}
    
 	// this should get "passed in" and what ever.
-	u64 at = entityManager->at++;
+	u64 at = exe->at++;
    
 	For(entityManager->entities)
 	{
@@ -342,16 +448,16 @@ static void AdvanceGameState(EntityManager *entityManager, ExecuteData *exe, b32
 	}
 }
 
-static void UpdateSimulation(EntityManager *entityManager, ExecuteData *execute, f32 dt)
+static void UpdateSimulation(EntityManager *entityManager, ExecuteData *exe, f32 dt)
 {
-	entityManager->t += dt * execute->simData.timeScale;
+	exe->t += dt * exe->simData.timeScale;
    
-	while (entityManager->t > 1.0f)
+	while (exe->t > 1.0f)
 	{
-		entityManager->t -= 1.0f;
+		exe->t -= 1.0f;
       
-		AdvanceGameState(entityManager, execute);
-		if (execute->state == Execute_Victory) break;
+		AdvanceGameState(entityManager, exe);
+		if (exe->state == Execute_Victory) break;
 	}
 }
 

@@ -164,6 +164,22 @@ struct EntityCopyData
 DefineArray(EntityCopyData);
 DefineDynamicArray(EntityCopyData);
 
+static EntityCopyData EntityToData(Entity e)
+{
+	EntityCopyData ret;
+   
+	ret.color = e.color;
+	ret.flags = e.flags;
+	ret.orientation = e.orientation;
+	ret.meshId = e.meshId;
+	ret.scale = e.scale;
+	ret.type = e.type;
+	ret.physicalPos = e.physicalPos;
+	ret.offset = e.offset;
+	return ret;
+   
+}
+
 
 struct LightSource
 {
@@ -340,14 +356,11 @@ static void RemoveAllEntities(TileOctTree *tree)
 
 
 
+
 struct EntityManager
 {
    String levelName;
-   
-	Camera camera;
-	Camera debugCamera;
-   LightSource lightSource;
-   
+   TileOctTree entityTree;
    // todo make some sort of bucketed array.
    // todo make an array thing for each entity type
 	EntityDynamicArray entities;
@@ -355,10 +368,7 @@ struct EntityManager
 	u32 entitySerializer;
 	u32DynamicArray entitySerialMap;
 	
-	TileOctTree entityTree;
-   
-	u32 at; // execute data?
-	f32 t;
+	
    
 	u32 blockMeshId;
 	u32 dudeMeshId;
@@ -370,6 +380,7 @@ static Entity *GetEntity(EntityManager *entityManager, u32 serialNumber)
 	Entity *ret = entityManager->entities + index;
 	return ret;
 }
+
 
 static void RemoveEntityFromTree(EntityManager *entityManager, Entity *e)
 {
@@ -642,7 +653,7 @@ static void RestoreEntity(EntityManager *entityManager, u32 serial, u32 meshID, 
 	ret.offset = offset;
 	ret.color = color;
 	ret.frameColor = V4(1, 1, 1, 1);
-	ret.serialNumber = entityManager->entitySerializer++;
+	ret.serialNumber = serial;
 	ret.type = type;
 	ret.flags = flags;
 	ret.interpolation = {};
@@ -676,9 +687,6 @@ static void RemoveEntity(EntityManager *entityManager, u32 serial)
 
 static void ResetEntityManager(EntityManager *entityManager)
 {
-	entityManager->at = 0;
-	entityManager->t = 0.0f;
-   
 	For(entityManager->entities)
 	{
 		if (it->flags & EntityFlag_IsDynamic)
@@ -811,15 +819,10 @@ static EntityManager InitEntityManager(Arena *currentStateArena, Level *level)
 	EntityManager ret;
    
    ret.levelName = CopyString(level->name, currentStateArena);
-   ret.camera = level->camera;
-   ret.debugCamera = level->camera;
-   ret.lightSource = level->lightSource;
    ret.entitySerializer = 0;
 	ret.entityTree = InitOctTree(currentStateArena, 100); // todo hardcoded.
 	ret.entities = EntityCreateDynamicArray(level->entities.amount);
    ret.entitySerialMap = u32CreateDynamicArray(level->entities.amount);
-   u32 at = 0;
-   f32 t = 0.0f;
    
    For(level->entities)
    {

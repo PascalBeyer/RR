@@ -2593,22 +2593,6 @@ static bool WriteLevel(char *fileName, Level level, AssetHandler *assetHandler)
 
 #define PullOff(type) *(type *)at; at += sizeof(type);
 
-static EntityCopyData EntityToData(Entity e)
-{
-	EntityCopyData ret;
-   
-	ret.color = e.color;
-	ret.flags = e.flags;
-	ret.orientation = e.orientation;
-	ret.meshId = e.meshId;
-	ret.scale = e.scale;
-	ret.type = e.type;
-	ret.physicalPos = e.physicalPos;
-	ret.offset = e.offset;
-	return ret;
-   
-}
-
 static Level LoadLevel(String fileName, Arena *arena, AssetHandler *assetHandler)
 {
    File file = LoadFile(FormatCString("level/%s.level", fileName), frameArena);

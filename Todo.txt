@@ -77,6 +77,7 @@ Asset:
 Get PNG loader
 make font into asset, would also make the draw String call way better, also solves the problem where I do not currently know where it is supposed to be stored
 animationInfo in assethandler
+get rid of most/all dynamic allocations in AssetLoading
 
 
 Tweekers:
@@ -114,7 +115,9 @@ how do you bright up colors? (brightness/ negative colors?)
 Euler thing
 UndoRedo has error with scale pushing one even if nothing selected
 direction keys do not record undos right now.
+make like a moved blocks per arrows flag so we can record one undo for a bundle of block moves
 panel should hide forever if tab was pressed and then only come back with tab
+make the panel load its values dynamically
 
 Execute:
 undo does not really have to be a thing, if I do a Least commom multiple system.
@@ -136,18 +139,13 @@ save level helper does not work right now. //done?
 make DrawEntityAABB // done?
 LoadLevelHelper should call GetLevel(AssetHandler *assetHandler, String name); // done ? sort of
 make sure all Editor actions have the serial // done?
+move the camera out of the entity manager // done?
+the whole what gameState are we in situation should be way clearer // done?
 
 
-move the camera out of the entity manager
-get rid of most/all dynamic allocations in AssetLoading
 we should probably make initEntityManager and load level one call
-
-the whole what gameState are we in situation should be way clearer 
 Add occupied and free to the dynamic allocator
-
 rethink how the snap to tilemap system works
-make the panel load its values dynamically
-make like a moved blocks per arrows flag so we can record one undo for a bundle of block moves
 
-
-
+GetHotEntity should use the entity tree. Not sure what acturally uses that anyway...
+Make the Entity systems bucketed instead of dynamically allocated.

@@ -745,6 +745,18 @@ static m3x3 Columns3x3(v3 X, v3 Y, v3 Z) // spalten
 	return(R);
 }
 
+static v3 GetColumn(m3x3 A, u32 C)
+{
+	v3 R = { A.a[0][C], A.a[1][C], A.a[2][C] };
+	return(R);
+}
+
+static v3 GetRow(m3x3 A, u32 R)
+{
+	v3 Result = { A.a[R][0], A.a[R][1], A.a[R][2] };
+	return(Result);
+}
+
 
 static v3 operator*(m3x3 a, v3 p) // tested, don't fall for this a third time.
 {

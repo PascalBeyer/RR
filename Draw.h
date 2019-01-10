@@ -73,7 +73,7 @@ static void RenderPathCreator(RenderGroup *rg, EntityManager *entityManager, Exe
 		DrawNumberOnTile(rg, pathCounter, e->physicalPos);
       
 		v3i pos = e->physicalPos;
-		v3 mouseP = ScreenZeroToOneToZ(entityManager->camera, input.mouseZeroToOne, e->physicalPos.z);
+		v3 mouseP = ScreenZeroToOneToZ(exe->camera, input.mouseZeroToOne, e->physicalPos.z);
 		v3 mouseToPath = mouseP - GetRenderPos(*e);
       
 		pathCounter++;
@@ -166,12 +166,12 @@ static void RenderSimulateUI(RenderGroup *rg, SimData *sim)
    
 }
 
-static void RenderSimulate(RenderGroup *rg, EntityManager *entityManager)
+static void RenderSimulate(RenderGroup *rg, EntityManager *entityManager, ExecuteData *exe)
 {
 #if 1
 	For(entityManager->entities)
 	{
-		PushTriangleMesh(rg, it->meshId, it->orientation, GetRenderPos(*it, entityManager->t), it->scale, it->color * it->frameColor);
+		PushTriangleMesh(rg, it->meshId, it->orientation, GetRenderPos(*it, exe->t), it->scale, it->color * it->frameColor);
 	}
 #else
 	For(entityManager->entities)
@@ -183,7 +183,7 @@ static void RenderSimulate(RenderGroup *rg, EntityManager *entityManager)
 
 static void RenderPlacingUnits(RenderGroup *rg, ExecuteData *exe, EntityManager *entityManager, AssetHandler *assetHandler, Input input)
 {
-	Entity *clickedE = GetHotEntity(entityManager->camera, entityManager, assetHandler, input.mouseZeroToOne);
+	Entity *clickedE = GetHotEntity(exe->camera, entityManager, assetHandler, input.mouseZeroToOne);
 	if (clickedE)
 	{
 		v3i pos = clickedE->physicalPos + V3i(0, 0, -1);
@@ -224,11 +224,11 @@ static void RenderExecute(RenderGroup *rg, EntityManager *entityManager, Execute
       }break;
       case Execute_Simulation:
       {
-         RenderSimulate(rg, entityManager);
+         RenderSimulate(rg, entityManager, exe);
       }break;
       case Execute_Victory:
       {
-         RenderSimulate(rg, entityManager);
+         RenderSimulate(rg, entityManager, exe);
       }break;
       InvalidDefaultCase;
       
@@ -640,13 +640,13 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor, Font font)
    
 }
 
-static void RenderEditor(RenderGroup *rg, AssetHandler *assetHandler, Editor editor,  Input input)
+static void RenderEditor(RenderGroup *rg, AssetHandler *assetHandler, Editor editor, Input input)
 {
    PushDebugPointCuboid(rg, editor.focusPoint);
    
-   EntityManager *entityManager = &editor.entityManager;
+   EditorEntities *editorEntities = &editor.editorEntities;
    
-	For(entityManager->entities)
+	For(editorEntities->entities)
 	{
 		PushTriangleMesh(rg, it->meshId, it->orientation, GetRenderPos(*it), it->scale, it->color * it->frameColor);
 	}
@@ -659,7 +659,7 @@ static void RenderEditor(RenderGroup *rg, AssetHandler *assetHandler, Editor edi
          
          For(editor.hotEntitySerials)
          {
-            Entity *e = GetEntity(entityManager, *it);
+            Entity *e = GetEntity(editorEntities, *it);
             
             PushTriangleMesh(rg, e->meshId, e->orientation, V3(e->physicalPos), e->scale, e->color * V4(0.5f, 1.0f, 1.0f, 1.0f));
          }
@@ -667,7 +667,7 @@ static void RenderEditor(RenderGroup *rg, AssetHandler *assetHandler, Editor edi
       
       case EditorState_PlacingNewMesh:
       {
-         v2 mouseP = ScreenZeroToOneToInGame(entityManager->camera, input.mouseZeroToOne);
+         v2 mouseP = ScreenZeroToOneToInGame(editor.camera, input.mouseZeroToOne);
          v3i clickedTile = SnapToTileMap(i12(mouseP));
          v3 clickedOffset = V3(clickedTile) - V3(mouseP, 0.0f);
          
@@ -691,7 +691,7 @@ static void RenderEditor(RenderGroup *rg, AssetHandler *assetHandler, Editor edi
    
 	For(editor.hotEntitySerials)
 	{
-		Entity *e = GetEntity(entityManager, *it);
+		Entity *e = GetEntity(editorEntities, *it);
 		PushDebugPointCuboid(rg, V3(e->physicalPos), V4(1.0f, 0.3f, 0.6f, 0.1f));
 		AABB transformedAABB = GetMesh(assetHandler, e->meshId)->aabb;
       
