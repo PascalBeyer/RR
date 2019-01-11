@@ -4,6 +4,21 @@
 
 //WARNING TO BE TESTED PROBABLY BUGGY AF
 
+// this is kind of a windows thing, thats why it was in buffers.h...
+struct SoundBuffer
+{
+	i16 toneVolume;
+	int samplesPerSecond;
+	int runningSampleIndex;
+	int bytesPerSample;
+	int secondaryBufferSize;
+	int latencySampleCount;
+	bool soundIsPlaying;
+	bool soundIsValid;
+	i16 *soundSamples;
+	int sampleAmount;
+};
+
 struct Sound
 {
 	i16 *samples[2];

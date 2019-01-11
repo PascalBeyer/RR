@@ -363,354 +363,350 @@ struct EntityManager
    TileOctTree entityTree;
    // todo make some sort of bucketed array.
    // todo make an array thing for each entity type
-	EntityDynamicArray entities;
+   EntityDynamicArray entities;
    
-	u32 entitySerializer;
-	u32DynamicArray entitySerialMap;
-	
-	
+   u32 entitySerializer;
+   u32DynamicArray entitySerialMap; // this is just huge and that fine
    
-	u32 blockMeshId;
-	u32 dudeMeshId;
 };
 
 static Entity *GetEntity(EntityManager *entityManager, u32 serialNumber)
 {
-	u32 index = entityManager->entitySerialMap[serialNumber];
-	Entity *ret = entityManager->entities + index;
-	return ret;
+   u32 index = entityManager->entitySerialMap[serialNumber];
+   Entity *ret = entityManager->entities + index;
+   return ret;
 }
 
 
 static void RemoveEntityFromTree(EntityManager *entityManager, Entity *e)
 {
-	if (!(e->flags & EntityFlag_InTree)) return;
+   if (!(e->flags & EntityFlag_InTree)) return;
    
-	TileOctTree *tree = &entityManager->entityTree;
-	TileOctTreeNode *cur = &tree->root;
-	
-	e->flags &= ~EntityFlag_InTree;
+   TileOctTree *tree = &entityManager->entityTree;
+   TileOctTreeNode *cur = &tree->root;
    
-	while (!cur->isLeaf)
-	{
-		for (u32 i = 0; i < 8; i++) // lazy
-		{
-			if (PointInAABBi(cur->children[i]->bound, e->physicalPos))
-			{
-				cur = cur->children[i];
-				break;
-			}
-		}
-	}
+   e->flags &= ~EntityFlag_InTree;
    
-	for (u32 i = 0; i < 16; i++)
-	{
-		if (e->serialNumber == cur->entitySerials[i])
-		{
-			cur->entitySerials[i] = 0xFFFFFFFF;
-			return;
-		}
-	}
+   while (!cur->isLeaf)
+   {
+      for (u32 i = 0; i < 8; i++) // lazy
+      {
+         if (PointInAABBi(cur->children[i]->bound, e->physicalPos))
+         {
+            cur = cur->children[i];
+            break;
+         }
+      }
+   }
    
-	Die;
+   for (u32 i = 0; i < 16; i++)
+   {
+      if (e->serialNumber == cur->entitySerials[i])
+      {
+         cur->entitySerials[i] = 0xFFFFFFFF;
+         return;
+      }
+   }
+   
+   Die;
 }
 
 static EntityPtrArray GetEntities(EntityManager *entityManager, v3i tile, u64 flags = 0)
 {
-	TileOctTreeNode *cur = &entityManager->entityTree.root;
-	Assert(PointInAABBi(cur->bound, tile));
-	while (!cur->isLeaf)
-	{
-		for (u32 i = 0; i < ArrayCount(cur->children); i++)
-		{
-			if (PointInAABBi(cur->children[i]->bound, tile))
-			{
-				cur = cur->children[i];
-				break;
-			}
-		}
-	}
+   TileOctTreeNode *cur = &entityManager->entityTree.root;
+   Assert(PointInAABBi(cur->bound, tile));
+   while (!cur->isLeaf)
+   {
+      for (u32 i = 0; i < ArrayCount(cur->children); i++)
+      {
+         if (PointInAABBi(cur->children[i]->bound, tile))
+         {
+            cur = cur->children[i];
+            break;
+         }
+      }
+   }
    
-	BeginArray(frameArena, EntityPtr, ret);
+   BeginArray(frameArena, EntityPtr, ret);
    
-	for (u32 i = 0; i < ArrayCount(cur->entitySerials); i++)
-	{
-		if (cur->entitySerials[i] == 0xFFFFFFFF) continue;
-		Entity *e = GetEntity(entityManager, cur->entitySerials[i]);
-		if (e->physicalPos == tile && ((e->flags & flags) == flags))
-		{
-			*PushStruct(frameArena, EntityPtr) = e;
-		}
-	}
-	EndArray(frameArena, EntityPtr, ret);
+   for (u32 i = 0; i < ArrayCount(cur->entitySerials); i++)
+   {
+      if (cur->entitySerials[i] == 0xFFFFFFFF) continue;
+      Entity *e = GetEntity(entityManager, cur->entitySerials[i]);
+      if (e->physicalPos == tile && ((e->flags & flags) == flags))
+      {
+         *PushStruct(frameArena, EntityPtr) = e;
+      }
+   }
+   EndArray(frameArena, EntityPtr, ret);
    
-	return ret;
+   return ret;
 }
 
 static void InsertEntity(EntityManager *entityManager, TileOctTreeNode *cur, Entity *e)
 {
-	TimedBlock;
-	if (!e) return;
+   TimedBlock;
+   if (!e) return;
    
-	TileOctTree *tree = &entityManager->entityTree;
+   TileOctTree *tree = &entityManager->entityTree;
    
-	while (!cur->isLeaf)
-	{
-		for (u32 i = 0; i < ArrayCount(cur->children); i++) // lazy
-		{
-			if (PointInAABBi(cur->children[i]->bound, e->physicalPos))
-			{
-				cur = cur->children[i];
-				break;
-			}
-		}
-	}
+   while (!cur->isLeaf)
+   {
+      for (u32 i = 0; i < ArrayCount(cur->children); i++) // lazy
+      {
+         if (PointInAABBi(cur->children[i]->bound, e->physicalPos))
+         {
+            cur = cur->children[i];
+            break;
+         }
+      }
+   }
    
-	Assert(cur);
-	Assert(cur->isLeaf);
+   Assert(cur);
+   Assert(cur->isLeaf);
    
-	//check for place allready taken, this is the only false case
+   //check for place allready taken, this is the only false case
 #if 0
-	for (u32 i = 0; i < 16; i++)
-	{
-		if (cur->entitySerials[i] != 0xFFFFFFFF)
-		{
-			Entity *other = GetEntities(entityManager, cur->entitySerials[i]);
-			if (other->physicalPos == e->physicalPos)
-			{
-				if (swap) cur->entitySerials[i] = e->serialNumber;
-				return other;
-			}
-		}
-	}
+   for (u32 i = 0; i < 16; i++)
+   {
+      if (cur->entitySerials[i] != 0xFFFFFFFF)
+      {
+         Entity *other = GetEntities(entityManager, cur->entitySerials[i]);
+         if (other->physicalPos == e->physicalPos)
+         {
+            if (swap) cur->entitySerials[i] = e->serialNumber;
+            return other;
+         }
+      }
+   }
 #endif
    
-	// try to insert
-	for (u32 i = 0; i < ArrayCount(cur->entitySerials); i++)
-	{
-		if (cur->entitySerials[i] == 0xFFFFFFFF)
-		{
-			cur->entitySerials[i] = e->serialNumber;
-			return;
-		}
-	}
+   // try to insert
+   for (u32 i = 0; i < ArrayCount(cur->entitySerials); i++)
+   {
+      if (cur->entitySerials[i] == 0xFFFFFFFF)
+      {
+         cur->entitySerials[i] = e->serialNumber;
+         return;
+      }
+   }
    
-	u32 oldSize = (cur->bound.maxDim.x - cur->bound.minDim.x);
-	u32 newSize = oldSize >> 1;
-	Assert(newSize);
+   u32 oldSize = (cur->bound.maxDim.x - cur->bound.minDim.x);
+   u32 newSize = oldSize >> 1;
+   Assert(newSize);
    
-	Entity *currentEntities[ArrayCount(cur->entitySerials) + 1];
-	for (u32 i = 0; i < ArrayCount(cur->entitySerials); i++)
-	{
-		currentEntities[i] = (cur->entitySerials[i] != 0xFFFFFFFF) ? GetEntity(entityManager, cur->entitySerials[i]) : NULL;
-	}
-	currentEntities[ArrayCount(cur->entitySerials)] = e;
+   Entity *currentEntities[ArrayCount(cur->entitySerials) + 1];
+   for (u32 i = 0; i < ArrayCount(cur->entitySerials); i++)
+   {
+      currentEntities[i] = (cur->entitySerials[i] != 0xFFFFFFFF) ? GetEntity(entityManager, cur->entitySerials[i]) : NULL;
+   }
+   currentEntities[ArrayCount(cur->entitySerials)] = e;
    
-	b32 allTheSame = true;
-	for (u32 i = 0; i < ArrayCount(cur->entitySerials); i++)
-	{
-		if (e->physicalPos != currentEntities[i]->physicalPos)
-		{
-			allTheSame = false;
-			break;
-		}
-	}
+   b32 allTheSame = true;
+   for (u32 i = 0; i < ArrayCount(cur->entitySerials); i++)
+   {
+      if (e->physicalPos != currentEntities[i]->physicalPos)
+      {
+         allTheSame = false;
+         break;
+      }
+   }
    
-	if (allTheSame)
-	{
-		Die;
-		e->physicalPos -= V3i(0, 0, 1);
-		InsertEntity(entityManager, &entityManager->entityTree.root, e);
-		return;
-	}
+   if (allTheSame)
+   {
+      Die;
+      e->physicalPos -= V3i(0, 0, 1);
+      InsertEntity(entityManager, &entityManager->entityTree.root, e);
+      return;
+   }
    
-	//split
-	TileOctTreeNode *TopUpLeft = GetALeaf(tree);
-	TopUpLeft->bound = CreateAABBi(cur->bound.minDim, cur->bound.minDim + V3i(newSize, newSize, newSize));
-	cur->TopUpLeft = TopUpLeft;
+   //split
+   TileOctTreeNode *TopUpLeft = GetALeaf(tree);
+   TopUpLeft->bound = CreateAABBi(cur->bound.minDim, cur->bound.minDim + V3i(newSize, newSize, newSize));
+   cur->TopUpLeft = TopUpLeft;
    
-	TileOctTreeNode *TopUpRight = GetALeaf(tree);
-	TopUpRight->bound = CreateAABBi(cur->bound.minDim + V3i(newSize, 0, 0), cur->bound.minDim + V3i(oldSize, newSize, newSize));
-	cur->TopUpRight = TopUpRight;
+   TileOctTreeNode *TopUpRight = GetALeaf(tree);
+   TopUpRight->bound = CreateAABBi(cur->bound.minDim + V3i(newSize, 0, 0), cur->bound.minDim + V3i(oldSize, newSize, newSize));
+   cur->TopUpRight = TopUpRight;
    
-	TileOctTreeNode *TopDownLeft = GetALeaf(tree);
-	TopDownLeft->bound = CreateAABBi(cur->bound.minDim + V3i(0, newSize, 0), cur->bound.minDim + V3i(newSize, oldSize, newSize));
-	cur->TopDownLeft = TopDownLeft;
+   TileOctTreeNode *TopDownLeft = GetALeaf(tree);
+   TopDownLeft->bound = CreateAABBi(cur->bound.minDim + V3i(0, newSize, 0), cur->bound.minDim + V3i(newSize, oldSize, newSize));
+   cur->TopDownLeft = TopDownLeft;
    
-	TileOctTreeNode *TopDownRight = GetALeaf(tree);
-	TopDownRight->bound = CreateAABBi(cur->bound.minDim + V3i(newSize, newSize, 0), cur->bound.minDim + V3i(oldSize, oldSize, newSize));
-	cur->TopDownRight = TopDownRight;
+   TileOctTreeNode *TopDownRight = GetALeaf(tree);
+   TopDownRight->bound = CreateAABBi(cur->bound.minDim + V3i(newSize, newSize, 0), cur->bound.minDim + V3i(oldSize, oldSize, newSize));
+   cur->TopDownRight = TopDownRight;
    
-	TileOctTreeNode *BotUpLeft = GetALeaf(tree);
-	BotUpLeft->bound = CreateAABBi(cur->bound.minDim + V3i(0, 0, newSize), cur->bound.minDim + V3i(newSize, newSize, oldSize));
-	cur->BotUpLeft = BotUpLeft;
+   TileOctTreeNode *BotUpLeft = GetALeaf(tree);
+   BotUpLeft->bound = CreateAABBi(cur->bound.minDim + V3i(0, 0, newSize), cur->bound.minDim + V3i(newSize, newSize, oldSize));
+   cur->BotUpLeft = BotUpLeft;
    
-	TileOctTreeNode *BotUpRight = GetALeaf(tree);
-	BotUpRight->bound = CreateAABBi(cur->bound.minDim + V3i(newSize, 0, newSize), cur->bound.minDim + V3i(oldSize, newSize, oldSize));
-	cur->BotUpRight = BotUpRight;
+   TileOctTreeNode *BotUpRight = GetALeaf(tree);
+   BotUpRight->bound = CreateAABBi(cur->bound.minDim + V3i(newSize, 0, newSize), cur->bound.minDim + V3i(oldSize, newSize, oldSize));
+   cur->BotUpRight = BotUpRight;
    
-	TileOctTreeNode *BotDownLeft = GetALeaf(tree);
-	BotDownLeft->bound = CreateAABBi(cur->bound.minDim + V3i(0, newSize, newSize), cur->bound.minDim + V3i(newSize, oldSize, oldSize));
-	cur->BotDownLeft = BotDownLeft;
+   TileOctTreeNode *BotDownLeft = GetALeaf(tree);
+   BotDownLeft->bound = CreateAABBi(cur->bound.minDim + V3i(0, newSize, newSize), cur->bound.minDim + V3i(newSize, oldSize, oldSize));
+   cur->BotDownLeft = BotDownLeft;
    
-	TileOctTreeNode *BotDownRight = GetALeaf(tree);
-	BotDownRight->bound = CreateAABBi(cur->bound.minDim + V3i(newSize, newSize, newSize), cur->bound.minDim + V3i(oldSize, oldSize, oldSize));
-	cur->BotDownRight = BotDownRight;
+   TileOctTreeNode *BotDownRight = GetALeaf(tree);
+   BotDownRight->bound = CreateAABBi(cur->bound.minDim + V3i(newSize, newSize, newSize), cur->bound.minDim + V3i(oldSize, oldSize, oldSize));
+   cur->BotDownRight = BotDownRight;
    
-	cur->isLeaf = false;
+   cur->isLeaf = false;
    
-	for (u32 i = 0; i < 17; i++)
-	{
-		InsertEntity(entityManager, cur, currentEntities[i]);
-	}
+   for (u32 i = 0; i < 17; i++)
+   {
+      InsertEntity(entityManager, cur, currentEntities[i]);
+   }
    
-	return;
+   return;
 }
 
 static void ResetTreeHelper(EntityManager *entityManager, TileOctTree *tree, TileOctTreeNode *node)
 {
-	if (node->isLeaf) return;
+   if (node->isLeaf) return;
    
-	for (u32 i = 0; i < 8; i++)
-	{
-		auto c = node->children[i];
-		ResetTreeHelper(entityManager, tree, c);
-		c->next = tree->freeList;
-		tree->freeList = c;
-	}
+   for (u32 i = 0; i < 8; i++)
+   {
+      auto c = node->children[i];
+      ResetTreeHelper(entityManager, tree, c);
+      c->next = tree->freeList;
+      tree->freeList = c;
+   }
 }
 
 static void ResetTree(EntityManager *entityManager, TileOctTree *tree) // todo speed can this be lineraized?
 {
-	ResetTreeHelper(entityManager, tree, &tree->root);
-	tree->root.isLeaf = true;
-	for (u32 i = 0; i < ArrayCount(tree->root.entitySerials); i++)
-	{
-		tree->root.entitySerials[i] = 0xFFFFFFFF;
-	}
+   ResetTreeHelper(entityManager, tree, &tree->root);
+   tree->root.isLeaf = true;
+   for (u32 i = 0; i < ArrayCount(tree->root.entitySerials); i++)
+   {
+      tree->root.entitySerials[i] = 0xFFFFFFFF;
+   }
    
-	For(entityManager->entities)
-	{
-		it->flags &= ~EntityFlag_InTree;
-	}
+   For(entityManager->entities)
+   {
+      it->flags &= ~EntityFlag_InTree;
+   }
 }
 
 static void InsertEntity(EntityManager *entityManager, Entity *e)
 {
-	Assert(!(e->flags & EntityFlag_InTree));
-	TileOctTree *tree = &entityManager->entityTree;
-	TileOctTreeNode *cur = &tree->root;
-	Assert(PointInAABBi(cur->bound, e->physicalPos));
-	// change this to isNotLeaf, to not have to do this not?
+   Assert(!(e->flags & EntityFlag_InTree));
+   TileOctTree *tree = &entityManager->entityTree;
+   TileOctTreeNode *cur = &tree->root;
+   Assert(PointInAABBi(cur->bound, e->physicalPos));
+   // change this to isNotLeaf, to not have to do this not?
    
-	InsertEntity(entityManager, cur, e);
+   InsertEntity(entityManager, cur, e);
    
-	e->flags |= EntityFlag_InTree;
+   e->flags |= EntityFlag_InTree;
 }
 
 static void MoveEntityInTree(EntityManager *entityManager, Entity *e, v3i by)
 {
-	RemoveEntityFromTree(entityManager, e);
-	e->physicalPos += by;
-	InsertEntity(entityManager, e);
+   RemoveEntityFromTree(entityManager, e);
+   e->physicalPos += by;
+   InsertEntity(entityManager, e);
 }
 
 static Entity *CreateEntityInternal(EntityManager *entityManager, u32 meshID, f32 scale, Quaternion orientation, v3i pos, v3 offset, v4 color, EntityType type, u64 flags)
 {
-	Entity ret;
-	ret.meshId = meshID;
-	ret.scale = scale;
-	ret.orientation = orientation;
-	ret.physicalPos = pos;
-	ret.initialPos = pos;
-	ret.offset = offset;
-	ret.color = color;
-	ret.frameColor = V4(1, 1, 1, 1);
-	ret.serialNumber = entityManager->entitySerializer++;
-	ret.type = type;
-	ret.flags = flags;
-	ret.interpolation = {};
-	
-	u32 arrayIndex = ArrayAdd(&entityManager->entities, ret);
+   Entity ret;
+   ret.meshId = meshID;
+   ret.scale = scale;
+   ret.orientation = orientation;
+   ret.physicalPos = pos;
+   ret.initialPos = pos;
+   ret.offset = offset;
+   ret.color = color;
+   ret.frameColor = V4(1, 1, 1, 1);
+   ret.serialNumber = entityManager->entitySerializer++;
+   ret.type = type;
+   ret.flags = flags;
+   ret.interpolation = {};
    
-	Assert(ret.serialNumber == entityManager->entitySerialMap.amount);
-	ArrayAdd(&entityManager->entitySerialMap, arrayIndex);
-	if (flags) // entity != none? // move this out?
-	{
-		InsertEntity(entityManager, entityManager->entities + arrayIndex);
-	}
+   u32 arrayIndex = ArrayAdd(&entityManager->entities, ret);
    
-	return entityManager->entities + arrayIndex;
+   Assert(ret.serialNumber == entityManager->entitySerialMap.amount);
+   ArrayAdd(&entityManager->entitySerialMap, arrayIndex);
+   if (flags) // entity != none? // move this out?
+   {
+      InsertEntity(entityManager, entityManager->entities + arrayIndex);
+   }
+   
+   return entityManager->entities + arrayIndex;
 };
 
 static void RestoreEntity(EntityManager *entityManager, u32 serial, u32 meshID, f32 scale, Quaternion orientation, v3i pos, v3 offset, v4 color, EntityType type, u64 flags)
 {
-	Entity ret;
-	ret.meshId = meshID;
-	ret.scale = scale;
-	ret.orientation = orientation;
-	ret.physicalPos = pos;
-	ret.offset = offset;
-	ret.color = color;
-	ret.frameColor = V4(1, 1, 1, 1);
-	ret.serialNumber = serial;
-	ret.type = type;
-	ret.flags = flags;
-	ret.interpolation = {};
+   Entity ret;
+   ret.meshId = meshID;
+   ret.scale = scale;
+   ret.orientation = orientation;
+   ret.physicalPos = pos;
+   ret.offset = offset;
+   ret.color = color;
+   ret.frameColor = V4(1, 1, 1, 1);
+   ret.serialNumber = serial;
+   ret.type = type;
+   ret.flags = flags;
+   ret.interpolation = {};
    
-	u32 arrayIndex = ArrayAdd(&entityManager->entities, ret);
+   u32 arrayIndex = ArrayAdd(&entityManager->entities, ret);
    
-	Assert(entityManager->entitySerialMap[serial] == 0xFFFFFFFF);
-	entityManager->entitySerialMap[serial] = arrayIndex;
-	if (flags) // entity != none?
-	{
-		InsertEntity(entityManager, entityManager->entities + arrayIndex);
-	}
+   Assert(entityManager->entitySerialMap[serial] == 0xFFFFFFFF);
+   entityManager->entitySerialMap[serial] = arrayIndex;
+   if (flags) // entity != none?
+   {
+      InsertEntity(entityManager, entityManager->entities + arrayIndex);
+   }
 }
 
 static void RemoveEntity(EntityManager *entityManager, u32 serial)
 {
-	u32 index = entityManager->entitySerialMap[serial];
-	Entity *toRemove = entityManager->entities + index;
-	RemoveEntityFromTree(entityManager, toRemove);
+   u32 index = entityManager->entitySerialMap[serial];
+   Entity *toRemove = entityManager->entities + index;
+   RemoveEntityFromTree(entityManager, toRemove);
    
-	entityManager->entitySerialMap[serial] = 0xFFFFFFFF;
+   entityManager->entitySerialMap[serial] = 0xFFFFFFFF;
    
-	u32 lastIndex = entityManager->entities.amount - 1;
-	if (index != lastIndex)
-	{
-		u32 serialNumberToChange = entityManager->entities[lastIndex].serialNumber;
-		entityManager->entitySerialMap[serialNumberToChange] = index;
-	}
-	UnorderedRemove(&entityManager->entities, index);
+   u32 lastIndex = entityManager->entities.amount - 1;
+   if (index != lastIndex)
+   {
+      u32 serialNumberToChange = entityManager->entities[lastIndex].serialNumber;
+      entityManager->entitySerialMap[serialNumberToChange] = index;
+   }
+   UnorderedRemove(&entityManager->entities, index);
 }
 
 static void ResetEntityManager(EntityManager *entityManager)
 {
-	For(entityManager->entities)
-	{
-		if (it->flags & EntityFlag_IsDynamic)
-		{
-			RemoveEntityFromTree(entityManager, it);
-		}
-	}
+   For(entityManager->entities)
+   {
+      if (it->flags & EntityFlag_IsDynamic)
+      {
+         RemoveEntityFromTree(entityManager, it);
+      }
+   }
    
-	For(entityManager->entities)
-	{
-		if (it->flags & EntityFlag_IsDynamic)
-		{
-			it->physicalPos = it->initialPos;
-			it->flags &= ~(EntityFlag_IsFalling | EntityFlag_IsMoving);
-			it->interpolation = {};
-			InsertEntity(entityManager, it);
-		}
-	}
+   For(entityManager->entities)
+   {
+      if (it->flags & EntityFlag_IsDynamic)
+      {
+         it->physicalPos = it->initialPos;
+         it->flags &= ~(EntityFlag_IsFalling | EntityFlag_IsMoving);
+         it->interpolation = {};
+         InsertEntity(entityManager, it);
+      }
+   }
 }
 
 static u64 GetStandardFlags(EntityType type)
 {
-	switch (type)
-	{
+   switch (type)
+   {
       case Entity_None:
       {
          return 0;
@@ -736,51 +732,49 @@ static u64 GetStandardFlags(EntityType type)
          return EntityFlag_BlocksUnit | EntityFlag_SupportsUnit;
       }break;
       InvalidDefaultCase;
-	};
-	return 0;
+   };
+   return 0;
 }
 
 static Entity CreateDude(EntityManager *entityManager, v3i pos, f32 scale = 1.0f, Quaternion orientation = {1, 0, 0, 0}, v3 offset = V3(), v4 color = V4(1, 1, 1, 1), u32 meshId = 0xFFFFFFFF)
 {
-	u64 flags = GetStandardFlags(Entity_Dude);
-	if (meshId == 0xFFFFFFFF) meshId = entityManager->blockMeshId;
-	Entity *e = CreateEntityInternal(entityManager, meshId, scale, orientation, pos, offset, color, Entity_Dude, flags);
+   u64 flags = GetStandardFlags(Entity_Dude);
+   Entity *e = CreateEntityInternal(entityManager, meshId, scale, orientation, pos, offset, color, Entity_Dude, flags);
    
-	e->instructions = UnitInstructionCreateDynamicArray(100);
+   e->instructions = UnitInstructionCreateDynamicArray(100);
    
-	return *e;
+   return *e;
 }
 
 static Entity CreateBlock(EntityManager *entityManager, v3i pos, f32 scale = 1.0f, Quaternion orientation = { 0.707106769f, -0.707106769f, 0, 0 }, v3 offset = V3(0, 0, 0.27f), v4 color = V4(1, 1, 1, 1), u32 meshId = 0xFFFFFFFF)
 {
-	if (meshId == 0xFFFFFFFF) meshId = entityManager->blockMeshId;
-	u64 flags = GetStandardFlags(Entity_Block);
-	return *CreateEntityInternal(entityManager, meshId, scale, orientation, pos, offset, color, Entity_Block, flags);
+   u64 flags = GetStandardFlags(Entity_Block);
+   return *CreateEntityInternal(entityManager, meshId, scale, orientation, pos, offset, color, Entity_Block, flags);
 }
 
 static Entity CreateWall(EntityManager *entityManager, u32 meshId, v3i pos, f32 scale = 1.0f, Quaternion orientation = { 1, 0, 0, 0 }, v3 offset = V3(), v4 color = V4(1, 1, 1, 1))
 {
-	u64 flags = GetStandardFlags(Entity_Wall);
-	return *CreateEntityInternal(entityManager, meshId, scale, orientation, pos, offset, color, Entity_Wall, flags);
+   u64 flags = GetStandardFlags(Entity_Wall);
+   return *CreateEntityInternal(entityManager, meshId, scale, orientation, pos, offset, color, Entity_Wall, flags);
 }
 
 static Entity CreateSpawner(EntityManager *entityManager, u32 meshId, v3i pos, f32 scale = 1.0f, Quaternion orientation = { 1, 0, 0, 0 }, v3 offset = V3(), v4 color = V4(1, 1, 1, 1))
 {
-	u64 flags = GetStandardFlags(Entity_Spawner);
-	return *CreateEntityInternal(entityManager, meshId, scale, orientation, pos, offset, color, Entity_Spawner, flags);
+   u64 flags = GetStandardFlags(Entity_Spawner);
+   return *CreateEntityInternal(entityManager, meshId, scale, orientation, pos, offset, color, Entity_Spawner, flags);
 }
 
 static Entity CreateGoal(EntityManager *entityManager, u32 meshId, v3i pos, f32 scale = 1.0f, Quaternion orientation = { 1, 0, 0, 0 }, v3 offset = V3(), v4 color = V4(1, 1, 1, 1))
 {
-	u64 flags = GetStandardFlags(Entity_Goal);
-	return *CreateEntityInternal(entityManager, meshId, scale, orientation, pos, offset, color, Entity_Goal, flags);
+   u64 flags = GetStandardFlags(Entity_Goal);
+   return *CreateEntityInternal(entityManager, meshId, scale, orientation, pos, offset, color, Entity_Goal, flags);
 }
 
 // this seems pretty bad in retrospect
 static Entity CreateEntity(EntityManager *entityManager, EntityType type, u32 meshId, v3i pos, f32 scale, Quaternion orientation, v3 offset, v4 color, u64 flags)
 {
-	switch (type)
-	{
+   switch (type)
+   {
       case Entity_None:
       {
          return *CreateEntityInternal(entityManager, meshId, scale, orientation, pos, offset, color, type, flags);
@@ -809,19 +803,19 @@ static Entity CreateEntity(EntityManager *entityManager, EntityType type, u32 me
       }break;
       
       InvalidDefaultCase;
-	}
+   }
    
-	return {};
+   return {};
 }
 
 static EntityManager InitEntityManager(Arena *currentStateArena, Level *level)
 {
-	EntityManager ret;
+   EntityManager ret;
    
    ret.levelName = CopyString(level->name, currentStateArena);
    ret.entitySerializer = 0;
-	ret.entityTree = InitOctTree(currentStateArena, 100); // todo hardcoded.
-	ret.entities = EntityCreateDynamicArray(level->entities.amount);
+   ret.entityTree = InitOctTree(currentStateArena, 100); // todo hardcoded.
+   ret.entities = EntityCreateDynamicArray(level->entities.amount);
    ret.entitySerialMap = u32CreateDynamicArray(level->entities.amount);
    
    For(level->entities)
@@ -829,15 +823,15 @@ static EntityManager InitEntityManager(Arena *currentStateArena, Level *level)
       CreateEntity(&ret, it->type, it->meshId, it->physicalPos, it->scale, it->orientation, it->offset, it->color, it->flags);
    }
    
-	return ret;
+   return ret;
 }
 
 
 static v3i GetAdvanceForOneStep(UnitInstruction step)
 {
-	v3i advance = {};
-	switch (step)
-	{
+   v3i advance = {};
+   switch (step)
+   {
       case Unit_Wait:
       {
          
@@ -864,8 +858,8 @@ static v3i GetAdvanceForOneStep(UnitInstruction step)
          Die;
       }break;
       
-	}
-	return advance;
+   }
+   return advance;
 }
 
 #endif

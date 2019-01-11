@@ -149,3 +149,5 @@ rethink how the snap to tilemap system works
 
 GetHotEntity should use the entity tree. Not sure what acturally uses that anyway...
 Make the Entity systems bucketed instead of dynamically allocated.
+maybe make arenas be on the things, so we do not have too visit 2 pointers.
+at this point I think the best way to do this is to build a general purpose allocator for the current state.

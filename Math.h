@@ -1,4 +1,3 @@
-
 #ifndef RR_MATH
 #define RR_MATH
 

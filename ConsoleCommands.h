@@ -274,17 +274,17 @@ static void LoadLevelHelper(StringArray args)
    }
    
    Level level = LoadLevel(args[0], frameArena, &gameState.assetHandler);
-   Clear(gameState.currentStateArena);
-   EditorLoadLevel(&gameState.editor, gameState.currentStateArena, &level);
    
    if (!level.name.amount)
    {
       ConsoleOutputError("Tried to load \"level/%s.level\", no such file or directory!", args[0]);
+      return;
    }
    
-   ConsoleOutput("Loaded level %s!", args[0]);
-   return;
+   Clear(gameState.currentStateArena);
+   EditorLoadLevel(&gameState.editor, gameState.currentStateArena, &level);
    
+   ConsoleOutput("Loaded level %s!", args[0]);
 }
 
 static void NewLevelHelper(StringArray args)

@@ -1,6 +1,58 @@
 #undef CreateFile
 #undef PlaySound
 
+#ifndef  COMPILER_MSVC
+#define COMPILER_MSVC 0
+#endif // ! COMPILER_MSVC
+
+#ifndef  COMPILER_LLVM
+#define COMPILER_LLVM 0
+#endif // ! COMPILER_MSVC
+
+#if !COMPILER_MSVC && !COMPILER_MSVC
+#if _MSC_VER
+
+#undef COMPILER_MSVC 
+#define COMPILER_MSVC 1
+
+#else
+#undef COMPILER_LLVM 
+#define COMPILER_LLVM 1
+#endif // 
+#endif
+
+
+#if COMPILER_MSVC
+#include <intrin.h>
+#else
+#define BEGIN_TIMED_BLOCK(ID)
+#define END_TIMED_BLOCK(ID)
+#endif
+
+#define Assert(Expression) if(!(Expression)) {__debugbreak();}
+#define InvalidDefaultCase \
+default: \
+{\
+	Die;\
+}break;
+
+template <typename F>
+struct saucy_defer {
+	F f;
+	saucy_defer(F f) : f(f) {}
+	~saucy_defer() { f(); }
+};
+
+template <typename F>
+saucy_defer<F> defer_func(F f) {
+	return saucy_defer<F>(f);
+}
+
+#define DEFER_1(x, y) x##y
+#define DEFER_2(x, y) DEFER_1(x, y)
+#define DEFER_3(x)    DEFER_2(x, __LINE__)
+#define defer(code)   auto DEFER_3(_defer_) = defer_func([&](){code;})
+
 #define WGLPROC(a) a = (a##_ *)wglGetProcAddress(#a);
 
 #define ArrayCount(a) (sizeof(a)/sizeof(*a))
@@ -32,7 +84,6 @@ typedef DIRECT_SOUND_CREATE(direct_sound_create);
 
 // todo: remove all globals?
 static bool globalGamePaused;
-static ImageBuffer globalImageBuffer;
 static LPDIRECTSOUNDBUFFER globalSoundBuffer;
 static MouseInput globalMouseInput;
 static BITMAPINFO globalInfo;
@@ -221,49 +272,12 @@ static StringArray FindAllFiles(char *path, char *fileType, Arena *arenaForStrin
 	return ret;
 }
 
-static void initializeImageBuffer(BITMAPINFO *info, ImageBuffer *buffer, int width, int height)
-{
-   
-	if (buffer->memory)
-	{
-		VirtualFree(buffer->memory, 0, MEM_RELEASE);
-	}
-	buffer->height = height;
-	buffer->width = width;
-   
-	info->bmiHeader.biSize = sizeof(info->bmiHeader);
-	info->bmiHeader.biWidth = buffer->width;
-	info->bmiHeader.biHeight = -buffer->height;
-	info->bmiHeader.biPlanes = 1;
-	info->bmiHeader.biBitCount = 32;
-	info->bmiHeader.biCompression = BI_RGB;
-   
-	buffer->bytesPerPixel = 4;
-	// width and height have to be divisible by 4
-	int rendererOverdraw = 8;
-	int memorySize = width * height * buffer->bytesPerPixel + rendererOverdraw;
-	buffer->memory = VirtualAlloc(0, memorySize, MEM_RESERVE| MEM_COMMIT, PAGE_READWRITE);
-	buffer->memory = ((u8 *)buffer->memory + 4);
-	buffer->pitch = width*buffer->bytesPerPixel;
-	//MEM_COMMIT = System should actually pay attension to them
-}
-
 static void displayImageBuffer(HDC deviceContext)
 {
-#if 0
-	StretchDIBits(deviceContext,
-                 0, 0, buffer->width, buffer->height,
-                 0, 0, buffer->width, buffer->height,
-                 buffer->memory,
-                 info,
-                 DIB_RGB_COLORS, SRCCOPY);
-#else
-	
+   
 	TimedBlock;
    
 	SwapBuffers(deviceContext);
-   
-#endif
 }
 
 static void initializeSoundBuffer(HWND window, SoundBuffer *soundOutput)
@@ -1023,7 +1037,6 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
 	windowClass.lpszClassName = "WindowClass";
    
 	i32 windowWidth = 1280, windowHeight = 720;
-	initializeImageBuffer(&globalInfo, &globalImageBuffer, windowWidth, windowHeight);
 	if (!RegisterClass(&windowClass))
 	{
       return 0;
@@ -1047,9 +1060,9 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
    renderCommands.pushBufferSize = 0;
    renderCommands.pushBufferBase = (u8 *)pushBuffer;
    
-   renderCommands.height = globalImageBuffer.height;
-   renderCommands.width = globalImageBuffer.width;
-   renderCommands.aspectRatio = (f32) globalImageBuffer.width / (f32) globalImageBuffer.height;
+   renderCommands.height = windowHeight;
+   renderCommands.width = windowWidth;
+   renderCommands.aspectRatio = (f32) renderCommands.width / (f32) renderCommands.height;
    
    
    // todo redo this, but make it so that the mouse position gets adjusted at the beginning of the frame, so if the window is not active, this does not do anything

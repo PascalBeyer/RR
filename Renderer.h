@@ -1,6 +1,19 @@
 #ifndef RR_RENDERER
 #define RR_RENDERER
 
+// this is kind of a windows thing, thats why it was in buffers.h...
+struct RenderCommands
+{
+	u32 maxBufferSize;
+	u32 pushBufferSize;
+	u8 *pushBufferBase;
+   
+	u32 width;
+	u32 height;
+	f32 aspectRatio;
+   
+};
+
 enum RenderGroupEntryType
 {
 	RenderGroup_EntryChangeRenderSetup,

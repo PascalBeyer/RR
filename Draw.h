@@ -188,14 +188,16 @@ static void RenderPlacingUnits(RenderGroup *rg, ExecuteData *exe, EntityManager 
 	{
 		v3i pos = clickedE->physicalPos + V3i(0, 0, -1);
       
+      u32 meshId = RegisterAsset(assetHandler, Asset_Mesh,  "dude.mesh");
+      
 		Entity *e = exe->placingUnits.unitsToPlace[0];
 		if (!GetEntities(entityManager, pos))
 		{
-			PushTriangleMesh(rg, entityManager->dudeMeshId, e->orientation, V3(pos), e->scale, V4(1.0f, 0.2f, 1.0f, 0.3f));
+			PushTriangleMesh(rg, meshId, e->orientation, V3(pos), e->scale, V4(1.0f, 0.2f, 1.0f, 0.3f));
 		}
 		else
 		{
-			PushTriangleMesh(rg, entityManager->dudeMeshId, e->orientation, V3(pos), e->scale, V4(1.0f, 1.0f, 0.2f, 0.3f));
+			PushTriangleMesh(rg, meshId, e->orientation, V3(pos), e->scale, V4(1.0f, 1.0f, 0.2f, 0.3f));
 		}
 	}
    

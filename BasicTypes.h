@@ -7,7 +7,13 @@
 #define MINF32 -MAXFLOAT
 #define F32MAX MAXF32
 #define F32MIN MINF32
-#define MAXU32 ((u32)-1)
+#define MAXU32 0xFFFFFFFF
+#define MAX_U32 0xFFFFFFFF
+#define MAX_U16 0xFFFF
+#define MAXU16 0xFFFF
+#define MAXU8  0xFF
+#define MAX_U8 0xFF
+
 
 #define DefineArray(type)		\
 struct type##Array				\
@@ -216,6 +222,26 @@ typedef uintptr_t uintptr;
 
 typedef uintptr_t umm;
 typedef intptr_t smm;
+
+
+static void memcpy(void *dest, void *source, u64 amount)
+{
+   u8 *_dest   = (u8 *)dest;
+   u8 *_source = (u8 *)source;
+   for (u64 it = 0; it < amount; it++)
+   {
+      *_dest++ = *_source++;
+   }
+}
+
+static void memset(void *dest, u8 val, u64 amount)
+{
+   u8 *it = (u8*)dest;
+   for (u64 i = 0; i < amount; i++)
+   {
+      *it++ = val;
+   }
+}
 
 
 struct v2i
@@ -1503,5 +1529,26 @@ static v4i operator-(v4i a)
 	return { -a.x, -a.y, -a.z, -a.w };
 }
 
+typedef u8* u8Ptr;
+typedef u16* u16Ptr;
+typedef u32* u32Ptr;
+
+typedef v3* v3Ptr;
+
+
+DefineArray(f32);
+DefineArray(f32Array);
+
+DefineArray(v3);
+DefineArray(v2);
+DefineArray(v4);
+
+DefineArray(bool);
+DefineArray(u32);
+
+DefineArray(u16);
+DefineArray(u16Ptr);
+DefineArray(u8);
+DefineArray(u8Ptr);
 
 #endif
