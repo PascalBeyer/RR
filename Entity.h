@@ -364,6 +364,7 @@ struct EntityManager
    // todo make some sort of bucketed array.
    // todo make an array thing for each entity type
    EntityDynamicArray entities;
+   BuddyAllocator alloc;
    
    u32 entitySerializer;
    u32DynamicArray entitySerialMap; // this is just huge and that fine
@@ -741,7 +742,7 @@ static Entity CreateDude(EntityManager *entityManager, v3i pos, f32 scale = 1.0f
    u64 flags = GetStandardFlags(Entity_Dude);
    Entity *e = CreateEntityInternal(entityManager, meshId, scale, orientation, pos, offset, color, Entity_Dude, flags);
    
-   e->instructions = UnitInstructionCreateDynamicArray(100);
+   e->instructions = UnitInstructionCreateDynamicArray(&entityManager->alloc, 100);
    
    return *e;
 }
@@ -815,8 +816,10 @@ static EntityManager InitEntityManager(Arena *currentStateArena, Level *level)
    ret.levelName = CopyString(level->name, currentStateArena);
    ret.entitySerializer = 0;
    ret.entityTree = InitOctTree(currentStateArena, 100); // todo hardcoded.
-   ret.entities = EntityCreateDynamicArray(level->entities.amount);
-   ret.entitySerialMap = u32CreateDynamicArray(level->entities.amount);
+   
+   ret.alloc = CreateBuddyAllocator(currentStateArena, MegaBytes(64), 1024);
+   ret.entities = EntityCreateDynamicArray(&ret.alloc, level->entities.amount);
+   ret.entitySerialMap = u32CreateDynamicArray(&ret.alloc, level->entities.amount);
    
    For(level->entities)
    {

@@ -308,7 +308,7 @@ static AssetHandler CreateAssetHandler(Arena *arena)
 	ret.meshList.front->prev = NULL;
 	ret.meshList.back->next = NULL;
    
-	ret.animations = KeyFramedAnimationCreateDynamicArray();
+	ret.animations = KeyFramedAnimationCreateDynamicArray(globalAlloc);
    
 	return ret;
 }

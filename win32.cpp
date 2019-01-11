@@ -93,17 +93,17 @@ static i64 globalPerformanceCountFrequency;
 static HANDLE semaphoreHandle;
 static HWND globalWindow;
 
-static void FreeFile(File file) // todo make this take a pointer and clear it, just in case.
+static void FreeFile(BuddyAllocator *alloc, File file) // todo make this take a pointer and clear it, just in case.
 {
 	void *memory = file.memory;
 	if (memory)
 	{
-		DynamicFree(memory);
+		DynamicFree(alloc, memory);
 	}
 }
 
 //todo clean it up, such that there are not 3 LoadFile...
-static File LoadFile(char *fileName)
+static File LoadFile(char *fileName, BuddyAllocator *alloc)
 {
 	void *memory = 0;
 	unsigned int size = 0;
@@ -118,7 +118,7 @@ static File LoadFile(char *fileName)
 	if (GetFileSizeEx(fileHandle, &fileSize))
 	{
 		u32 fileSize32 = (u32)fileSize.QuadPart;
-		memory = DynamicAlloc(u8, fileSize32);
+		memory = DynamicAlloc(alloc, u8, fileSize32);
 		if (memory)
 		{
 			DWORD bytesRead;
@@ -978,8 +978,8 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
 	Assert(frameMem);
 	Assert(constantMemory);
    
-	alloc = PushStruct(constantArena, BuddyAllocator);
-	*alloc = CreateBuddyAllocator(constantArena, MegaBytes(128), KiloBytes(64));
+	globalAlloc = PushStruct(constantArena, BuddyAllocator);
+	*globalAlloc = CreateBuddyAllocator(constantArena, MegaBytes(128), KiloBytes(64));
    
 	//TestAllocator(&buddyAlloc);
    

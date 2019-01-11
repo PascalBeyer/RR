@@ -67,7 +67,7 @@ static Sound CreateSound(char *fileName)
 {
 	Sound ret;
    
-	File tempFile = LoadFile(fileName);
+	File tempFile = LoadFile(fileName, globalAlloc);
    
 	Assert(tempFile.fileSize);
    

@@ -199,7 +199,7 @@ static void ConvertHelper(StringArray args)
 	{
 		String nameToSave = FormatString("textures/%stexture\n", name);
 		nameToSave[nameToSave.length - 1] = '\0'; // todo  hack... maybe make this a version of format string
-		Bitmap bitmap = CreateBitmap(nameToLoad);
+		Bitmap bitmap = CreateBitmap(nameToLoad, frameArena);
       
 		if (!bitmap.pixels)
 		{

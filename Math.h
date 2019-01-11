@@ -211,6 +211,61 @@ static float QuadDist(v2 a, v2 b)
 	return QuadNorm(a - b);
 }
 
+static u32 BitwiseScanForward(u32 value)
+{
+	unsigned long result = 32;
+#if COMPILER_MSVC
+	if (!_BitScanForward(&result, value))
+	{
+		result = 32;
+	}
+#else
+   
+   
+	for (int i = 0; i < 32; i++)
+	{
+		if (value & 1 << i)
+		{
+			result = i;
+			break;
+		}
+	}
+#endif
+	return (u32)result;
+   
+}
+
+static u32 BitwiseScanReverse(u32 value)
+{
+	unsigned long result;
+#if COMPILER_MSVC
+	if (!_BitScanReverse(&result, value))
+	{
+		result = 0;
+	}
+#else
+   
+   
+	for (int i = 31; i > 0; i++)
+	{
+		if (value & (1 << i))
+		{
+			result = i;
+			break;
+		}
+	}
+#endif
+	return (u32)result;
+   
+}
+
+static bool IsPowerOfTwo(u32 value)
+{
+	u8 highestBit = (u8)BitwiseScanReverse(value);
+   
+	return (value == (1u << highestBit));
+};
+
 static float AngleBetween(v2 a, v2 b)
 {
 	return (float)(atan2(b.y, b.x) - atan2(a.y, a.x));

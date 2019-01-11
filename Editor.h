@@ -478,22 +478,6 @@ static void RemoveEntity(EditorEntities *editorEntities, u32 serial)
 	UnorderedRemove(&editorEntities->entities, index);
 }
 
-static EditorEntities InitEditorEntities(Arena *currentStateArena, Level *level)
-{
-	EditorEntities ret;
-   
-   ret.entitySerializer = 0;
-	ret.entities = EntityCreateDynamicArray(level->entities.amount);
-   ret.entitySerialMap = u32CreateDynamicArray(level->entities.amount);
-   
-   For(level->entities)
-   {
-      CreateEntity(&ret, it->type, it->meshId, it->physicalPos, it->scale, it->orientation, it->offset, it->color, it->flags);
-   }
-   
-	return ret;
-}
-
 typedef EntityCopyDataDynamicArray EditorClipBoard;
 
 struct EditorLevelInfo
@@ -582,9 +566,23 @@ static v3 GetAveragePosForSelection(Editor *editor)
 	return averagePos;
 }
 
+static void ClearEditorEntities(EditorEntities *ret, Arena *currentStateArena, Level *level)
+{
+   ret->entitySerializer = 0;
+	ret->entities.amount  = 0;
+   Reserve(&ret->entities, level->entities.amount);
+   ret->entitySerialMap.amount = 0;
+   Reserve(&ret->entitySerialMap, level->entities.amount);
+   
+   For(level->entities)
+   {
+      CreateEntity(ret, it->type, it->meshId, it->physicalPos, it->scale, it->orientation, it->offset, it->color, it->flags);
+   }
+}
+
 static void EditorLoadLevel(Editor *editor, Arena *currentStateArena, Level *level)
 {
-   editor->editorEntities = InitEditorEntities(currentStateArena, level);
+   ClearEditorEntities(&editor->editorEntities, currentStateArena, level);
    
    EditorSelectNothing(editor);
    EditorGoToNone(editor);
@@ -606,20 +604,24 @@ static Editor InitEditor(Arena *constantArena)
    
    ret.state = EditorState_Default;
    
-   ret.colorPickers   = ColorPickerCreateDynamicArray();
-   ret.clipBoard      = EntityCopyDataCreateDynamicArray();
+   ret.colorPickers   = ColorPickerCreateDynamicArray(globalAlloc);
+   ret.clipBoard      = EntityCopyDataCreateDynamicArray(globalAlloc);
    
-   ret.undoRedoBuffer = EditorActionCreateDynamicArray();
+   ret.undoRedoBuffer = EditorActionCreateDynamicArray(globalAlloc);
    ret.undoRedoAt     = 0xFFFFFFFF;
    
-   ret.hotEntitySerials = u32CreateDynamicArray();
-   ret.hotEntityInitialStates = EntityCopyDataCreateDynamicArray();
+   ret.hotEntitySerials = u32CreateDynamicArray(globalAlloc);
+   ret.hotEntityInitialStates = EntityCopyDataCreateDynamicArray(globalAlloc);
    
    Tweekable(v2, initialEditorPanelPos, V2(0.75f, 0.2f));
    
+   ret.editorEntities.entitySerializer = 0;
+   ret.editorEntities.entities = EntityCreateDynamicArray(globalAlloc, 100);
+   ret.editorEntities.entitySerialMap = u32CreateDynamicArray(globalAlloc, 100);
+   
    ret.panel.pos = initialEditorPanelPos;
    ret.panel.visible = false;
-   ret.panel.values = TweekerPointerCreateDynamicArray();
+   ret.panel.values = TweekerPointerCreateDynamicArray(globalAlloc);
    ret.panel.textInput.string = PushArray(constantArena, Char, 50);
    ret.panel.textInput.string.length = 0;
    ret.panel.textInput.maxLength = 50;

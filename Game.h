@@ -2,27 +2,24 @@
 #define RR_GAME
 
 #include "BasicTypes.h"
+#include "SIMD.h"
 
-#include "buffers.h"
-
-#include "Intrinsics.h"
 #include "Math.h"
 #include "Debug.h"
 
 #include "Arena.h"
+#include "DynamicAlloc.h"
 #include "String.h"
+#include "LinearAlgebra.h"
 
 #include "ConsoleHeader.h"
-#include "Array.h"
 #include "Tweeker.h"
 
 #include "WorkHandler.h"
 #include "Color.h"
 #include "File.h"
 
-#include "LinearAlgebra.h"
 
-#include "SIMD.h"
 #include "Random.h"
 #include "Input.h"
 #include "Camera.h"
@@ -113,6 +110,11 @@ static void SwitchGameMode(GameState *state, GameMode mode)
          Clear(state->currentStateArena);
          
          state->entityManager = InitEntityManager(state->currentStateArena, &level);
+         state->executeData.camera = level.camera;
+         state->executeData.debugCamera = level.camera;
+         state->executeData.t = 0.0f;
+         state->executeData.at = 0;
+         state->executeData.lightSource = level.lightSource;
          ChangeExecuteState(&state->entityManager, &state->executeData, Execute_PathCreator);
          
       }break;

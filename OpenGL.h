@@ -850,7 +850,7 @@ static OpenGLContext OpenGLInit(bool modernContext)
    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementBuffer);
 #endif
    
-   File file = LoadFile("src/ubershader.glsl");
+   File file = LoadFile("src/ubershader.glsl", frameArena);
    
    // used for textured quads
    ret.zBias = OpenGLMakeProgram((char *)file.data, ShaderFlags_Textured);

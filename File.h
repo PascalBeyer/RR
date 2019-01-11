@@ -27,8 +27,8 @@ static File CreateFile(void *memory, u32 fileSize)
 
 static bool WriteEntireFile(char *fileName, File file);
 static File LoadFile(char *fileName, Arena *arena);
-static File LoadFile(char *fileName);
-static void FreeFile(File file);
+static File LoadFile(char *fileName, BuddyAllocator *alloc);
+static void FreeFile(BuddyAllocator *alloc, File file);
 static File LoadFile(char *fileName, void *dest, u32 destSize);
 static StringArray FindAllFiles(char *path, char *type, Arena *stringArena);
 

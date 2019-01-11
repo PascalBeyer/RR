@@ -181,45 +181,10 @@ static void RenderSimulate(RenderGroup *rg, EntityManager *entityManager, Execut
 #endif
 }
 
-static void RenderPlacingUnits(RenderGroup *rg, ExecuteData *exe, EntityManager *entityManager, AssetHandler *assetHandler, Input input)
-{
-	Entity *clickedE = GetHotEntity(exe->camera, entityManager, assetHandler, input.mouseZeroToOne);
-	if (clickedE)
-	{
-		v3i pos = clickedE->physicalPos + V3i(0, 0, -1);
-      
-      u32 meshId = RegisterAsset(assetHandler, Asset_Mesh,  "dude.mesh");
-      
-		Entity *e = exe->placingUnits.unitsToPlace[0];
-		if (!GetEntities(entityManager, pos))
-		{
-			PushTriangleMesh(rg, meshId, e->orientation, V3(pos), e->scale, V4(1.0f, 0.2f, 1.0f, 0.3f));
-		}
-		else
-		{
-			PushTriangleMesh(rg, meshId, e->orientation, V3(pos), e->scale, V4(1.0f, 1.0f, 0.2f, 0.3f));
-		}
-	}
-   
-	For(exe->placingUnits.unitsToPlace)
-	{
-		(*it)->frameColor.a = 0.0f;
-	}
-   
-	For(entityManager->entities)
-	{
-		PushTriangleMesh(rg, it->meshId, it->orientation, GetRenderPos(*it), it->scale, it->color * it->frameColor);
-	}
-}
-
 static void RenderExecute(RenderGroup *rg, EntityManager *entityManager, ExecuteData *exe, AssetHandler *assetHandler, Input input)
 {
 	switch (exe->state)
 	{
-      case Execute_PlacingUnits:
-      {
-         RenderPlacingUnits(rg, exe, entityManager, assetHandler, input);
-      }break;
       case Execute_PathCreator:
       {
          RenderPathCreator(rg, entityManager, exe, &exe->pathCreator, input);

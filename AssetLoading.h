@@ -15,7 +15,7 @@ DefineArray(UVListPtr);
 
 static MaterialDynamicArray LoadMTL(String path, String fileName, Arena *arena)
 {
-	MaterialDynamicArray ret = MaterialCreateDynamicArray();
+	MaterialDynamicArray ret = MaterialCreateDynamicArray(globalAlloc);
 	DeferRestore(frameArena);
    
 	File file = LoadFile(FormatCString("%s%s\0", path, fileName), frameArena);
@@ -1169,9 +1169,8 @@ static DAEReturn ReadDAE(Arena *constantArena, char *fileName)
 {
 	TimedBlock;
    
-	File file = LoadFile(fileName);
+	File file = LoadFile(fileName, frameArena);
 	if (!file.amount) return {};
-	defer(FreeFile(file));
    
 	b32 success = true;
    
@@ -2132,19 +2131,13 @@ struct BitmapFileHeader
 #pragma pack(pop)
 
 
-static Bitmap CreateBitmap(char* fileName, Arena *arena = NULL, bool wrapping = false)
+static Bitmap CreateBitmap(char* fileName, Arena *arena, bool wrapping = false)
 {
 	Bitmap ret = {};
 	//TODO: maybe check if its actually a bmp
 	File tempFile;
-   if(arena)
-   {
-      tempFile = LoadFile(fileName, arena);
-   }
-   else
-   {
-      tempFile = LoadFile(fileName);
-   }
+   tempFile = LoadFile(fileName, arena);
+   
    
 	void *memPointer = tempFile.memory;
 	if (!memPointer) return ret;
@@ -2193,11 +2186,6 @@ static Bitmap CreateBitmap(char* fileName, Arena *arena = NULL, bool wrapping = 
    
 	ret.textureHandle = RegisterWrapingTexture(ret.width, ret.height, ret.pixels);
 	return ret;
-}
-
-static Bitmap CreateBitmap(String fileName)
-{
-	return CreateBitmap(ToNullTerminated(fileName));
 }
 
 static void DoNothing(void *x) { }
@@ -2266,7 +2254,7 @@ static Font CreateFontFromSTB(u32 width, u32 height, u8 *pixels, u32 amountOfCha
 
 static Font LoadFont(char *fileName, Arena *arena)
 {
-	File file = LoadFile(fileName);
+	File file = LoadFile(fileName, frameArena);
    
 	u32 width = 1024;
 	u32 height = 1024;
@@ -2276,8 +2264,6 @@ static Font LoadFont(char *fileName, Arena *arena)
 	f32 charHeight = 64.0f;
 	stbtt_bakedchar *charData = PushData(frameArena, stbtt_bakedchar, amountOfChars);
 	stbtt_BakeFontBitmap((char *)file.memory, 0, charHeight, pixels, width, height, 0, amountOfChars, charData);
-   
-	FreeFile(file);
    
 	return CreateFontFromSTB(width, height, pixels, amountOfChars, charHeight, charData, arena);
 }
@@ -2295,7 +2281,7 @@ static void UnloadMesh(AssetInfo *info)
    Assert(info->currentlyLoaded);
    Assert(info->type == Asset_Mesh);
    
-   DynamicFree(info->meshInfo->fileLocation);
+   DynamicFree(globalAlloc, info->meshInfo->fileLocation);
 }
 
 static TriangleMesh LoadMesh(AssetHandler *assetHandler, char *fileName, void **filePtr)
@@ -2304,7 +2290,7 @@ static TriangleMesh LoadMesh(AssetHandler *assetHandler, char *fileName, void **
    // todo this should not call Register mesh, we should get rid of type
    TriangleMesh ret;
    
-   File file = LoadFile(fileName);
+   File file = LoadFile(fileName, globalAlloc);
    if (!file.fileSize) return {};
    *filePtr = file.data;
    u8 *at = (u8 *)file.memory;
@@ -2470,7 +2456,7 @@ static bool WriteAnimation(char *fileName, KeyFramedAnimation animation) // unte
 
 static KeyFramedAnimation LoadAnimation(char *fileName) // untested
 {
-   File file = LoadFile(fileName);
+   File file = LoadFile(fileName, globalAlloc);
    if (!file.fileSize) return {};
    
    u8 *at = file.memory;
@@ -2514,8 +2500,7 @@ static Bitmap DownSampleTexture(Bitmap bitmap)
 }
 static bool LoadBitmapIntoBitmap(char *filefile, Bitmap *texture)
 {
-   File file = LoadFile(filefile);
-   defer(FreeFile(file));
+   File file = LoadFile(filefile, frameArena);
    if (!file.fileSize) return false;
    u8 *at = (u8 *)file.memory;
    u32 version = *(u32 *)at;

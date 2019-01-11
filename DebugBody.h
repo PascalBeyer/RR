@@ -15,7 +15,7 @@ inline void AdvanceMod(u32 *a, u32 mod) // todo can make fast version of this by
 static void LoadDebugVariablesFile() //todo strings?
 {
 	File *file = PushStruct(globalDebugState.arena, File);
-	*file = LoadFile("src/DebugVariables.txt");
+	*file = LoadFile("src/DebugVariables.txt", globalAlloc);
 	globalTweekers.tweekerFile = file;
 }
 
@@ -109,7 +109,7 @@ static void InitDebug()
 		debugInfoArray[i].color = RandomColorU32(&series);
 	}
    
-	globalTweekers.tweekers = TweekerCreateDynamicArray();
+	globalTweekers.tweekers = TweekerCreateDynamicArray(globalAlloc);
 	s->lastFrameTime = 1.0f;
    
 	for (u32 i = 0; i < DEBUG_AMOUNT_OF_DEBUG_FRAMES; i++)
@@ -611,8 +611,8 @@ static void WriteSingleTweeker(Tweeker tweeker)
 			Assert(WriteEntireFile("src/DebugVariables.txt", newFile));
          
 			//todo : hack
-			FreeFile(*globalTweekers.tweekerFile);
-			*globalTweekers.tweekerFile = LoadFile("src/DebugVariables.txt");
+			FreeFile(globalAlloc, *globalTweekers.tweekerFile);
+			*globalTweekers.tweekerFile = LoadFile("src/DebugVariables.txt", globalAlloc);
          
 			ConsoleOutput("Saved to file."); // todo  somehow there no failing right now
 		}
@@ -631,8 +631,8 @@ static void WriteSingleTweeker(Tweeker tweeker)
 	Assert(WriteEntireFile("src/DebugVariables.txt", newFile)); 
    
 	//todo : hack
-	FreeFile(*globalTweekers.tweekerFile);
-	*globalTweekers.tweekerFile = LoadFile("DebugVariables.txt");
+	FreeFile(globalAlloc, *globalTweekers.tweekerFile);
+	*globalTweekers.tweekerFile = LoadFile("DebugVariables.txt", globalAlloc);
    
 	ConsoleOutputError("Saved to file."); // todo  somehow there no failing right now
 }

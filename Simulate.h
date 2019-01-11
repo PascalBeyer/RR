@@ -111,12 +111,6 @@ enum ExecuteState
 	Execute_Count,
 };
 
-// place units on release, so we can use it both for moving em it the path creator and the inital thing
-struct PlacingUnitsData 
-{
-	EntityPtrDynamicArray unitsToPlace;
-};
-
 struct SimData
 {
 	u32 blocksNeeded;
@@ -137,13 +131,11 @@ struct ExecuteData
    
 	PathCreator pathCreator;
 	SimData simData;
-	PlacingUnitsData placingUnits;
 };
 static ExecuteData InitExecute()
 {
 	ExecuteData ret;
 	ret.state = Execute_None;
-	ret.placingUnits.unitsToPlace = EntityPtrCreateDynamicArray();
 	return ret;
 }
 

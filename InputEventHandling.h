@@ -1,37 +1,4 @@
 
-static void PlacingUnitsHandleEvent(ExecuteData *exe, EntityManager *entityManager, AssetHandler *assetHandler, KeyStateMessage message, Input input)
-{
-	if (message.flag & KeyState_ReleasedThisFrame)
-	{
-		switch (message.key)
-		{
-         case Key_leftMouse:
-         {
-            // todo only ones that are in the tree, i.e. are gamePlay related
-            Entity *clickedE = GetHotEntity(exe->camera, entityManager, assetHandler, input.mouseZeroToOne); 
-            if (clickedE)
-            {
-               v3i posToPlace = clickedE->physicalPos + V3i(0, 0, -1);
-               Entity *e = exe->placingUnits.unitsToPlace[0];
-               e->physicalPos = posToPlace;
-               
-               InsertEntity(entityManager, e);
-               
-               e->initialPos = e->physicalPos;
-               UnorderedRemove(&exe->placingUnits.unitsToPlace, 0);
-               if (!exe->placingUnits.unitsToPlace)
-               {
-                  ChangeExecuteState(entityManager, exe, Execute_PathCreator);
-                  exe->pathCreator.hotUnit = e->serialNumber;
-                  exe->pathCreator.state = PathCreator_CreatingPath;
-                  return;
-               }
-            }
-         }break;
-		}
-	}
-}
-
 static u32 GetHotUnit(EntityManager *entityManager, AssetHandler *assetHandler, v2 mousePosZeroToOne, Camera camera)
 {
 	v3 camP = camera.pos; // todo camera or debugCamera? Maybe we should again unify them
@@ -134,10 +101,12 @@ static void PathCreatorHandleEvent(EntityManager *entityManager, ExecuteData *ex
                   
                   if (message.flag & KeyState_ControlDown)
                   {
+                     Die;
+#if 0
                      RemoveEntityFromTree(entityManager, e);
                      ChangeExecuteState(entityManager, exe, Execute_PlacingUnits);
                      ArrayAdd(&exe->placingUnits.unitsToPlace, e);
-                     
+#endif
                      break;
                   }
                   
@@ -276,10 +245,6 @@ static void ExecuteHandleEvents(EntityManager *entityManager, AssetHandler *asse
 {
 	switch (exe->state)
 	{
-      case Execute_PlacingUnits:
-      {
-         PlacingUnitsHandleEvent(exe, entityManager, assetHandler, message, input);
-      }break;
       case Execute_Simulation:
       {
          SimHandleEvents(entityManager, exe, message);
