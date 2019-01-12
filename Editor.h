@@ -488,6 +488,12 @@ struct EditorLevelInfo
    u32 blocksNeeded;
 };
 
+enum EditorFlags
+{
+   Editor_EditingPhysical = 0x1,
+   Editor_
+};
+
 struct Editor
 {
    EditorState state = EditorState_Default;

@@ -343,6 +343,7 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
       PushLine(rg, camera->pos, camera->pos + B3(camera->orientation), 0xFF0000FF); // red
       
       
+      
       //PushDebugPointCuboid(rg, camera->pos + B3(camera->orientation) *5.0f);
       
 #if 0

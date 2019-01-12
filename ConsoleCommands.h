@@ -345,7 +345,14 @@ static void SetLightHelper(StringArray args)
    gameState.editor.levelInfo.lightSource.pos         = gameState.editor.camera.pos;
 }
 
-
+static void LevelsHelper(StringArray args)
+{
+   StringArray levels = FindAllFiles("level\\", ".level", frameArena);
+   For(levels)
+   {
+      ConsoleOutput(*it);
+   }
+}
 
 #endif // ! RR_CONSOLECOMMANDS
 

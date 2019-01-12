@@ -70,6 +70,7 @@ static void InitConsole(Arena *constantArena)
 	BuildStaticArray(constantArena, console.commands, CreateCommand("addMesh", AddMeshHelper, 1, 1));
 	BuildStaticArray(constantArena, console.commands, CreateCommand("saveCamera", SaveCameraHelper, 0, 0));
    BuildStaticArray(constantArena, console.commands, CreateCommand("setLight", SetLightHelper, 0, 0));
+   BuildStaticArray(constantArena, console.commands, CreateCommand("levels", LevelsHelper, 0, 0));
    
 }
 
@@ -710,14 +711,22 @@ static void UpdateConsole(Input input)
    preCursorString.length = console.cursorPos;
    
    f32 stringLengthUpToCursor = GetActualStringLength(preCursorString, console.fontSize, globalFont);
+   f32 rightEdgePos = (1.0f - console.cursorScrollEdge);
    
-   if ((stringLengthUpToCursor - console.typeFieldTextScrollOffset) > (1.0f - console.cursorScrollEdge))
+   if ((stringLengthUpToCursor - console.typeFieldTextScrollOffset) > rightEdgePos)
    {
-      console.typeFieldTextScrollOffset = stringLengthUpToCursor - (1.0f - console.cursorScrollEdge);
+      // scroll right when cursor is past rightEdgePos
+      console.typeFieldTextScrollOffset = stringLengthUpToCursor - rightEdgePos;
    }
    else if ((stringLengthUpToCursor >  console.cursorScrollEdge) && (stringLengthUpToCursor - console.typeFieldTextScrollOffset) < console.cursorScrollEdge)
    {
+      // if we can and should scoll left scroll left
       console.typeFieldTextScrollOffset = stringLengthUpToCursor - console.cursorScrollEdge;
+   }
+   else if(stringLengthUpToCursor < (1.0f - console.cursorScrollEdge))
+   {
+      // if the string is small enough to fit, just reset
+      console.typeFieldTextScrollOffset = 0.0f;
    }
    
    console.cursorTimer += input.dt;
@@ -815,7 +824,7 @@ static void DrawConsole(RenderGroup *rg)
    PushRectangle(rg, typeFieldPos, p4, consoleTextFieldColor);
    
    //cursor
-   if ((console.cursorTimer < 0.5f) && !(console.selecting & SelectTag_History))
+   if (ConsoleActive() && (console.cursorTimer < 0.5f) && !(console.selecting & SelectTag_History))
    {
       String preCursorString = console.inputString;
       preCursorString.length = console.cursorPos;

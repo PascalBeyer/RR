@@ -797,6 +797,12 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      Reserve(&editor->clipBoard, editor->hotEntityInitialStates.amount);
                      memcpy(editor->clipBoard.data, editor->hotEntityInitialStates.data, editor->hotEntityInitialStates.amount * sizeof(EntityCopyData));
                      editor->clipBoard.amount = editor->hotEntityInitialStates.amount;
+                     
+                     For(editor->clipBoard) // slow?
+                     {
+                        it->physicalPos -= averageTile;
+                     }
+                     
                   }
                   
                }break;
