@@ -151,5 +151,16 @@ maybe make arenas be on the things, so we do not have too visit 2 pointers.
 
 
 tocheck wheather on cam do project and check intersection with unit cube.
-fix static m4x4Array CalculateBoneTransforms(Skeleton *skeleton, KeyFramedAnimation *animation, f32 t) once i am done
+
 animatedMesh should probably never have an objectTransform, as that is the same thing as the boneTransform of the root
+
+lets do exactly what the dude does. 
+->accelerationTilt.
+->2 keyFrame static move animation. // i.e foot matching.
+->2 differant speeds, that we interpolate
+->bonces that depend on speed.
+->interpolate between keyframes, bicubic.
+->crouch spring damper
+->IK
+->forses on parts of his body
+->posematching (ragdoll)

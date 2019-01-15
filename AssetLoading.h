@@ -2050,6 +2050,7 @@ static DAEReturn ReadDAE(Arena *constantArena, char *fileName)
    
    triangleMesh.indexSets = PushArray(constantArena, IndexSet, 1);
    triangleMesh.indexSets[0].mat = gatheredData.materials[0];
+   triangleMesh.indexSets[0].mat.texturePath = FormatString("%s.texture", gatheredData.images[0].name, constantArena);
    triangleMesh.indexSets[0].offset = 0;
    triangleMesh.indexSets[0].amount = indices.amount;
    triangleMesh.name = CopyString(gatheredData.scenes[0].nodes[1]->name, constantArena);
