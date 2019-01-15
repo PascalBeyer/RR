@@ -44,8 +44,8 @@ struct AssetInfo
 	
 	union
 	{
-		MeshInfo	*meshInfo;
-		TextureInfo *textureInfo;
+		MeshInfo  	*meshInfo;
+		TextureInfo   *textureInfo;
 		AnimationInfo *animationInfo;
 	};
 };
@@ -427,7 +427,9 @@ static KeyFramedAnimation *GetAnimation(AssetHandler *handler, u32 id)
 	char* filePath = FormatCString("animation/%s", entry->name);
 	KeyFramedAnimation animation = LoadAnimation(filePath);
    
-	return handler->animations + ArrayAdd(&handler->animations, animation);
+   u32 loadedIndex = ArrayAdd(&handler->animations, animation);
+   entry->loadedIndex = loadedIndex;
+	return handler->animations + loadedIndex;
 }
 
 static TriangleMesh *GetMesh(AssetHandler *handler, u32 id)

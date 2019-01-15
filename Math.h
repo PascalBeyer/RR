@@ -672,16 +672,15 @@ static Quaternion Slerp(Quaternion a, f32 t, Quaternion b)
    
 	// if a=b or a=-b then theta = 0 and we can return a
 	if (Abs(cosHalfTheta) >= 1.0) {
-		ret.w = a.w; ret.x = a.x; ret.y = a.y; ret.z = a.z;
-		return ret;
+		return a;
 	}
    
-	// Calculate temporary values.
-	double halfTheta = acos(cosHalfTheta);
-	double sinHalfTheta = sqrt(1.0 - cosHalfTheta*cosHalfTheta);
+   f32 halfTheta    = acosf(cosHalfTheta);
+   f32 sinHalfTheta = Sqrt(1.0f - cosHalfTheta*cosHalfTheta);
 	// if theta = 180 degrees then result is not fully defined
 	// we could rotate around any axis normal to a or b
-	if (fabs(sinHalfTheta) < 0.001f) { // fabs is floating point absolute
+   
+	if (fabsf(sinHalfTheta) < 0.001f) {
 		ret.w = (a.w * 0.5f + b.w * 0.5f);
 		ret.x = (a.x * 0.5f + b.x * 0.5f);
 		ret.y = (a.y * 0.5f + b.y * 0.5f);
@@ -689,8 +688,8 @@ static Quaternion Slerp(Quaternion a, f32 t, Quaternion b)
 		return ret;
 	}
    
-	double ratioA = sin((1 - t) * halfTheta) / sinHalfTheta;
-	double ratioB = sin(t * halfTheta) / sinHalfTheta;
+   f32 ratioA = Sin((1 - t) * halfTheta) / sinHalfTheta;
+   f32 ratioB = Sin(     t  * halfTheta) / sinHalfTheta;
 	//calculate Quaternion.
 	ret.w = (f32)(a.w * ratioA + b.w * ratioB);
 	ret.x = (f32)(a.x * ratioA + b.x * ratioB);
@@ -1547,6 +1546,50 @@ static Quaternion EulerAngleToQuaternion(EulerAngle angle)
 	q.y = sy * cp * sr + cy * sp * cr;
 	q.z = sy * cp * cr - cy * sp * sr;
 	return q;
+}
+
+
+// todo there could be a baked version of this
+// note directions need to be normalized
+// this does not handle the cases around v = -v' very well...
+static Quaternion LookAt(v3 oldForward, v3 newForward)
+{
+   f32 cosineOfAngle = Dot(oldForward, newForward);
+   
+#if 1
+   // saveguard for singularity at oldForward == - newForward
+   if(cosineOfAngle < -0.99f)
+   {
+      return {0, 1, 0, 0};
+   }
+#endif
+   
+   v3 rotationAxisTimesSine = CrossProduct(oldForward, newForward);
+   //if(rotationAxisTimesSine.z > 0.0f) rotationAxisTimesSine *= -1.0f;
+   
+   Quaternion q;
+   q.v = rotationAxisTimesSine;
+   q.r = cosineOfAngle + 1; 
+   
+   // this '+ 1' effectivly does a slerp(id, q, 0.5) according to some guy on overflow
+   // it does an NLerp, not sure if slerp and nlerp always agree at 0.5f. Would seem logical
+   q = Normalize(q); // normalize or minus id?
+   // can  normalize faster because we know the norm
+   
+   return q;
+}
+
+static f32 Dot(Quaternion q, Quaternion s)
+{
+   return (q.x * s.x) + (q.y * s.y) + (q.z * s.z) + (q.w * s.w);
+}
+
+static Quaternion Negate(Quaternion a)
+{
+   Quaternion ret;
+   ret.r = -a.r;
+   ret.v = -a.v;
+   return ret;
 }
 
 

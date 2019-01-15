@@ -4,6 +4,6 @@ echo running
 
 pushd \..
 
-call build\win32
+call build\RealRun1
 
 popd

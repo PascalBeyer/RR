@@ -487,7 +487,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                {
                   Tweekable(f32, editorPanelWidth);
                   Tweekable(f32, editorPanelHeight);
-                  if (editor->panel.visible && PointInRectangle(editor->panel.pos, editorPanelWidth, editorPanelHeight, input.mouseZeroToOne))
+                  if (editor->panel.visible && !editor->panelIsHidden &&  PointInRectangle(editor->panel.pos, editorPanelWidth, editorPanelHeight, input.mouseZeroToOne))
                   {
                      Tweekable(f32, editorBorderWidth);
                      Tweekable(f32, editorHeaderWidth);
@@ -651,7 +651,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      
                      editor->panel.values.amount = 0;
                      editor->panel.visible = true;
-                     ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_b32, "SnapToTileMap", &editor->snapToTileMap));
+                     ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_b32, "Edit Physical", &editor->editingPhysical));
                      break;
                   }
                   
@@ -665,8 +665,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      ArrayAdd(&editor->hotEntityInitialStates, toAdd);
                      ArrayAdd(&editor->hotEntitySerials, hotEntity->serialNumber);
                      editor->panel.visible = true;
-                     
-                     ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_b32, "SnapToTileMap", &editor->snapToTileMap));
+                     ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_b32, "Edit Physical", &editor->editingPhysical));
                      ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_EntityType, "EntityType", &hotEntity->type));
                      ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_v3i, "PhysicalPos", &hotEntity->physicalPos));
                      ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_v3, "Offset", &hotEntity->offset));
@@ -681,7 +680,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                {
                   if (EditorHasSelection(editor))
                   {
-                     editor->panel.visible = !editor->panel.visible;
+                     editor->panelIsHidden = !editor->panelIsHidden;
                   }
                }break;
                case Key_left:
@@ -692,6 +691,8 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      Entity *mesh = GetEntity(editorEntities, *it);
                      mesh->physicalPos += inc;
                   }
+                  EditorPushUndo(editor);
+                  ResetSelectionInitials(editor);
                }break;
                case Key_right:
                {
@@ -701,6 +702,8 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      Entity *mesh = GetEntity(editorEntities, *it);
                      mesh->physicalPos += inc;
                   }
+                  EditorPushUndo(editor);
+                  ResetSelectionInitials(editor);
                   
                }break;
                case Key_up:
@@ -721,7 +724,8 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      Entity *mesh = GetEntity(editorEntities, *it);
                      mesh->physicalPos += inc;
                   }
-                  
+                  EditorPushUndo(editor);
+                  ResetSelectionInitials(editor);
                }break;
                case Key_down:
                {
@@ -741,6 +745,8 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      Entity *mesh = GetEntity(editorEntities, *it);
                      mesh->physicalPos += inc;
                   }
+                  EditorPushUndo(editor);
+                  ResetSelectionInitials(editor);
                }break;
                
                case Key_g:
@@ -814,7 +820,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      editor->state = EditorState_PlacingNewMesh;
                      
                      ResetEditorPanel(editor);
-                     ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_b32, "SnapToTileMap", &editor->snapToTileMap));
+                     ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_b32, "Edit physical position", &editor->editingPhysical));
                      editor->panel.visible = true;
                      
                      EditorSelectNothing(editor);
@@ -925,12 +931,12 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
             {
                case Key_leftMouse:
                {
-                  if (editor->snapToTileMap)
-                  {   // todo this is garbage.
-                     For(editor->hotEntitySerials)
+                  if (editor->editingPhysical)
+                  {
+                     for(u32 i = 0; i < editor->hotEntitySerials.amount; i++)
                      {
-                        Entity *mesh = GetEntity(editorEntities, *it);
-                        mesh->offset = V3();
+                        Entity *e = GetEntity(editorEntities, editor->hotEntitySerials[i]);
+                        e->offset = editor->hotEntityInitialStates[i].offset;
                      }
                   }
                   
@@ -1183,7 +1189,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                   For(editor->clipBoard)
                   {
                      v3i pos = it->physicalPos + clickedTile;
-                     v3 offset = editor->snapToTileMap ? V3() : (it->offset + clickedOffset);
+                     v3 offset = (it->offset);
                      
                      Entity *e = CreateEntity(editorEntities, it->type,it->meshId, pos, it->scale, it->orientation, offset, it->color, it->flags);
                      

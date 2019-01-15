@@ -217,7 +217,7 @@ enum OpenGLShaderFlags : u32
    ShaderFlags_ShadowMapping  = 0x2,
    ShaderFlags_Phong          = 0x4,
    ShaderFlags_Animated       = 0x8,
-   
+   ShaderFlags_ZBias          = 0x10,
    
 };
 
@@ -271,6 +271,7 @@ struct OpenGLContext
    GLuint defaultInternalTextureFormat;
    
    OpenGLProgram basic;
+   OpenGLProgram basicZBias;
    OpenGLProgram basicMesh;
    OpenGLProgram shadow;
    OpenGLProgram zBias;
@@ -388,6 +389,10 @@ static OpenGLProgram OpenGLMakeProgram(char *shaderCode, u32 flags)
    if(flags & ShaderFlags_Animated)
    {
       S("#define Animated \n", frameArena);
+   }
+   if(flags & ShaderFlags_ZBias)
+   {
+      S("#define ZBias \n", frameArena);
    }
    
    *PushStruct(frameArena, Char) = '\0';
@@ -858,6 +863,9 @@ static OpenGLContext OpenGLInit(bool modernContext)
    // used for untextured quads
    ret.basic = OpenGLMakeProgram((char *)file.data, ShaderFlags_ShadowMapping);
    
+   // used for untextured quads
+   ret.basicZBias = OpenGLMakeProgram((char *)file.data, ShaderFlags_ShadowMapping | ShaderFlags_ZBias);
+   
    ret.animated = OpenGLMakeProgram((char *)file.data, ShaderFlags_Animated|ShaderFlags_ShadowMapping|ShaderFlags_Phong|ShaderFlags_Textured);
    
    ret.basicMesh = OpenGLMakeProgram((char *)file.data, ShaderFlags_ShadowMapping|ShaderFlags_Phong|ShaderFlags_Textured);
@@ -1325,17 +1333,19 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
          {
             EntryColoredVertices *lineHeader = (EntryColoredVertices*)header;
             
+            OpenGLProgram prog = context->basicZBias;
+            
             OpenGLUniformInfo uniforms;
             uniforms.vertexBuffer = context->vertexBuffer;
             
-            BeginUseProgram(context, context->basic, currentSetup, uniforms);
+            BeginUseProgram(context, prog, currentSetup, uniforms);
             
-            BeginAttribArraysPC(context->basic);
+            BeginAttribArraysPC(prog);
             glBufferData(GL_ARRAY_BUFFER, lineHeader->vertexCount * sizeof(VertexFormatPC), lineHeader->data, GL_STREAM_COPY);
             glDrawArrays(GL_LINES, 0, lineHeader->vertexCount);
             
-            EndAttribArrays(context->basic);
-            EndUseProgram(context->basic);
+            EndAttribArrays(prog);
+            EndUseProgram(prog);
             pBufferIt += sizeof(*lineHeader);
          }break;
          

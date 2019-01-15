@@ -488,12 +488,6 @@ struct EditorLevelInfo
    u32 blocksNeeded;
 };
 
-enum EditorFlags
-{
-   Editor_EditingPhysical = 0x1,
-   Editor_
-};
-
 struct Editor
 {
    EditorState state = EditorState_Default;
@@ -513,7 +507,10 @@ struct Editor
 	EditorActionDynamicArray undoRedoBuffer;
 	u32 undoRedoAt;
    
-	b32 snapToTileMap; // todo if there are more flags, we could bundle em here
+   // todo: I could pack these...
+	b32 editingPhysical;
+   b32 orbitingCamera;
+   b32 panelIsHidden;
    
    EditorPanel panel;
    ColorPickerDynamicArray colorPickers;
@@ -903,6 +900,7 @@ static void EditorPushUndo(Editor *editor)
    
    switch (editor->state)
    {
+      case EditorState_Default: // for arrow moves
       case EditorState_Scaling:
       case EditorState_Rotating:
       case EditorState_Moving:
@@ -1054,16 +1052,30 @@ static void UpdateEditor(Editor *editor, Input input)
          f32 angle = AngleBetween(relP2, relP1);
          Quaternion q = AxisAngleToQuaternion(angle, V3(0, 0, 1));
          m4x4 mat = QuaternionToMatrix4(q);
-         
-         For(editor->hotEntitySerials)
+         if(editor->editingPhysical)
          {
-            Entity *e = GetEntity(editorEntities, *it);
-            
-            v4 relPos = V4(GetRenderPos(*e) - averagePos, 1.0f);
-            e->orientation = q * e->orientation;
-            v3 pos = averagePos + (mat * relPos).xyz;
-            e->physicalPos = RoundToTileMap(pos);
-            e->offset = pos - V3(e->physicalPos);
+            For(editor->hotEntitySerials)
+            {
+               Entity *e = GetEntity(editorEntities, *it);
+               
+               v4 relPos = V4(GetRenderPos(*e) - averagePos, 1.0f);
+               e->orientation = q * e->orientation;
+               v3 pos = averagePos + (mat * relPos).xyz;
+               e->physicalPos = RoundToTileMap(pos);
+               e->offset = pos - V3(e->physicalPos);
+            }
+         }
+         else
+         {
+            For(editor->hotEntitySerials)
+            {
+               Entity *e = GetEntity(editorEntities, *it);
+               
+               v4 relPos = V4(GetRenderPos(*e) - averagePos, 1.0f);
+               e->orientation = q * e->orientation;
+               v3 pos = averagePos + (mat * relPos).xyz;
+               e->offset = pos - V3(e->physicalPos);
+            }
          }
       }break;
       case EditorState_Scaling:
@@ -1085,15 +1097,30 @@ static void UpdateEditor(Editor *editor, Input input)
          f32 dot = 3.0f * Dot(mouseD, d); // scale speed
          f32 exp = expf(dot);
          
-         For(editor->hotEntitySerials)
+         if(editor->editingPhysical)
          {
-            Entity *mesh = GetEntity(editorEntities, *it);
-            v3 delta = GetRenderPos(*mesh) - averagePos;
-            v3 newPos = exp * delta + averagePos;
-            
-            mesh->physicalPos = RoundToTileMap(newPos);
-            mesh->offset = newPos - V3(mesh->physicalPos);
-            mesh->scale *= exp;
+            For(editor->hotEntitySerials)
+            {
+               Entity *mesh = GetEntity(editorEntities, *it);
+               v3 delta = GetRenderPos(*mesh) - averagePos;
+               v3 newPos = exp * delta + averagePos;
+               
+               mesh->physicalPos = RoundToTileMap(newPos);
+               mesh->offset = newPos - V3(mesh->physicalPos);
+               mesh->scale *= exp;
+            }
+         }
+         else
+         {
+            For(editor->hotEntitySerials)
+            {
+               Entity *mesh = GetEntity(editorEntities, *it);
+               v3 delta = GetRenderPos(*mesh) - averagePos;
+               v3 newPos = exp * delta + averagePos;
+               
+               mesh->offset = newPos - V3(mesh->physicalPos);
+               mesh->scale *= exp;
+            }
          }
       }break;
       case EditorState_Moving:
@@ -1115,15 +1142,27 @@ static void UpdateEditor(Editor *editor, Input input)
          v3 oI = camPos + oP.x * (oldP - camPos); // = p + op.y * cam->b1 + op.z * cam->b2
          v3 nI = camPos + nP.x * (newP - camPos);
          v3 realDelta = nI - oI;
-         
-         For(editor->hotEntitySerials)
+         if(editor->editingPhysical)
          {
-            Entity *e = GetEntity(editorEntities, *it);
-            
-            v3 pos = GetRenderPos(*e) + realDelta;
-            
-            e->physicalPos = RoundToTileMap(pos);
-            e->offset = pos - V3(e->physicalPos);
+            For(editor->hotEntitySerials)
+            {
+               Entity *e = GetEntity(editorEntities, *it);
+               
+               v3 pos = GetRenderPos(*e) + realDelta;
+               
+               e->physicalPos = RoundToTileMap(pos);
+               e->offset = pos - V3(e->physicalPos);
+            }
+         }
+         else
+         {
+            For(editor->hotEntitySerials)
+            {
+               Entity *e = GetEntity(editorEntities, *it);
+               
+               v3 pos = GetRenderPos(*e) + realDelta;
+               e->offset = pos - V3(e->physicalPos);
+            }
          }
          
       }break;

@@ -61,13 +61,13 @@ saucy_defer<F> defer_func(F f) {
 #define KiloBytes(a) (1024 * (a))
 #define OffsetOf(type, Member) (umm)&(((type *)0)->Member)
 #define Die Assert(false)
-
+#include <cstdio>
 #include "Game.h"
 
 #include <Windows.h>
 #include <gl/gl.h>
+
 #include <dsound.h>
-#include <cstdio>
 
 
 #undef CreateFile

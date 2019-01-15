@@ -1,7 +1,62 @@
 #ifndef RR_GENERATION
 #define RR_GENERATION
 
+
 #if 0
+
+float dotGridGradient(int ix, int iy, float x, float y) {
+   
+   extern float Gradient[IYMAX][IXMAX][2];
+   
+   // Compute the distance vector
+   float dx = x - (float)ix;
+   float dy = y - (float)iy;
+   
+   // Compute the dot-product
+   return (dx*Gradient[iy][ix][0] + dy*Gradient[iy][ix][1]);
+}
+
+static TriangleArray Perlin(i32 min, i32 max) 
+{
+   TriangleMesh ret;
+	Material mat;
+	mat.bitmapID = RegisterAsset(assetHandler, Asset_Texture, "stone.texture");
+	mat.spectularExponent = 96.078431f;
+	mat.ambientColor = V3(1.000000f, 1.000000f, 1.000000f);
+	mat.diffuseColor = V3(0.640000f, 0.640000f, 0.640000f);
+	mat.specularColor = V3(0.500000f, 0.500000f, 0.500000f);
+	mat.ke = V3(0.000000f, 0.000000f, 0.000000f);
+	mat.indexOfReflection = 1;
+	mat.dissolved = 1.000000;
+	mat.illuminationModel = 2;
+	mat.name = CreateString("Perlin");
+	mat.texturePath = CreateString("textures/white.texture");
+   
+   // Determine grid cell coordinates
+   i32 x0 = (i32)x;
+   i32 x1 = x0 + 1;
+   i32 y0 = (i32)y;
+   i32 y1 = y0 + 1;
+   
+   // Determine interpolation weights
+   // Could also use higher order polynomial/s-curve here
+   float sx = x - (float)x0;
+   float sy = y - (float)y0;
+   
+   // Interpolate between grid point gradients
+   f32 n0    = dotGridGradient(x0, y0, x, y);
+   f32 n1    = dotGridGradient(x1, y0, x, y);
+   f32 ix0   = lerp(n0, sx, n1);
+   
+   f32 n0    = dotGridGradient(x0, y1, x, y);
+   f32 n1    = dotGridGradient(x1, y1, x, y);
+   f32 ix1   = lerp(n0, n1, sx);
+   
+   f32 value = lerp(ix0, sy, ix1);
+   
+   return value;
+}
+
 
 struct RockCorner
 {
@@ -46,7 +101,7 @@ static RockCorner CreateRockCorner(v3 p, u32 colorSeed)
 	return ret;
 }
 
-static TriangleMesh GenerateMeshForFlatTile(AssetHandler *assetHandler, AABB aabb, Arena* arena)
+static TriangleMesh GenerateMesh(AssetHandler *assetHandler, AABB aabb, Arena* arena)
 {
 	TriangleMesh ret;
 	Material mat;
@@ -78,6 +133,12 @@ static TriangleMesh GenerateMeshForFlatTile(AssetHandler *assetHandler, AABB aab
 	f32 xFac = (aabb.maxDim.x - aabb.minDim.x) / (meshSize - 1);
 	f32 yFac = (aabb.maxDim.y - aabb.minDim.y) / (meshSize - 1);
    
+   // generate the gradiants for perlin noise.
+   v2Array gradiants = PushArray(frameArena, v2, amountOfVertices);
+   
+   
+   
+   // generate the vertices
 	f32 meshInv = 1.0f / (f32)(meshSize - 1);
 	for (u32 i = 0; i < meshSize; i++)
 	{

@@ -186,7 +186,7 @@ struct Bone
 	String name;
 	u32 parentIndex;
 	m4x4 inverseBindShapeMatrix;
-	InterpolationData interp; // do I need this?
+	InterpolationData interp; // do I need this? yes for IK
 };
 DefineArray(Bone);
 

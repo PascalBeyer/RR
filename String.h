@@ -480,15 +480,18 @@ static String FtoS(float rational, u32 numberOfDigits, Arena *arena = frameArena
 	//FloatSpread f6 = Mult(f0, f2);
 	//FloatSpread f7 = Mult(f0, f3);
 	//FloatSpread f8 = Mult(f0, f4);
+   String ret = PushArray(arena, Char, 0);
+   
+   if (rational < 0)
+	{
+      rational *= -1.0f;
+      *PushStruct(arena, Char) = '-';
+	}
+   
    
 	int intPart = (int)rational;
 	float ratPart = rational - intPart;
-	if (ratPart < 0)
-	{
-		ratPart *= -1.0f;
-	}
-   
-	String ret = PushArray(arena, Char, 0);
+	
 	ItoS(intPart, arena);
 	*PushStruct(arena, Char) = '.';
 	for (u32 i = 0; i < numberOfDigits; i++) // todo table lookup?

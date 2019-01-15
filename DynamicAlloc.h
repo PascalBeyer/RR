@@ -156,6 +156,8 @@ enum BuddyBlockNodeState
 DefineArray(BuddyBlockNodeState);
 struct BuddyAllocator
 {
+   u32 blocksUsed;  // this is the amount of minimum blocks used, WARNING: CURRENTLY UNTESTED
+   
 	u32 size; // power of two smaller then 4 gigs.
 	u32 logMinimumBlockSize; // see above
 	u8 *base;
@@ -206,17 +208,17 @@ static void *BuddyAlloc(BuddyAllocator *alloc, u32 size)
    
 	u32 intoIndexSpace = (desiredSize >> alloc->logMinimumBlockSize); 
    
-	void *ret = NULL;
 	// todo maybe make this stackless.
 	DeferRestore(frameArena);
 	u32Array stack = PushZeroArray(frameArena, u32, 1);
 	while (stack.amount)
 	{
 		u32 currentIndex = stack[stack.amount - 1]; stack.amount--;
+      auto node = alloc->implicitBinaryTree[currentIndex];
+      if (node == Buddy_Used) continue;
+      
 		u32 depth = IntegerLogarithm(currentIndex); //BinaryTreeDepthFromIndex(currentIndex);
-		auto node = alloc->implicitBinaryTree[currentIndex];
 		u32 nodeSize = (alloc->size >> depth);
-		if (node == Buddy_Used) continue;
 		if (desiredSize > nodeSize) continue;
       
 		if (node == Buddy_SplitNode)
@@ -236,6 +238,9 @@ static void *BuddyAlloc(BuddyAllocator *alloc, u32 size)
 			// we are done
 			u32 relativeIndex = currentIndex - (1 << depth) + 1;
 			u32 coDepth = alloc->treeDepth - depth;
+         
+         alloc->blocksUsed += (1 << coDepth);
+         
 			u32 offset = (relativeIndex << (coDepth + alloc->logMinimumBlockSize));
 			Assert(offset < alloc->size);
 			alloc->implicitBinaryTree[currentIndex] = Buddy_Used;
@@ -251,9 +256,9 @@ static void *BuddyAlloc(BuddyAllocator *alloc, u32 size)
 		BuildStaticArray(frameArena, stack, childrenIndex);
 		BuildStaticArray(frameArena, stack, childrenIndex + 1);
 	};
-	Assert(ret);
-   
-	return ret;
+	
+   Die;
+   return NULL;
 }
 
 static void BuddyFree(BuddyAllocator *buddy, void *_mem)
@@ -278,6 +283,9 @@ static void BuddyFree(BuddyAllocator *buddy, void *_mem)
 		currentIndex = (1 << --depth) - 1 + relIndex;
 		node = buddy->implicitBinaryTree[currentIndex];
 	}
+   
+   u32 coDepth = buddy->treeDepth - depth;
+   buddy->blocksUsed -= (1 << coDepth);
    
 	u32 otherChildIndex = ((currentIndex - 1) ^ 1) + 1; // flippes the last bit,  -1 / 1 because we have an even number of leafes, but an uneven Number of nodes
 	auto otherChild = buddy->implicitBinaryTree[otherChildIndex];

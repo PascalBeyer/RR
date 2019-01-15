@@ -1,4 +1,5 @@
 
+
 static m4x4 InterpolationDataToMatrix(InterpolationData a)
 {
 	m4x4 ret;
@@ -20,6 +21,7 @@ static m4x4 InterpolationDataToMatrix(InterpolationData a)
 	return ret;
 }
 
+// inverse almost as fast
 static m4x4 InterpolationDataToMatrix(v3 translation, Quaternion orientation, f32 scale)
 {
 	m4x4 ret;
@@ -126,60 +128,23 @@ static InterpolationData Interpolate(InterpolationData prev, InterpolationData n
 	
 	InterpolationData ret; 
 	ret.translation = Lerp(prev.translation, t, next.translation);
-	ret.scale		= Lerp(prev.scale, t, next.scale);
-	ret.orientation = NLerp(prev.orientation, t, next.orientation);
-   
+	ret.scale	   = Lerp(prev.scale, t, next.scale);
+   if(Dot(prev.orientation, next.orientation) < 0.0f)
+   {
+      ret.orientation = NLerp(prev.orientation, t, Negate(next.orientation));
+   }
+   else
+   {
+      ret.orientation = NLerp(prev.orientation, t, next.orientation);
+   }
+   // he did one more thing here.
 	return ret;
 }
 
-static m4x4Array InterpolateKeyFrames(InterpolationDataArray prevBoneStates, InterpolationDataArray nextBoneStates, f32 t)
+static InterpolationDataArray GetLocalTransforms(KeyFramedAnimation *animation, f32 t)
 {
-	Assert(prevBoneStates.amount == nextBoneStates.amount);
-	u32 amountOfBones = prevBoneStates.amount;
-	
-   
-	m4x4Array ret = PushArray(frameArena, m4x4, amountOfBones);
-   
-	for (u32 i = 0; i < amountOfBones; i++)
-	{
-		InterpolationData prev = prevBoneStates[i];
-		InterpolationData next = nextBoneStates[i];
-      
-		ret[i] = InterpolationDataToMatrix(Interpolate(prev, next, t));
-	}
-   
-	return ret;
-}
-
-static m4x4Array CalculateBoneTransforms(Skeleton *skeleton, KeyFramedAnimation *animation, f32 t)
-{
-   //Assert(skeleton->name == animation->meshName);
-   Assert(skeleton->bones.amount == animation->keyFrames[0].boneStates.amount);
-   
-	m4x4Array ret = PushArray(frameArena, m4x4, skeleton->bones.amount);
-   
-	if (!animation)
-	{
-		ret[0] = InterpolationDataToMatrix(skeleton->bones[0].interp);
-      
-		for (u32 i = 1; i < skeleton->bones.amount; i++)
-		{
-			Bone *bone = skeleton->bones + i;
-			Assert(bone->parentIndex < i);
-			ret[i] =  ret[bone->parentIndex] * InterpolationDataToMatrix(bone->interp)  * bone->inverseBindShapeMatrix; // todo is it faster to do this multiplication in InterpolationData ?
-		}
-      
-      for (u32 i = 0; i < skeleton->bones.amount; i++)
-      {
-         ret[i] = ret[i] * skeleton->bones[i].inverseBindShapeMatrix;
-      }
-      
-		return ret;
-	}
-	
-	f32 at = (f32)fmod(t, animation->length);
-   
-	KeyFrame *nextKeyFrame = NULL;
+   f32 at = fmodf(t, animation->length);
+   KeyFrame *nextKeyFrame = NULL;
 	KeyFrame *prevKeyFrame = NULL;
 	For(animation->keyFrames)
 	{
@@ -207,21 +172,72 @@ static m4x4Array CalculateBoneTransforms(Skeleton *skeleton, KeyFramedAnimation 
    
 	f32 interpolationT = (at - begT) / (endT - begT);
    
-	m4x4Array transformedMatrices = InterpolateKeyFrames(prevKeyFrame->boneStates, nextKeyFrame->boneStates, interpolationT);
+   Assert(interpolationT <= 1.0f);
+   Assert(interpolationT >= 0.0f);
    
-	ret[0] = transformedMatrices[0];
-	for (u32 i = 1; i < skeleton->bones.amount; i++)
-	{
-		Bone *bone = skeleton->bones + i;
-		Assert(bone->parentIndex < i);
-		// this way around: first transform the hand -> transform the hand according to the arm transform.
-		ret[i] = ret[bone->parentIndex] * transformedMatrices[i];
-	}
+   InterpolationDataArray prevBoneStates = prevKeyFrame->boneStates;
+   InterpolationDataArray nextBoneStates = nextKeyFrame->boneStates;
    
-   for (u32 i = 0; i < skeleton->bones.amount; i++)
+   Assert(prevBoneStates.amount == nextBoneStates.amount);
+   u32 amountOfBones = prevBoneStates.amount;
+   
+   InterpolationDataArray ret = PushArray(frameArena, InterpolationData, amountOfBones);
+   
+   for (u32 i = 0; i < amountOfBones; i++)
    {
-      ret[i] = ret[i] * skeleton->bones[i].inverseBindShapeMatrix;
+      InterpolationData prev = prevBoneStates[i];
+      InterpolationData next = nextBoneStates[i];
+      
+      ret[i] = Interpolate(prev, next, interpolationT);
    }
    
-	return ret;
+   return ret;
 }
+
+static m4x4Array LocalToSpace(Skeleton *skeleton, InterpolationDataArray data)
+{
+   m4x4Array ret = PushArray(frameArena, m4x4, skeleton->bones.amount);
+   
+   ret[0] = InterpolationDataToMatrix(data[0]);
+   for (u32 i = 1; i < skeleton->bones.amount; i++)
+   {
+      Bone *bone = skeleton->bones + i;
+      Assert(bone->parentIndex < i);
+      // this way around: first transform the hand -> transform the hand according to the arm transform.
+      ret[i] = ret[bone->parentIndex] * InterpolationDataToMatrix(data[i]);
+   }
+   
+   return ret;
+}
+
+static void ApplyIK(BoneArray bones, InterpolationDataArray local, m4x4Array spaceT, u32 index, v3 pos)
+{
+   Quaternion cur = QuaternionId();
+   
+   for(u32 it = index; it != 0xFFFFFFFF; it = bones[it].parentIndex)
+   {
+      if(bones[it].parentIndex == 0xFFFFFFFF) break;
+      InterpolationData spaceData = MatrixToInterpolationData(spaceT[it]);
+      spaceData.orientation *= cur;
+      m3x3 mat = QuaternionToMatrix3(spaceData.orientation);
+      v3 view = mat * V3(1, 0, 0);
+      v3 boneP = spaceData.translation;
+      
+      local[it].orientation = LookAt(Normalize(view - boneP), Normalize(view - pos)) * local[it].orientation;
+      
+      cur = local[it].orientation * cur;
+      *PushStruct(frameArena, u32) = it;
+   }
+   
+   // recalc all matrices
+   spaceT[0] = InterpolationDataToMatrix(local[0]);
+   for (u32 i = 1; i < bones.amount; i++)
+   {
+      Bone *bone = bones + i;
+      Assert(bone->parentIndex < i);
+      // this way around: first transform the hand -> transform the hand according to the arm transform.
+      spaceT[i] = spaceT[bone->parentIndex] * InterpolationDataToMatrix(local[i]);
+   }
+   
+}
+

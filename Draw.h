@@ -314,6 +314,7 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor, Font font)
    
 	EditorPanel *p = &editor.panel;
 	if (!p->visible) return;
+   if (editor.panelIsHidden) return;
    
 	Tweekable(v4, editorPanelColor, V4(1, 1, 1, 1));
 	Tweekable(v4, editorPanelValueColor, V4(1.0f, 0.5f, 0.7f, 1.0f));
@@ -609,7 +610,7 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor, Font font)
 
 static void RenderEditor(RenderGroup *rg, AssetHandler *assetHandler, Editor editor, Input input)
 {
-   PushDebugPointCuboid(rg, editor.focusPoint);
+   //PushDebugPointCuboid(rg, editor.focusPoint);
    
    EditorEntities *editorEntities = &editor.editorEntities;
    
@@ -622,13 +623,14 @@ static void RenderEditor(RenderGroup *rg, AssetHandler *assetHandler, Editor edi
 	{
       case EditorState_Moving:
       {
-         if (!editor.snapToTileMap) break;
+         if (!editor.editingPhysical) break;
          
-         For(editor.hotEntitySerials)
+         for(u32 i = 0; i < editor.hotEntitySerials.amount; i++)
          {
-            Entity *e = GetEntity(editorEntities, *it);
+            Entity *e = GetEntity(editorEntities, editor.hotEntitySerials[i]);
+            EntityCopyData *data = editor.hotEntityInitialStates + i;
             
-            PushTriangleMesh(rg, e->meshId, e->orientation, V3(e->physicalPos), e->scale, e->color * V4(0.5f, 1.0f, 1.0f, 1.0f));
+            PushTriangleMesh(rg, e->meshId, e->orientation, V3(e->physicalPos) + data->offset, e->scale, e->color * V4(0.5f, 1.0f, 1.0f, 1.0f));
          }
       }break;
       
@@ -641,7 +643,7 @@ static void RenderEditor(RenderGroup *rg, AssetHandler *assetHandler, Editor edi
          For(editor.clipBoard)
          {
             v3i pos = it->physicalPos + clickedTile;
-            v3 offset = editor.snapToTileMap ? V3() : (it->offset + clickedOffset);
+            v3 offset = it->offset;
             
             v3 rpos = V3(pos) + offset;
             PushTriangleMesh(rg, it->meshId, it->orientation, rpos, it->scale, it->color * V4(0.5f, 1.0f, 1.0f, 1.0f));
@@ -652,9 +654,8 @@ static void RenderEditor(RenderGroup *rg, AssetHandler *assetHandler, Editor edi
    
 	if (!editor.hotEntitySerials.amount) return;
    
-	v3 averagePos = GetAveragePosForSelection(&editor);
-   
-	PushDebugPointCuboid(rg, V3(averagePos.xy, 0.0f));
+	//v3 averagePos = GetAveragePosForSelection(&editor);
+	//PushDebugPointCuboid(rg, V3(averagePos.xy, 0.0f));
    
 	For(editor.hotEntitySerials)
 	{
@@ -826,6 +827,7 @@ static void RenderEntityQuadTree(RenderGroup *rg, TileOctTreeNode *node)
 	}
 }
 
+#if 0
 static void AnimationTestStuff(RenderGroup *rg, DAEReturn *stuff, f32 dt)
 {
    
@@ -870,3 +872,17 @@ static void AnimationTestStuff(RenderGroup *rg, DAEReturn *stuff, f32 dt)
 		PushTriangle(rg, p1, p2, p3, V3(0.8f, 0.8f, 0.8f));
 	}
 }
+#endif
+
+static void DrawSkeletonBones(RenderGroup *rg, m4x4Array boneStates)
+{
+   For(boneStates)
+   {
+      v3 p1 = *it * V3(0, 0, 0);
+      v3 p2 = *it * V3(0, 1, 0);
+      
+      //PushDebugPointCuboid(rg, p1);
+      PushLine(rg, p1, p2);
+   }
+}
+

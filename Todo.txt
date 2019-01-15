@@ -1,4 +1,5 @@
-Make a good general purpose allocator // done?
+Make a good general purpose allocator // done ?
+Add occupied and free to the dynamic allocator // should be done, but untested
 reenable shadow mapping // done?
 do a good StoF, so that we have a better mesh. // done ? (at least for now)
 make the meshstruct work like it does in soko? having a vertex pool, an index pool and then have list {start index, amount, materialIndex}? // yes!, and now they do.
@@ -72,12 +73,25 @@ add lightPos to the level // done?
 we were just making AssetTypes.h continue that. // done
 right now It feels like levels are baked in things, we need to untangle that e.g. remove entityManager from LoadLevel.// done?
 make levels assets, // for now they are not, as i do not see the purpose
+save level helper does not work right now. //done?
+make DrawEntityAABB // done?
+LoadLevelHelper should call GetLevel(AssetHandler *assetHandler, String name); // done ? sort of
+make sure all Editor actions have the serial // done?
+UndoRedo has error with scale pushing one even if nothing selected // done?
+move the camera out of the entity manager // done?
+the whole what gameState are we in situation should be way clearer // done?
+make editorEntities just globalAlloc and stay forever. // done?
+at this point I think the best way to do this is to build a general purpose allocator for the current state. // done?
+panel should hide forever if tab was pressed and then only come back with tab // done?
+rethink how the snap to tilemap system works // done?
+direction keys do not record undos right now. // done?
+get rid of most/all dynamic allocations in AssetLoading // done?
+
 
 Asset:
 Get PNG loader
 make font into asset, would also make the draw String call way better, also solves the problem where I do not currently know where it is supposed to be stored
 animationInfo in assethandler
-get rid of most/all dynamic allocations in AssetLoading
 
 
 Tweekers:
@@ -112,11 +126,6 @@ double click = 'numpad .'
 box select
 make the orbiting more of a always usable flag, maybe just a bool.
 how do you bright up colors? (brightness/ negative colors?)
-Euler thing
-UndoRedo has error with scale pushing one even if nothing selected
-direction keys do not record undos right now.
-make like a moved blocks per arrows flag so we can record one undo for a bundle of block moves
-panel should hide forever if tab was pressed and then only come back with tab
 make the panel load its values dynamically
 
 Execute:
@@ -125,6 +134,7 @@ speed meter
 redo lighting, kd-tree for AABB's? make it just 4 u16 per triangle and work with the old system?
 get rid of meshes having color? lighting should go into a seperate buffer that stores those colors
 victory currupts position right now, if we are too fast.
+
 
 make _unit_ into active entity and gather infos about the stones and maybe platforms and such, 
 so we can actually generate the _production cycle_ and proof throughput and latency
@@ -135,20 +145,11 @@ do weight averageing in the loading.
 I feel like skeletons and meshes should be parralel. And so should bones and bone names
 
 
-save level helper does not work right now. //done?
-make DrawEntityAABB // done?
-LoadLevelHelper should call GetLevel(AssetHandler *assetHandler, String name); // done ? sort of
-make sure all Editor actions have the serial // done?
-move the camera out of the entity manager // done?
-the whole what gameState are we in situation should be way clearer // done?
-
-
 we should probably make initEntityManager and load level one call
-Add occupied and free to the dynamic allocator
-rethink how the snap to tilemap system works
-
 GetHotEntity should use the entity tree. Not sure what acturally uses that anyway...
 maybe make arenas be on the things, so we do not have too visit 2 pointers.
-at this point I think the best way to do this is to build a general purpose allocator for the current state.
-make editorEntities just globalAlloc and stay forever.
-remake moving dudes
+
+
+tocheck wheather on cam do project and check intersection with unit cube.
+fix static m4x4Array CalculateBoneTransforms(Skeleton *skeleton, KeyFramedAnimation *animation, f32 t) once i am done
+animatedMesh should probably never have an objectTransform, as that is the same thing as the boneTransform of the root

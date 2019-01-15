@@ -101,6 +101,11 @@ void main(void)
    vec4 vertexInCameraSpace = cameraTransform * inputVertex;
    gl_Position = projection * vertexInCameraSpace;
    
+#ifdef ZBias
+   gl_Position.z = -2.0f; // what should this value be?
+#endif
+   
+   
 #ifdef ShadowMapping
 #ifdef Animated // hack
    inputVertex = boneWeights[0] * boneStates[boneIndices[0]] * inputVertex;
