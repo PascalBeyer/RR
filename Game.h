@@ -27,9 +27,9 @@
 
 #include "AssetTypes.h"
 
-#include "Animation.h"
 
 #include "AssetHandler.h"
+#include "Animation.h"
 
 #include "Generation.h"
 
@@ -272,6 +272,8 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
          
          UpdateColorPickers(editor, input);
          GameExecuteUpdate(entityManager, exe, dt);
+         
+         AnimateUnits(entityManager);
          
          // :ExecuteDraw
          PushRenderSetup(rg, *cam, exe->lightSource, (Setup_Projective | Setup_ShadowMapping));

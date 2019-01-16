@@ -549,8 +549,8 @@ static void NewLevel(Editor *editor)
    editor->focusPoint = V3();
    
    EditorEntities *editorEntities = &editor->editorEntities;
-	editorEntities->entities.amount = 0; // this before ResetTree, makes the reset faster
-	editorEntities->entitySerialMap.amount = 0;
+	editorEntities->entities.amount = 0;
+   editorEntities->entitySerialMap.amount = 0;
 	editorEntities->entitySerializer = 0;
 }
 

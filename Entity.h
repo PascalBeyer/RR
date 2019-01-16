@@ -45,6 +45,7 @@ struct UnitData
    u32 at;
    f32 t;
    b32 needsReupdate;
+   b32 isWalking;
 };
 DefineDynamicArray(UnitData);
 
@@ -542,6 +543,7 @@ static void ResetTreeHelper(EntityManager *entityManager, TileOctTree *tree, Til
    }
 }
 
+// not used right now
 static void ResetTree(EntityManager *entityManager, TileOctTree *tree) // todo speed can this be lineraized?
 {
    ResetTreeHelper(entityManager, tree, &tree->root);
