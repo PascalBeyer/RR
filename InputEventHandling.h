@@ -4,9 +4,9 @@ static u32 GetHotUnit(EntityManager *entityManager, AssetHandler *assetHandler, 
 	v3 camP = camera.pos; // todo camera or debugCamera? Maybe we should again unify them
 	v3 camD = ScreenZeroToOneToDirecion(camera, mousePosZeroToOne);
    
-	For(entityManager->units)
+	For(entityManager->unitArray)
 	{
-		Entity *e = GetEntity(entityManager, it->serial);
+		Entity *e = it;
 		m4x4 mat = QuaternionToMatrix4(Inverse(e->orientation));
 		v3 rayP = mat * (camP - GetRenderPos(*e));
 		v3 rayD = mat * camD;
@@ -69,7 +69,7 @@ static u32 GetHotUnit(EntityManager *entityManager, AssetHandler *assetHandler, 
 		}
 		v3 curExit = rayD * curIntersectionMin + rayP;
       
-		if (PointInAABB(aabb, curExit)) return (u32)(it - entityManager->units.data);
+		if (PointInAABB(aabb, curExit)) return (u32)(it - entityManager->unitArray.data);
 	}
    
 	return 0xFFFFFFFF;
@@ -102,7 +102,7 @@ static void PathCreatorHandleEvent(EntityManager *entityManager, ExecuteData *ex
                   ResetEntityManager(entityManager);
                   f32 dt = 1.0f;
                   
-                  For(entityManager->units[unitIndex].instructions)
+                  For(entityManager->unitData[unitIndex].instructions)
                   {
                      GameExecuteUpdate(entityManager, exe, dt);
                   }
@@ -131,7 +131,7 @@ static void PathCreatorHandleEvent(EntityManager *entityManager, ExecuteData *ex
                      break;
                   }
                   
-                  UnitData *data = entityManager->units + pathCreator->hotUnit;
+                  UnitData *data = entityManager->unitData + pathCreator->hotUnit;
                   Entity *entity = GetEntity(entityManager, data->serial);
                   auto program = &data->instructions;
                   if (PointInRectangle(pathCreator->resetUnitButton, input.mouseZeroToOne))
@@ -176,7 +176,7 @@ static void PathCreatorHandleEvent(EntityManager *entityManager, ExecuteData *ex
                }break;
                case Key_rightMouse:
                {
-                  UnitData *data = entityManager->units + pathCreator->hotUnit;
+                  UnitData *data = entityManager->unitData + pathCreator->hotUnit;
                   auto program = &data->instructions;
                   if (!program->amount) break;
                   --program->amount;
@@ -621,7 +621,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      b32 allreadyIn = false;
                      For(editor->hotEntitySerials)
                      {
-                        if (*it == hotEntity->serialNumber)
+                        if (*it == hotEntity->serial)
                         {
                            allreadyIn = true;
                            u32 it_index = (u32)(it - editor->hotEntitySerials.data);
@@ -635,7 +635,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      EntityCopyData toAdd = EntityToData(*hotEntity);
                      
                      ArrayAdd(&editor->hotEntityInitialStates, toAdd);
-                     ArrayAdd(&editor->hotEntitySerials, hotEntity->serialNumber);
+                     ArrayAdd(&editor->hotEntitySerials, hotEntity->serial);
                      
                      editor->panel.values.amount = 0;
                      editor->panel.visible = true;
@@ -651,7 +651,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      EntityCopyData toAdd = EntityToData(*hotEntity);
                      
                      ArrayAdd(&editor->hotEntityInitialStates, toAdd);
-                     ArrayAdd(&editor->hotEntitySerials, hotEntity->serialNumber);
+                     ArrayAdd(&editor->hotEntitySerials, hotEntity->serial);
                      editor->panel.visible = true;
                      ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_b32, "Edit Physical", &editor->editingPhysical));
                      ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_EntityType, "EntityType", &hotEntity->type));
@@ -661,7 +661,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      // todo make euler angle v3i
                      ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_EulerAngle, "Orientation", &hotEntity->orientation));
                      ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_v4, "Color", &hotEntity->color));
-                     ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_u32, "Serial", &hotEntity->serialNumber));
+                     ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_u32, "Serial", &hotEntity->serial));
                   }
                }break;
                case Key_tab:
@@ -673,6 +673,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                }break;
                case Key_left:
                {
+                  if(!editor->hotEntitySerials) break;
                   v3i inc = AdjustForCamera(*cam, Key_left);
                   For(editor->hotEntitySerials)
                   {
@@ -684,6 +685,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                }break;
                case Key_right:
                {
+                  if(!editor->hotEntitySerials) break;
                   v3i inc = AdjustForCamera(*cam, Key_right);
                   For(editor->hotEntitySerials)
                   {
@@ -696,6 +698,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                }break;
                case Key_up:
                {
+                  if(!editor->hotEntitySerials) break;
                   if (message.flag & KeyState_ControlDown)
                   {
                      For(editor->hotEntitySerials)
@@ -717,6 +720,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                }break;
                case Key_down:
                {
+                  if(!editor->hotEntitySerials) break;
                   if (message.flag & KeyState_ControlDown)
                   {
                      For(editor->hotEntitySerials)
@@ -1182,7 +1186,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      Entity *e = CreateEntity(editorEntities, it->type,it->meshId, pos, it->scale, it->orientation, offset, it->color, it->flags);
                      
                      ArrayAdd(&editor->hotEntityInitialStates, EntityToData(*e));
-                     ArrayAdd(&editor->hotEntitySerials, e->serialNumber);
+                     ArrayAdd(&editor->hotEntitySerials, e->serial);
                   }
                   
                   EditorPushUndo(editor); // needs them to be selected

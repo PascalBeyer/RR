@@ -428,13 +428,13 @@ static Entity *CreateEntity(EditorEntities *editorEntities, EntityType type, u32
 	ret.offset = offset;
 	ret.color = color;
 	ret.frameColor = V4(1, 1, 1, 1);
-	ret.serialNumber = editorEntities->entitySerializer++;
+	ret.serial = editorEntities->entitySerializer++;
 	ret.type = type;
 	ret.flags = flags;
 	
 	u32 arrayIndex = ArrayAdd(&editorEntities->entities, ret);
    
-	Assert(ret.serialNumber == editorEntities->entitySerialMap.amount);
+	Assert(ret.serial == editorEntities->entitySerialMap.amount);
 	ArrayAdd(&editorEntities->entitySerialMap, arrayIndex);
 	
 	return editorEntities->entities + arrayIndex;
@@ -450,7 +450,7 @@ static void RestoreEntity(EditorEntities *editorEntities, u32 serial, u32 meshID
 	ret.offset = offset;
 	ret.color = color;
 	ret.frameColor = V4(1, 1, 1, 1);
-	ret.serialNumber = serial;
+	ret.serial = serial;
 	ret.type = type;
 	ret.flags = flags;
    
@@ -470,7 +470,7 @@ static void RemoveEntity(EditorEntities *editorEntities, u32 serial)
 	u32 lastIndex = editorEntities->entities.amount - 1;
 	if (index != lastIndex)
 	{
-		u32 serialNumberToChange = editorEntities->entities[lastIndex].serialNumber;
+		u32 serialNumberToChange = editorEntities->entities[lastIndex].serial;
 		editorEntities->entitySerialMap[serialNumberToChange] = index;
 	}
 	UnorderedRemove(&editorEntities->entities, index);
@@ -877,7 +877,7 @@ static void PushAlterMeshModifies(Editor *editor)
       
       EditorAction toAdd;
       toAdd.type = EditorAction_AlterMesh;
-      toAdd.serial = e->serialNumber;
+      toAdd.serial = e->serial;
       toAdd.preModifyMesh  = *data;
       toAdd.postModifyMesh = EntityToData(*e);
       AddActionToUndoRedoBuffer(editor, toAdd);

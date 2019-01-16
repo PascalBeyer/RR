@@ -57,7 +57,7 @@ static void RenderPathCreator(RenderGroup *rg, EntityManager *entityManager, Exe
 {
 	if (pathCreator->hotUnit != 0xFFFFFFFF)
 	{
-      UnitData *data = entityManager->units + pathCreator->hotUnit;
+      UnitData *data = entityManager->unitData + pathCreator->hotUnit;
       
 		auto path = data->instructions;
       Entity *e = GetEntity(entityManager, data->serial);
@@ -117,27 +117,31 @@ static void RenderPathCreator(RenderGroup *rg, EntityManager *entityManager, Exe
       
 	}
    
-	For(entityManager->entities)
-	{
-		switch (it->type)
-		{
-         case Entity_Dude:
+   for(u32 i = 0; i < Entity_Count; i++)
+   {
+      if(i == Entity_Dude)
+      {
+         
+         For(entityManager->unitArray)
          {
             PushTriangleMesh(rg, it->meshId, it->orientation, V3((it->physicalPos)) + it->offset, it->scale, V4(0.75f, 0.0f, 0.0f, 0.0f));
             PushTriangleMesh(rg, it->meshId, it->orientation, V3((it->initialPos)) + it->offset, it->scale, it->color * it->frameColor);
-         }break;
-         default:
+         }
+      }
+      else
+      {
+         For(entityManager->entityArrays[i])
          {
             PushTriangleMesh(rg, it->meshId, it->orientation, GetRenderPos(*it), it->scale, it->color * it->frameColor);
-         }break;
-		}
-	}
+         }
+      }
+   }
 }
 
 static void RenderPathCreatorUI(RenderGroup *rg, PathCreator *pathCreator)
 {
-	switch (pathCreator->state)
-	{
+   switch (pathCreator->state)
+   {
       case PathCreator_CreatingPath:
       {
          PushRectangle(rg, pathCreator->finishButton.pos, pathCreator->finishButton.width, pathCreator->finishButton.height, V4(1.0f, 0.5, 0.7f, 0.5f));
@@ -145,43 +149,39 @@ static void RenderPathCreatorUI(RenderGroup *rg, PathCreator *pathCreator)
          PushRectangle(rg, pathCreator->resetUnitButton.pos, pathCreator->resetUnitButton.width, pathCreator->resetUnitButton.height, V4(1.0f, 0.7f, 0.3f, 0.5f));
          PushString(rg, pathCreator->resetUnitButton.pos, "Reset", 0.05f, globalFont);
       }break;
-	}
+   }
 }
 
 static void RenderSimulateUI(RenderGroup *rg, SimData *sim)
 {
-	v2 pos = V2(0.05f, 0.05f);
-	f32 width = 0.3f;
-	f32 height = 0.05f;
-	f32 border = 0.01f;
+   v2 pos = V2(0.05f, 0.05f);
+   f32 width = 0.3f;
+   f32 height = 0.05f;
+   f32 border = 0.01f;
    
-	PushRectangle(rg, pos, width, height, V4(1.0f, 0.2f, 0.3f, 0.6f));
-	f32 percentage = (f32)sim->blocksCollected / (f32)sim->blocksNeeded;
-	PushRectangle(rg, pos + V2(border, border), percentage * (width - 2.0f * border), (height - 2.0f * border), V4(1.0f, 0.4f, 0.6f, 0.9f));
-	String progressString = FormatString("%u32/%u32", sim->blocksCollected, sim->blocksNeeded);
-	PushString(rg, pos + V2(border, border), progressString, (height - 2.0f * border), globalFont);
+   PushRectangle(rg, pos, width, height, V4(1.0f, 0.2f, 0.3f, 0.6f));
+   f32 percentage = (f32)sim->blocksCollected / (f32)sim->blocksNeeded;
+   PushRectangle(rg, pos + V2(border, border), percentage * (width - 2.0f * border), (height - 2.0f * border), V4(1.0f, 0.4f, 0.6f, 0.9f));
+   String progressString = FormatString("%u32/%u32", sim->blocksCollected, sim->blocksNeeded);
+   PushString(rg, pos + V2(border, border), progressString, (height - 2.0f * border), globalFont);
    
 }
 
 static void RenderSimulate(RenderGroup *rg, EntityManager *entityManager, ExecuteData *exe)
 {
-#if 1
-	For(entityManager->entities)
-	{
-		PushTriangleMesh(rg, it->meshId, it->orientation, GetRenderPos(*it, exe->t), it->scale, it->color * it->frameColor);
-	}
-#else
-	For(entityManager->entities)
-	{
-		PushTriangleMesh(rg, it->meshId, it->orientation, GetRenderPos(*it), it->scale, it->color * it->frameColor);
-	}
-#endif
+   for(u32 i = 0; i < Entity_Count; i++)
+   {
+      For(entityManager->entityArrays[i])
+      {
+         PushTriangleMesh(rg, it->meshId, it->orientation, GetRenderPos(*it, exe->t), it->scale, it->color * it->frameColor);
+      }
+   }
 }
 
 static void RenderExecute(RenderGroup *rg, EntityManager *entityManager, ExecuteData *exe, AssetHandler *assetHandler, Input input)
 {
-	switch (exe->state)
-	{
+   switch (exe->state)
+   {
       case Execute_PathCreator:
       {
          RenderPathCreator(rg, entityManager, exe, &exe->pathCreator, input);
@@ -196,19 +196,19 @@ static void RenderExecute(RenderGroup *rg, EntityManager *entityManager, Execute
       }break;
       InvalidDefaultCase;
       
-	}
+   }
    
 }
 
 static void RenderVictoryUI(RenderGroup *rg)
 {
-	PushString(rg, V2(0.1f, 0.1f), "Victory", 0.2f, globalFont);
+   PushString(rg, V2(0.1f, 0.1f), "Victory", 0.2f, globalFont);
 }
 
 static void RenderExecuteUI(RenderGroup *rg, ExecuteData *exe)
 {
-	switch (exe->state)
-	{
+   switch (exe->state)
+   {
       case Execute_PlacingUnits:
       {
          
@@ -228,126 +228,126 @@ static void RenderExecuteUI(RenderGroup *rg, ExecuteData *exe)
       
       InvalidDefaultCase;
       
-	}
+   }
 }
 
 
 static void RenderColorPicker(RenderGroup *rg, ColorPicker *picker)
 {
-	Tweekable(v4, borderColor);
+   Tweekable(v4, borderColor);
    
-	//BackGround
-	v2 windowUL = picker->pos - V2(picker->border, 2.0f * picker->border + picker->headerSize);
-	f32 windowWidth = picker->width + 2.0f * picker->border;
-	f32 windowHeight = picker->height + 2.0f * picker->border + picker->sliderHeight + 2.0f * picker->border + picker->headerSize;
+   //BackGround
+   v2 windowUL = picker->pos - V2(picker->border, 2.0f * picker->border + picker->headerSize);
+   f32 windowWidth = picker->width + 2.0f * picker->border;
+   f32 windowHeight = picker->height + 2.0f * picker->border + picker->sliderHeight + 2.0f * picker->border + picker->headerSize;
    
-	PushRectangle(rg, windowUL, windowWidth, windowHeight, borderColor);
+   PushRectangle(rg, windowUL, windowWidth, windowHeight, borderColor);
    
-	//Header
-	v2 headerPos = picker->pos - V2(0.0f, picker->headerSize + picker->border);
-	picker->headerPos = headerPos;
-	//PushRectangle(rg, headerPos, picker->width, picker->pickerHeaderSize, borderColor);
-	Tweekable(v4, headerKillColor);
-	v2 killRectPos = V2(headerPos.x + picker->width - picker->headerSize, headerPos.y);
-	picker->killRectPos = killRectPos;
-	PushRectangle(rg, killRectPos, picker->headerSize, picker->headerSize, headerKillColor);
+   //Header
+   v2 headerPos = picker->pos - V2(0.0f, picker->headerSize + picker->border);
+   picker->headerPos = headerPos;
+   //PushRectangle(rg, headerPos, picker->width, picker->pickerHeaderSize, borderColor);
+   Tweekable(v4, headerKillColor);
+   v2 killRectPos = V2(headerPos.x + picker->width - picker->headerSize, headerPos.y);
+   picker->killRectPos = killRectPos;
+   PushRectangle(rg, killRectPos, picker->headerSize, picker->headerSize, headerKillColor);
    
-	f32 scale = 1.0f / 6.0f;
-	f32 scaledWidth = scale * picker->width;
+   f32 scale = 1.0f / 6.0f;
+   f32 scaledWidth = scale * picker->width;
    
-	u32 colors[7] =
-	{
-		0xFFFF0000, // blue
-		0xFFFFFF00, // cyan
-		0xFF00FF00, // green
-		0xFF00FFFF, // yellow
-		0xFF0000FF, // red
-		0xFFFF00FF, // purple
-		0xFFFF0000, // blue
-	};
+   u32 colors[7] =
+   {
+      0xFFFF0000, // blue
+      0xFFFFFF00, // cyan
+      0xFF00FF00, // green
+      0xFF00FFFF, // yellow
+      0xFF0000FF, // red
+      0xFFFF00FF, // purple
+      0xFFFF0000, // blue
+   };
    
-	for (u32 i = 0; i < 6; i++)
-	{
-		PushRectangle(rg, V2(picker->sliderPos.x + i * scaledWidth, picker->sliderPos.y), scaledWidth, picker->sliderHeight, colors[i], colors[(i + 1)], colors[i], colors[(i + 1)]);
-	}
+   for (u32 i = 0; i < 6; i++)
+   {
+      PushRectangle(rg, V2(picker->sliderPos.x + i * scaledWidth, picker->sliderPos.y), scaledWidth, picker->sliderHeight, colors[i], colors[(i + 1)], colors[i], colors[(i + 1)]);
+   }
    
-	//Slider
-	Tweekable(f32, sliderSlider);
+   //Slider
+   Tweekable(f32, sliderSlider);
    
-	f32 ppx = picker->pos.x + picker->pickerPos.x;
-	f32 ppy = picker->pos.y + picker->pickerPos.y;
+   f32 ppx = picker->pos.x + picker->pickerPos.x;
+   f32 ppy = picker->pos.y + picker->pickerPos.y;
    
-	PushRectangle(rg, picker->pos, picker->width, picker->height, 0xFFFFFFFF, picker->sliderColor, 0xFF000000, 0xFF000000);
+   PushRectangle(rg, picker->pos, picker->width, picker->height, 0xFFFFFFFF, picker->sliderColor, 0xFF000000, 0xFF000000);
    
-	//picker rect
-	PushRectangle(rg, V2(ppx - 2.0f * picker->border, ppy - 2.0f * picker->border), 4.0f * picker->border, 1.0f * picker->border, borderColor);
-	PushRectangle(rg, V2(ppx - 2.0f * picker->border, ppy + 2.0f * picker->border), 4.0f * picker->border, 1.0f * picker->border, borderColor);
-	PushRectangle(rg, V2(ppx - 2.0f * picker->border, ppy - 2.0f * picker->border), 1.0f * picker->border, 4.0f * picker->border, borderColor);
-	PushRectangle(rg, V2(ppx + 1.0f * picker->border, ppy - 2.0f * picker->border), 1.0f * picker->border, 4.0f * picker->border, borderColor);
+   //picker rect
+   PushRectangle(rg, V2(ppx - 2.0f * picker->border, ppy - 2.0f * picker->border), 4.0f * picker->border, 1.0f * picker->border, borderColor);
+   PushRectangle(rg, V2(ppx - 2.0f * picker->border, ppy + 2.0f * picker->border), 4.0f * picker->border, 1.0f * picker->border, borderColor);
+   PushRectangle(rg, V2(ppx - 2.0f * picker->border, ppy - 2.0f * picker->border), 1.0f * picker->border, 4.0f * picker->border, borderColor);
+   PushRectangle(rg, V2(ppx + 1.0f * picker->border, ppy - 2.0f * picker->border), 1.0f * picker->border, 4.0f * picker->border, borderColor);
    
-	//slider
-	v2 pickerSliderBoxPos = V2(picker->sliderPos.x + picker->sliderSelectedColorPos - 0.5f * (sliderSlider + picker->border), picker->sliderPos.y - 1.5f * picker->border);
-	v2 pickerSliderColorPos = V2(picker->sliderPos.x + picker->sliderSelectedColorPos - 0.5f * sliderSlider, picker->sliderPos.y - 0.5f * picker->border);
-	PushRectangle(rg, pickerSliderBoxPos, sliderSlider + picker->border, picker->sliderHeight + 3.0f * picker->border, borderColor);
-	PushRectangle(rg, pickerSliderColorPos, sliderSlider, picker->sliderHeight + picker->border, picker->sliderColor);
+   //slider
+   v2 pickerSliderBoxPos = V2(picker->sliderPos.x + picker->sliderSelectedColorPos - 0.5f * (sliderSlider + picker->border), picker->sliderPos.y - 1.5f * picker->border);
+   v2 pickerSliderColorPos = V2(picker->sliderPos.x + picker->sliderSelectedColorPos - 0.5f * sliderSlider, picker->sliderPos.y - 0.5f * picker->border);
+   PushRectangle(rg, pickerSliderBoxPos, sliderSlider + picker->border, picker->sliderHeight + 3.0f * picker->border, borderColor);
+   PushRectangle(rg, pickerSliderColorPos, sliderSlider, picker->sliderHeight + picker->border, picker->sliderColor);
    
-	//a r g b
-	Tweekable(f32, pickerFontSize);
-	Tweekable(f32, pickerFontXIncrease);
-	f32 fontY = picker->pos.y + picker->width - pickerFontSize;
-	PushString(rg, V2(picker->pos.x + 0.0f * pickerFontXIncrease * pickerFontSize, fontY), FormatString("a:%f32", picker->pickedColor->a), pickerFontSize, globalFont);
-	PushString(rg, V2(picker->pos.x + 1.0f * pickerFontXIncrease * pickerFontSize, fontY), FormatString("r:%f32", picker->pickedColor->r), pickerFontSize, globalFont);
-	PushString(rg, V2(picker->pos.x + 2.0f * pickerFontXIncrease * pickerFontSize, fontY), FormatString("g:%f32", picker->pickedColor->g), pickerFontSize, globalFont);
-	PushString(rg, V2(picker->pos.x + 3.0f * pickerFontXIncrease * pickerFontSize, fontY), FormatString("b:%f32", picker->pickedColor->b), pickerFontSize, globalFont);
+   //a r g b
+   Tweekable(f32, pickerFontSize);
+   Tweekable(f32, pickerFontXIncrease);
+   f32 fontY = picker->pos.y + picker->width - pickerFontSize;
+   PushString(rg, V2(picker->pos.x + 0.0f * pickerFontXIncrease * pickerFontSize, fontY), FormatString("a:%f32", picker->pickedColor->a), pickerFontSize, globalFont);
+   PushString(rg, V2(picker->pos.x + 1.0f * pickerFontXIncrease * pickerFontSize, fontY), FormatString("r:%f32", picker->pickedColor->r), pickerFontSize, globalFont);
+   PushString(rg, V2(picker->pos.x + 2.0f * pickerFontXIncrease * pickerFontSize, fontY), FormatString("g:%f32", picker->pickedColor->g), pickerFontSize, globalFont);
+   PushString(rg, V2(picker->pos.x + 3.0f * pickerFontXIncrease * pickerFontSize, fontY), FormatString("b:%f32", picker->pickedColor->b), pickerFontSize, globalFont);
    
 }
 
 static void RenderEditorPanel(RenderGroup *rg, Editor editor, Font font)
 {
-	if (editor.state == EditorState_Rotating || editor.state == EditorState_Scaling || editor.state == EditorState_Moving)
-	{
-		return;
-	}
+   if (editor.state == EditorState_Rotating || editor.state == EditorState_Scaling || editor.state == EditorState_Moving)
+   {
+      return;
+   }
    
-	EditorPanel *p = &editor.panel;
-	if (!p->visible) return;
+   EditorPanel *p = &editor.panel;
+   if (!p->visible) return;
    if (editor.panelIsHidden) return;
    
-	Tweekable(v4, editorPanelColor, V4(1, 1, 1, 1));
-	Tweekable(v4, editorPanelValueColor, V4(1.0f, 0.5f, 0.7f, 1.0f));
-	Tweekable(v4, editorPanelHeaderColor, V4(1.0f, 0.4f, 0.6f, 0.8f));
-	Tweekable(f32, editorBorderWidth, 0.01f);
-	Tweekable(f32, editorHeaderWidth, 0.08f);
-	Tweekable(f32, editorPanelFontSize, 0.01f);
-	Tweekable(f32, editorPanelWidth, 0.1f);
-	Tweekable(f32, editorPanelHeight, 0.6f);
+   Tweekable(v4, editorPanelColor, V4(1, 1, 1, 1));
+   Tweekable(v4, editorPanelValueColor, V4(1.0f, 0.5f, 0.7f, 1.0f));
+   Tweekable(v4, editorPanelHeaderColor, V4(1.0f, 0.4f, 0.6f, 0.8f));
+   Tweekable(f32, editorBorderWidth, 0.01f);
+   Tweekable(f32, editorHeaderWidth, 0.08f);
+   Tweekable(f32, editorPanelFontSize, 0.01f);
+   Tweekable(f32, editorPanelWidth, 0.1f);
+   Tweekable(f32, editorPanelHeight, 0.6f);
    
-	f32 panelWidth = editorPanelWidth;
-	f32 panelHeight = editorPanelHeight;
+   f32 panelWidth = editorPanelWidth;
+   f32 panelHeight = editorPanelHeight;
    
-	//whole thang
-	PushRectangle(rg, p->pos, panelWidth, panelHeight, editorPanelColor);
+   //whole thang
+   PushRectangle(rg, p->pos, panelWidth, panelHeight, editorPanelColor);
    
-	//header
-	f32 widthWithoutBoarder = panelWidth - 2 * editorBorderWidth;
-	PushRectangle(rg, p->pos + V2(editorBorderWidth, editorBorderWidth), widthWithoutBoarder, editorHeaderWidth, editorPanelHeaderColor);
-	PushString(rg, p->pos + V2(editorBorderWidth, editorBorderWidth), EditorStateToString(editor.state), 0.5f * editorHeaderWidth, font);
+   //header
+   f32 widthWithoutBoarder = panelWidth - 2 * editorBorderWidth;
+   PushRectangle(rg, p->pos + V2(editorBorderWidth, editorBorderWidth), widthWithoutBoarder, editorHeaderWidth, editorPanelHeaderColor);
+   PushString(rg, p->pos + V2(editorBorderWidth, editorBorderWidth), EditorStateToString(editor.state), 0.5f * editorHeaderWidth, font);
    
-	u32 xyz = editor.panel.hotValueXYZ;
-	v2 valuePos = p->pos + V2(editorBorderWidth, editorBorderWidth + editorHeaderWidth);
-	For(p->values)
-	{
+   u32 xyz = editor.panel.hotValueXYZ;
+   v2 valuePos = p->pos + V2(editorBorderWidth, editorBorderWidth + editorHeaderWidth);
+   For(p->values)
+   {
       
-		String name = FormatString("%s:", it->name);
-		f32 offset = PushString(rg, valuePos, name, editorPanelFontSize, font);
+      String name = FormatString("%s:", it->name);
+      f32 offset = PushString(rg, valuePos, name, editorPanelFontSize, font);
       
-		v2 writePos = valuePos + V2(0, editorPanelFontSize);
-		v2 continuePos = valuePos + V2(offset + 3 * editorPanelFontSize, 0);
+      v2 writePos = valuePos + V2(0, editorPanelFontSize);
+      v2 continuePos = valuePos + V2(offset + 3 * editorPanelFontSize, 0);
       
-		f32 height = HeightForTweekerPanel(it->type, editorBorderWidth, editorPanelFontSize);
+      f32 height = HeightForTweekerPanel(it->type, editorBorderWidth, editorPanelFontSize);
       
-		switch (it->type)
-		{
+      switch (it->type)
+      {
          case Tweeker_b32:
          {
             PushRectangle(rg, valuePos, widthWithoutBoarder, height, editorPanelValueColor);
@@ -586,10 +586,10 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor, Font font)
          {
             Die;
          }break;
-		}
+      }
       
-		valuePos.y += height + editorBorderWidth;
-	}
+      valuePos.y += height + editorBorderWidth;
+   }
    
 }
 
@@ -599,13 +599,13 @@ static void RenderEditor(RenderGroup *rg, AssetHandler *assetHandler, Editor edi
    
    EditorEntities *editorEntities = &editor.editorEntities;
    
-	For(editorEntities->entities)
-	{
-		PushTriangleMesh(rg, it->meshId, it->orientation, GetRenderPos(*it), it->scale, it->color * it->frameColor);
-	}
+   For(editorEntities->entities)
+   {
+      PushTriangleMesh(rg, it->meshId, it->orientation, GetRenderPos(*it), it->scale, it->color * it->frameColor);
+   }
    
-	switch (editor.state)
-	{
+   switch (editor.state)
+   {
       case EditorState_Moving:
       {
          if (!editor.editingPhysical) break;
@@ -635,76 +635,76 @@ static void RenderEditor(RenderGroup *rg, AssetHandler *assetHandler, Editor edi
          }
          
       }break;
-	}
+   }
    
-	if (!editor.hotEntitySerials.amount) return;
+   if (!editor.hotEntitySerials.amount) return;
    
-	//v3 averagePos = GetAveragePosForSelection(&editor);
-	//PushDebugPointCuboid(rg, V3(averagePos.xy, 0.0f));
+   //v3 averagePos = GetAveragePosForSelection(&editor);
+   //PushDebugPointCuboid(rg, V3(averagePos.xy, 0.0f));
    
-	For(editor.hotEntitySerials)
-	{
-		Entity *e = GetEntity(editorEntities, *it);
-		PushDebugPointCuboid(rg, V3(e->physicalPos), V4(1.0f, 0.3f, 0.6f, 0.1f));
-		AABB transformedAABB = GetMesh(assetHandler, e->meshId)->aabb;
+   For(editor.hotEntitySerials)
+   {
+      Entity *e = GetEntity(editorEntities, *it);
+      PushDebugPointCuboid(rg, V3(e->physicalPos), V4(1.0f, 0.3f, 0.6f, 0.1f));
+      AABB transformedAABB = GetMesh(assetHandler, e->meshId)->aabb;
       
-		transformedAABB.minDim *= e->scale;
-		transformedAABB.maxDim *= e->scale;
+      transformedAABB.minDim *= e->scale;
+      transformedAABB.maxDim *= e->scale;
       
-		m4x4 mat = Translate(QuaternionToMatrix4(e->orientation), GetRenderPos(*e));
+      m4x4 mat = Translate(QuaternionToMatrix4(e->orientation), GetRenderPos(*e));
       
-		v3 d1 = V3(transformedAABB.maxDim.x - transformedAABB.minDim.x, 0, 0);
-		v3 d2 = V3(0, transformedAABB.maxDim.y - transformedAABB.minDim.y, 0);
-		v3 d3 = V3(0, 0, transformedAABB.maxDim.z - transformedAABB.minDim.z);
+      v3 d1 = V3(transformedAABB.maxDim.x - transformedAABB.minDim.x, 0, 0);
+      v3 d2 = V3(0, transformedAABB.maxDim.y - transformedAABB.minDim.y, 0);
+      v3 d3 = V3(0, 0, transformedAABB.maxDim.z - transformedAABB.minDim.z);
       
-		v3 p[8] =
-		{
-			mat * transformedAABB.minDim,			//0
+      v3 p[8] =
+      {
+         mat * transformedAABB.minDim,			//0
          
-			mat * (transformedAABB.minDim + d1),		//1
-			mat * (transformedAABB.minDim + d2),		//2
-			mat * (transformedAABB.minDim + d3),		//3
+         mat * (transformedAABB.minDim + d1),		//1
+         mat * (transformedAABB.minDim + d2),		//2
+         mat * (transformedAABB.minDim + d3),		//3
          
-			mat * (transformedAABB.minDim + d1 + d2),	//4
-			mat * (transformedAABB.minDim + d2 + d3),	//5
-			mat * (transformedAABB.minDim + d3 + d1),	//6
+         mat * (transformedAABB.minDim + d1 + d2),	//4
+         mat * (transformedAABB.minDim + d2 + d3),	//5
+         mat * (transformedAABB.minDim + d3 + d1),	//6
          
-			mat * transformedAABB.maxDim,			//7
+         mat * transformedAABB.maxDim,			//7
          
-		};
+      };
       
-		//_upper_ square
-		PushLine(rg, p[0], p[1]);
-		PushLine(rg, p[1], p[4]);
-		PushLine(rg, p[4], p[2]);
-		PushLine(rg, p[2], p[0]);
+      //_upper_ square
+      PushLine(rg, p[0], p[1]);
+      PushLine(rg, p[1], p[4]);
+      PushLine(rg, p[4], p[2]);
+      PushLine(rg, p[2], p[0]);
       
-		//_lower_ square
-		PushLine(rg, p[7], p[5]);
-		PushLine(rg, p[5], p[3]);
-		PushLine(rg, p[3], p[6]);
-		PushLine(rg, p[6], p[7]);
+      //_lower_ square
+      PushLine(rg, p[7], p[5]);
+      PushLine(rg, p[5], p[3]);
+      PushLine(rg, p[3], p[6]);
+      PushLine(rg, p[6], p[7]);
       
-		//_connecting_ lines
-		PushLine(rg, p[0], p[3]);
-		PushLine(rg, p[2], p[5]);
-		PushLine(rg, p[1], p[6]);
-		PushLine(rg, p[4], p[7]);
-	}
+      //_connecting_ lines
+      PushLine(rg, p[0], p[3]);
+      PushLine(rg, p[2], p[5]);
+      PushLine(rg, p[1], p[6]);
+      PushLine(rg, p[4], p[7]);
+   }
    
 }
 
 static void RenderEditorUI(RenderGroup *rg, Editor editor, Font font)
 {
-	if (editor.state == EditorState_DeleteSelection)
-	{
-		PushString(rg, V2(0.4f, 0.1f), "Delete?", 0.05f, font);
-	}
+   if (editor.state == EditorState_DeleteSelection)
+   {
+      PushString(rg, V2(0.4f, 0.1f), "Delete?", 0.05f, font);
+   }
    
-	RenderEditorPanel(rg, editor, font);
+   RenderEditorPanel(rg, editor, font);
    
-	For(editor.colorPickers)
-	{
+   For(editor.colorPickers)
+   {
       RenderColorPicker(rg, it);
    }
 }
@@ -761,101 +761,101 @@ static void RenderEntityAABBOutline(RenderGroup *rg, AssetHandler *assetHandler,
 
 static void RenderEntityQuadTree(RenderGroup *rg, TileOctTreeNode *node)
 {
-	if (!node) return;
+   if (!node) return;
    
-	AABB aabb = { V3(node->bound.minDim) - V3(0.5f, 0.5f, 0.5f), V3(node->bound.maxDim) - V3(0.5f, 0.5f, 0.5f) };
+   AABB aabb = { V3(node->bound.minDim) - V3(0.5f, 0.5f, 0.5f), V3(node->bound.maxDim) - V3(0.5f, 0.5f, 0.5f) };
    
-	v3 d1 = V3(aabb.maxDim.x - aabb.minDim.x, 0, 0);
-	v3 d2 = V3(0, aabb.maxDim.y - aabb.minDim.y, 0);
-	v3 d3 = V3(0, 0, aabb.maxDim.z - aabb.minDim.z);
+   v3 d1 = V3(aabb.maxDim.x - aabb.minDim.x, 0, 0);
+   v3 d2 = V3(0, aabb.maxDim.y - aabb.minDim.y, 0);
+   v3 d3 = V3(0, 0, aabb.maxDim.z - aabb.minDim.z);
    
-	v3 p[8] =
-	{
-		aabb.minDim,			//0
+   v3 p[8] =
+   {
+      aabb.minDim,			//0
       
-		(aabb.minDim + d1),		//1
-		(aabb.minDim + d2),		//2
-		(aabb.minDim + d3),		//3
+      (aabb.minDim + d1),		//1
+      (aabb.minDim + d2),		//2
+      (aabb.minDim + d3),		//3
       
-		(aabb.minDim + d1 + d2),	//4
-		(aabb.minDim + d2 + d3),	//5
-		(aabb.minDim + d3 + d1),	//6
+      (aabb.minDim + d1 + d2),	//4
+      (aabb.minDim + d2 + d3),	//5
+      (aabb.minDim + d3 + d1),	//6
       
-		aabb.maxDim,			//7
+      aabb.maxDim,			//7
       
-	};
+   };
    
-	//_upper_ square
-	PushLine(rg, p[0], p[1]);
-	PushLine(rg, p[1], p[4]);
-	PushLine(rg, p[4], p[2]);
-	PushLine(rg, p[2], p[0]);
+   //_upper_ square
+   PushLine(rg, p[0], p[1]);
+   PushLine(rg, p[1], p[4]);
+   PushLine(rg, p[4], p[2]);
+   PushLine(rg, p[2], p[0]);
    
-	//_lower_ square
-	PushLine(rg, p[7], p[5]);
-	PushLine(rg, p[5], p[3]);
-	PushLine(rg, p[3], p[6]);
-	PushLine(rg, p[6], p[7]);
+   //_lower_ square
+   PushLine(rg, p[7], p[5]);
+   PushLine(rg, p[5], p[3]);
+   PushLine(rg, p[3], p[6]);
+   PushLine(rg, p[6], p[7]);
    
-	//_connecting_ lines
-	PushLine(rg, p[0], p[3]);
-	PushLine(rg, p[2], p[5]);
-	PushLine(rg, p[1], p[6]);
-	PushLine(rg, p[4], p[7]);
+   //_connecting_ lines
+   PushLine(rg, p[0], p[3]);
+   PushLine(rg, p[2], p[5]);
+   PushLine(rg, p[1], p[6]);
+   PushLine(rg, p[4], p[7]);
    
-	if (!node->isLeaf)
-	{
-		for (u32 i = 0; i < 8; i++)
-		{
-			RenderEntityQuadTree(rg, node->children[i]);
-		}
-	}
+   if (!node->isLeaf)
+   {
+      for (u32 i = 0; i < 8; i++)
+      {
+         RenderEntityQuadTree(rg, node->children[i]);
+      }
+   }
 }
 
 #if 0
 static void AnimationTestStuff(RenderGroup *rg, DAEReturn *stuff, f32 dt)
 {
    
-	TriangleMesh *mesh = &stuff->mesh;
-	Skeleton *skeleton = &stuff->mesh.skeleton;
-	KeyFramedAnimation *animation = &stuff->animation;
+   TriangleMesh *mesh = &stuff->mesh;
+   Skeleton *skeleton = &stuff->mesh.skeleton;
+   KeyFramedAnimation *animation = &stuff->animation;
    
-	v3Array out = PushArray(frameArena, v3, mesh->positions.amount);
+   v3Array out = PushArray(frameArena, v3, mesh->positions.amount);
    
-	static f32 t = 0;
-	t += dt;
+   static f32 t = 0;
+   t += dt;
    
-	m4x4Array boneTransformes = CalculateBoneTransforms(skeleton, animation, t);
+   m4x4Array boneTransformes = CalculateBoneTransforms(skeleton, animation, t);
    
-	
-	for (u32 i = 0; i < mesh->positions.amount; i++)
-	{
-		u32 unflattend = skeleton->vertexMap[i];
-		WeightDataArray weights = skeleton->vertexToWeightsMap[unflattend];
-      
-		out[i] = V3();
-      
-		v3 v = mesh->positions[i];
-      
-		For(weights)
-		{
-			// first inverse then transform it, makes sense!
-			out[i] += it->weight * (boneTransformes[it->boneIndex]  * v);
-		}
-	}
    
-	for (u32 i = 0; i < mesh->indices.amount; i += 3)
-	{
-		u16 i1 = mesh->indices[i + 0];
-		u16 i2 = mesh->indices[i + 1];
-		u16 i3 = mesh->indices[i + 2];
+   for (u32 i = 0; i < mesh->positions.amount; i++)
+   {
+      u32 unflattend = skeleton->vertexMap[i];
+      WeightDataArray weights = skeleton->vertexToWeightsMap[unflattend];
       
-		v3 p1 = out[i1];
-		v3 p2 = out[i2];
-		v3 p3 = out[i3];
+      out[i] = V3();
       
-		PushTriangle(rg, p1, p2, p3, V3(0.8f, 0.8f, 0.8f));
-	}
+      v3 v = mesh->positions[i];
+      
+      For(weights)
+      {
+         // first inverse then transform it, makes sense!
+         out[i] += it->weight * (boneTransformes[it->boneIndex]  * v);
+      }
+   }
+   
+   for (u32 i = 0; i < mesh->indices.amount; i += 3)
+   {
+      u16 i1 = mesh->indices[i + 0];
+      u16 i2 = mesh->indices[i + 1];
+      u16 i3 = mesh->indices[i + 2];
+      
+      v3 p1 = out[i1];
+      v3 p2 = out[i2];
+      v3 p3 = out[i3];
+      
+      PushTriangle(rg, p1, p2, p3, V3(0.8f, 0.8f, 0.8f));
+   }
 }
 #endif
 

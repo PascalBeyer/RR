@@ -158,10 +158,10 @@ static void InitGame(int screenWidth, int screenHeight, WorkHandler *workHandler
    
 	ret->currentStateArena = InitArena(PushData(constantArena, u8, constantArenaRestCapacity), constantArenaRestCapacity);
    
+   
    // todo load this together with level
    Level level = LoadLevel(CreateString("Intro1"), ret->currentStateArena, &ret->assetHandler);
 	InitEntityManager(&ret->entityManager, ret->currentStateArena, &level);
-	ret->executeData = InitExecute();
    
 	ChangeExecuteState(&ret->entityManager, &ret->executeData, Execute_PathCreator);
    
@@ -180,8 +180,6 @@ static void InitGame(int screenWidth, int screenHeight, WorkHandler *workHandler
 	}
 #endif
 	
-	
-   
 	SwitchGameMode(ret, Game_Editor);
 }
 
@@ -265,12 +263,6 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
       case Game_Execute:
       {
          
-         //reset
-         For(entityManager->entities)
-         {
-            it->frameColor = V4(1, 1, 1, 1);
-         }
-         
          Tweekable(b32, debugCam);
          Camera *cam = debugCam ? &exe->debugCamera : &exe->camera;
          
@@ -284,17 +276,17 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
          // :ExecuteDraw
          PushRenderSetup(rg, *cam, exe->lightSource, (Setup_Projective | Setup_ShadowMapping));
          
-         
-         
          Tweekable(b32, DrawMeshOutlines);
          if (DrawMeshOutlines)
          {
-            For(entityManager->entities)
+            for(u32 i = 0; i < Entity_Count; i++)
             {
-               RenderEntityAABBOutline(rg, assetHandler, it, exe->t);
+               For(entityManager->entityArrays[i])
+               {
+                  RenderEntityAABBOutline(rg, assetHandler, it, exe->t);
+               }
             }
          }
-         
          Tweekable(b32, drawEntityTree, 1);
          if (drawEntityTree)
          {

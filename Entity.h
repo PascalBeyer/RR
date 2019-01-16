@@ -1,14 +1,14 @@
 #ifndef RR_ENTITY
 #define RR_ENTITY
 
-enum EntityType
+enum EntityType // warning gets used in  files
 {
 	Entity_None,
    
 	Entity_Dude,
-	Entity_Wall,
+   Entity_Wall,
 	
-	Entity_Count,
+   Entity_Count,
 };
 
 enum EntityFlags
@@ -43,16 +43,29 @@ struct UnitData
    UnitInstructionDynamicArray instructions;
    u32 serial;
    u32 at;
-   f32 startTime;
+   f32 t;
+   b32 needsReupdate;
 };
 DefineDynamicArray(UnitData);
 
+
+struct EntitySerialResult
+{
+   u16 type; // this could be a u8... but there are no u 24... maybe we find some kind of static data...
+   u16 index;
+};
+DefineDynamicArray(EntitySerialResult);
+static EntitySerialResult InvalidEntitySerial___()
+{
+   return {0xFFFF, 0xFFFF};
+}
+#define InvalidEntitySerial InvalidEntitySerial___()
 
 struct Entity
 {
    // general entity data header if you will
    EntityType type;
-   u32 serialNumber;
+   u32 serial;
    
    // render stuff
    u32 meshId;
@@ -303,19 +316,30 @@ struct EntityManager
    String levelName;
    TileOctTree entityTree;
    
-   UnitDataDynamicArray units;
+   UnitDataDynamicArray unitData;
    
-   EntityDynamicArray entities;
+   union
+   {
+      EntityDynamicArray entityArrays[Entity_Count];
+      struct
+      {
+         EntityDynamicArray noneArray;
+         EntityDynamicArray unitArray;
+         EntityDynamicArray wallArray;
+      };
+   };
+   
+   
    BuddyAllocator alloc;
    
    u32 entitySerializer;
-   u32DynamicArray entitySerialMap; // this is just huge and that fine???
+   EntitySerialResultDynamicArray entitySerialMap; // this is just huge and that fine???
 };
 
-static Entity *GetEntity(EntityManager *entityManager, u32 serialNumber)
+static Entity *GetEntity(EntityManager *entityManager, u32 serial)
 {
-   u32 index = entityManager->entitySerialMap[serialNumber];
-   Entity *ret = entityManager->entities + index;
+   EntitySerialResult result = entityManager->entitySerialMap[serial];
+   Entity *ret = entityManager->entityArrays[result.type] + result.index;
    return ret;
 }
 
@@ -343,7 +367,7 @@ static void RemoveEntityFromTree(EntityManager *entityManager, Entity *e)
    
    for (u32 i = 0; i < 16; i++)
    {
-      if (e->serialNumber == cur->entitySerials[i])
+      if (e->serial == cur->entitySerials[i])
       {
          cur->entitySerials[i] = 0xFFFFFFFF;
          return;
@@ -428,7 +452,7 @@ static void InsertEntity(EntityManager *entityManager, TileOctTreeNode *cur, Ent
    {
       if (cur->entitySerials[i] == 0xFFFFFFFF)
       {
-         cur->entitySerials[i] = e->serialNumber;
+         cur->entitySerials[i] = e->serial;
          return;
       }
    }
@@ -527,9 +551,12 @@ static void ResetTree(EntityManager *entityManager, TileOctTree *tree) // todo s
       tree->root.entitySerials[i] = 0xFFFFFFFF;
    }
    
-   For(entityManager->entities)
+   for(u32 i = 1; i < Entity_Count; i++)
    {
-      it->flags &= ~EntityFlag_InTree;
+      For(entityManager->entityArrays[i])
+      {
+         it->flags &= ~EntityFlag_InTree;
+      }
    }
 }
 
@@ -564,20 +591,25 @@ static Entity *CreateEntityInternal(EntityManager *entityManager, u32 meshID, f3
    ret.offset = offset;
    ret.color = color;
    ret.frameColor = V4(1, 1, 1, 1);
-   ret.serialNumber = entityManager->entitySerializer++;
+   ret.serial = entityManager->entitySerializer++;
    ret.type = type;
    ret.flags = flags;
    
-   u32 arrayIndex = ArrayAdd(&entityManager->entities, ret);
+   Assert(type < Entity_Count);
    
-   Assert(ret.serialNumber == entityManager->entitySerialMap.amount);
-   ArrayAdd(&entityManager->entitySerialMap, arrayIndex);
+   u32 arrayIndex = ArrayAdd(&entityManager->entityArrays[type], ret);
+   
+   Assert(ret.serial == entityManager->entitySerialMap.amount);
+   EntitySerialResult toAdd;
+   toAdd.index = (u16)arrayIndex;
+   toAdd.type = (u16)type;
+   ArrayAdd(&entityManager->entitySerialMap, toAdd);
    if (flags) // entity != none? // move this out?
    {
-      InsertEntity(entityManager, entityManager->entities + arrayIndex);
+      InsertEntity(entityManager, entityManager->entityArrays[type] + arrayIndex);
    }
    
-   return entityManager->entities + arrayIndex;
+   return entityManager->entityArrays[type] + arrayIndex;
 };
 
 static void RestoreEntity(EntityManager *entityManager, u32 serial, u32 meshID, f32 scale, Quaternion orientation, v3i pos, v3 offset, v4 color, EntityType type, u64 flags)
@@ -590,56 +622,60 @@ static void RestoreEntity(EntityManager *entityManager, u32 serial, u32 meshID, 
    ret.offset = offset;
    ret.color = color;
    ret.frameColor = V4(1, 1, 1, 1);
-   ret.serialNumber = serial;
+   ret.serial = serial;
    ret.type = type;
    ret.flags = flags;
    
+   u32 arrayIndex = ArrayAdd(&entityManager->entityArrays[type], ret);
+   EntitySerialResult toAdd;
+   toAdd.index = (u16)arrayIndex;
+   toAdd.type = (u16)type;
+   Assert(entityManager->entitySerialMap[serial].index == 0xFFFF);
    
-   u32 arrayIndex = ArrayAdd(&entityManager->entities, ret);
-   
-   Assert(entityManager->entitySerialMap[serial] == 0xFFFFFFFF);
-   entityManager->entitySerialMap[serial] = arrayIndex;
+   entityManager->entitySerialMap[serial] = toAdd;
    if (flags) // entity != none?
    {
-      InsertEntity(entityManager, entityManager->entities + arrayIndex);
+      InsertEntity(entityManager, entityManager->entityArrays[type] + arrayIndex);
    }
 }
 
 static void RemoveEntity(EntityManager *entityManager, u32 serial)
 {
-   u32 index = entityManager->entitySerialMap[serial];
-   Entity *toRemove = entityManager->entities + index;
+   EntitySerialResult result = entityManager->entitySerialMap[serial];
+   Assert(result.type < Entity_Count);
+   Entity *toRemove = entityManager->entityArrays[result.type] + result.index;
    RemoveEntityFromTree(entityManager, toRemove);
    
-   entityManager->entitySerialMap[serial] = 0xFFFFFFFF;
+   u16 index = result.index;
+   entityManager->entitySerialMap[serial] = InvalidEntitySerial;
    
-   u32 lastIndex = entityManager->entities.amount - 1;
+   u32 lastIndex = entityManager->entityArrays[result.type].amount - 1;
    if (index != lastIndex)
    {
-      u32 serialNumberToChange = entityManager->entities[lastIndex].serialNumber;
-      entityManager->entitySerialMap[serialNumberToChange] = index;
+      u32 serialNumberToChange = entityManager->entityArrays[result.type][lastIndex].serial;
+      entityManager->entitySerialMap[serialNumberToChange].index = index;
    }
-   UnorderedRemove(&entityManager->entities, index);
+   UnorderedRemove(&entityManager->entityArrays[result.type], index);
 }
 
 static void ResetEntityManager(EntityManager *entityManager)
 {
-   For(entityManager->entities)
+   For(entityManager->unitData)
    {
-      if (it->flags & EntityFlag_IsDynamic)
-      {
-         RemoveEntityFromTree(entityManager, it);
-      }
+      it->t = 0.0f;
+      it->at = 0;
    }
    
-   For(entityManager->entities)
+   For(entityManager->unitArray)
    {
-      if (it->flags & EntityFlag_IsDynamic)
-      {
-         it->physicalPos = it->initialPos;
-         it->flags &= ~EntityFlag_FrameResetFlag;
-         InsertEntity(entityManager, it);
-      }
+      RemoveEntityFromTree(entityManager, it);
+   }
+   
+   For(entityManager->unitArray)
+   {
+      it->physicalPos = it->initialPos;
+      it->flags &= ~EntityFlag_FrameResetFlag;
+      InsertEntity(entityManager, it);
    }
 }
 
@@ -671,10 +707,10 @@ static Entity CreateDude(EntityManager *entityManager, v3i pos, f32 scale = 1.0f
    
    UnitData data;
    data.at = 0;
-   data.startTime = 0.0f;
-   data.serial = e->serialNumber;
+   data.t= 0.0f;
+   data.serial = e->serial;
    data.instructions = UnitInstructionCreateDynamicArray(&entityManager->alloc);
-   ArrayAdd(&entityManager->units, data);
+   ArrayAdd(&entityManager->unitData, data);
    
    return *e;
 }
@@ -717,9 +753,13 @@ static void InitEntityManager(EntityManager *entityManager, Arena *currentStateA
    entityManager->entityTree = InitOctTree(currentStateArena, 100); // todo hardcoded.
    
    entityManager->alloc = CreateBuddyAllocator(currentStateArena, MegaBytes(64), 1024);
-   entityManager->entities = EntityCreateDynamicArray(&entityManager->alloc, level->entities.amount);
-   entityManager->entitySerialMap = u32CreateDynamicArray(&entityManager->alloc, level->entities.amount);
-   entityManager->units = UnitDataCreateDynamicArray(&entityManager->alloc);
+   // todo something something, probabaly do not allocate level->entites for each one...
+   entityManager->noneArray = EntityCreateDynamicArray(&entityManager->alloc, level->entities.amount);
+   entityManager->unitArray = EntityCreateDynamicArray(&entityManager->alloc, level->entities.amount);
+   entityManager->wallArray = EntityCreateDynamicArray(&entityManager->alloc, level->entities.amount);
+   
+   entityManager->entitySerialMap = EntitySerialResultCreateDynamicArray(&entityManager->alloc, level->entities.amount);
+   entityManager->unitData = UnitDataCreateDynamicArray(&entityManager->alloc);
    
    For(level->entities)
    {

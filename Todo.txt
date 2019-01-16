@@ -164,3 +164,4 @@ my current 'renderCode' is in entity.h "GetRenderPos"
 when we actually decide, that we only have blocks and dudes, we know that only dudes are dynmic, so the unitArray could just be static and openended.
 
 PathCreator has to have like advance for single Entity? search for advanceGameState
+when exactly do we call resetEntity tree.

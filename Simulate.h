@@ -39,87 +39,89 @@ static Entity *GetHotEntity(Camera cam, EntityManager *entityManager, AssetHandl
    
    Entity *ret = NULL;
    
-   For(entityManager->entities)
+   for(u32 i = 0; i < Entity_Count; i++)
    {
-      
-      MeshInfo *info = GetMeshInfo(handler, it->meshId);
-      
-      if (!info) continue; // probably not on screen, if never rendered
-      
-      m4x4 mat = QuaternionToMatrix4(Inverse(it->orientation)); // todo save these?
-      v3 rayP = mat * (camP - GetRenderPos(*it));
-      v3 rayD = mat * camD; 
-      // better rayCast system, right now this loads every mesh, to find out the aabb....
-      
-      AABB aabb = info->aabb;
-      
-      aabb.maxDim *= it->scale;
-      aabb.minDim *= it->scale;
-      f32 curIntersectionMin = MAXF32;
-      
-      f32 x = rayP.x;
-      f32 dx = rayD.x;
-      f32 y = rayP.y;
-      f32 dy = rayD.y;
-      f32 z = rayP.z;
-      f32 dz = rayD.z;
-      
-      f32 aabbMinX = aabb.minDim.x;
-      f32 aabbMaxX = aabb.maxDim.x; 
-      f32 aabbMinY = aabb.minDim.y;
-      f32 aabbMaxY = aabb.maxDim.y;
-      f32 aabbMinZ = aabb.minDim.z;
-      f32 aabbMaxZ = aabb.maxDim.z;
-      
-      f32 t1x = (aabbMaxX - x) / dx;
-      if (dx > 0 && t1x <= curIntersectionMin)
+      For(entityManager->entityArrays[i])
       {
-         curIntersectionMin = t1x;
-      }
-      
-      f32 t2x = (aabbMinX - x) / dx;
-      if (dx < 0 && t2x <= curIntersectionMin)
-      {
-         curIntersectionMin = t2x;
-      }
-      
-      f32 t1y = (aabbMaxY - y) / dy;
-      if (dy > 0 && t1y <= curIntersectionMin)
-      {
-         curIntersectionMin = t1y;
-      }
-      
-      f32 t2y = (aabbMinY - y) / dy;
-      if (dy < 0 && t2y <= curIntersectionMin)
-      {
-         curIntersectionMin = t2y;
-      }
-      
-      f32 t1z = (aabbMaxZ - z) / dz;
-      if (dz > 0 && t1z <= curIntersectionMin)
-      {
-         curIntersectionMin = t1z;
-      }
-      
-      f32 t2z = (aabbMinZ - z) / dz;
-      if (dz < 0 && t2z <= curIntersectionMin)
-      {
-         curIntersectionMin = t2z;
-      }
-      v3 curExit = rayD * curIntersectionMin + rayP;
-      
-      
-      if (PointInAABB(aabb, curExit))
-      {
-         f32 dist = Dist(curExit, rayP);
-         if (dist < minDist)
+         
+         MeshInfo *info = GetMeshInfo(handler, it->meshId);
+         
+         if (!info) continue; // probably not on screen, if never rendered
+         
+         m4x4 mat = QuaternionToMatrix4(Inverse(it->orientation)); // todo save these?
+         v3 rayP = mat * (camP - GetRenderPos(*it));
+         v3 rayD = mat * camD; 
+         // better rayCast system, right now this loads every mesh, to find out the aabb....
+         
+         AABB aabb = info->aabb;
+         
+         aabb.maxDim *= it->scale;
+         aabb.minDim *= it->scale;
+         f32 curIntersectionMin = MAXF32;
+         
+         f32 x = rayP.x;
+         f32 dx = rayD.x;
+         f32 y = rayP.y;
+         f32 dy = rayD.y;
+         f32 z = rayP.z;
+         f32 dz = rayD.z;
+         
+         f32 aabbMinX = aabb.minDim.x;
+         f32 aabbMaxX = aabb.maxDim.x; 
+         f32 aabbMinY = aabb.minDim.y;
+         f32 aabbMaxY = aabb.maxDim.y;
+         f32 aabbMinZ = aabb.minDim.z;
+         f32 aabbMaxZ = aabb.maxDim.z;
+         
+         f32 t1x = (aabbMaxX - x) / dx;
+         if (dx > 0 && t1x <= curIntersectionMin)
          {
-            minDist = dist;
-            ret = it;
+            curIntersectionMin = t1x;
+         }
+         
+         f32 t2x = (aabbMinX - x) / dx;
+         if (dx < 0 && t2x <= curIntersectionMin)
+         {
+            curIntersectionMin = t2x;
+         }
+         
+         f32 t1y = (aabbMaxY - y) / dy;
+         if (dy > 0 && t1y <= curIntersectionMin)
+         {
+            curIntersectionMin = t1y;
+         }
+         
+         f32 t2y = (aabbMinY - y) / dy;
+         if (dy < 0 && t2y <= curIntersectionMin)
+         {
+            curIntersectionMin = t2y;
+         }
+         
+         f32 t1z = (aabbMaxZ - z) / dz;
+         if (dz > 0 && t1z <= curIntersectionMin)
+         {
+            curIntersectionMin = t1z;
+         }
+         
+         f32 t2z = (aabbMinZ - z) / dz;
+         if (dz < 0 && t2z <= curIntersectionMin)
+         {
+            curIntersectionMin = t2z;
+         }
+         v3 curExit = rayD * curIntersectionMin + rayP;
+         
+         
+         if (PointInAABB(aabb, curExit))
+         {
+            f32 dist = Dist(curExit, rayP);
+            if (dist < minDist)
+            {
+               minDist = dist;
+               ret = it;
+            }
          }
       }
    }
-   
    return ret;
 }
 
@@ -159,12 +161,6 @@ struct ExecuteData
 	PathCreator pathCreator;
 	SimData simData;
 };
-static ExecuteData InitExecute()
-{
-	ExecuteData ret;
-	ret.state = Execute_None;
-	return ret;
-}
 
 static void ChangeExecuteState(EntityManager *entityManager, ExecuteData *exe, ExecuteState state)
 {
@@ -181,6 +177,10 @@ static void ChangeExecuteState(EntityManager *entityManager, ExecuteData *exe, E
       }break;
       case Execute_PathCreator:
       {
+         exe->simData.timeScale = 1.0f;
+         exe->at = 0;
+         exe->t = 0.0f;
+         
          exe->pathCreator = InitPathCreator();
          ResetEntityManager(entityManager);
       }break;
@@ -200,9 +200,9 @@ static void ChangeExecuteState(EntityManager *entityManager, ExecuteData *exe, E
 	}
 }
 
-static void MaybeMoveEntity(Entity *e, v3i dir, EntityManager *entityManager)
+static b32 MaybeMoveEntity(Entity *e, v3i dir, EntityManager *entityManager)
 {
-	if (dir == V3i()) return;
+	if (dir == V3i()) return false;
    
 	v3i intendedPos = e->physicalPos + dir;
    
@@ -211,17 +211,56 @@ static void MaybeMoveEntity(Entity *e, v3i dir, EntityManager *entityManager)
    
 	if(blockingEntities.amount)
 	{
-		return;
+		return false;
 	}
    RemoveEntityFromTree(entityManager, e);
    e->physicalPos += dir;
    InsertEntity(entityManager, e);
    
 	e->flags |= EntityFlag_IsMoving;
+   return true;
 }
 
 static void GameExecuteUpdate(EntityManager *entityManager, ExecuteData *exe, f32 dt)
 {
-	exe->t += dt * exe->simData.timeScale;
+	
+   f32 timePassed = dt * exe->simData.timeScale;
+   exe->t += timePassed;
+   
+   
+   For(entityManager->unitData)
+   {
+      it->t += timePassed;
+      if(!it->instructions) continue;
+      
+      if(!it->needsReupdate)
+         // this relies on the fact, that timePassed is never to big which eventually I want it to be
+      {
+         if(it->t <= 1.0f)
+         {
+            continue;
+         }
+         
+         it->t -= 1.0f;
+         it->at++;
+         if(it->at >= it->instructions.amount)
+         {
+            it->at = 0;
+         }
+         
+      }
+      
+      UnitInstruction step = it->instructions[it->at];
+      v3i dir = GetAdvanceForOneStep(step);
+      
+      Entity *e = GetEntity(entityManager, it->serial);
+      bool moved = MaybeMoveEntity(e, dir, entityManager);
+      if(!moved)
+      {
+         it->needsReupdate = true;
+         continue;
+      }
+   }
+   
    
 }

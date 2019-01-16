@@ -1857,11 +1857,6 @@ static void CalculateLightingSolution(EntityManager *entityManager, AssetHandler
    
 	Die;
    
-	For(e, entityManager->entities)
-	{
-		//TriangleMesh *mesh = GetMesh(assetHandler, e->meshId);
-		
-	}
    
 	EndArray(frameArena, LightingTriangle, triangles);
    

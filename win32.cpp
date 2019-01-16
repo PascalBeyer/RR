@@ -29,7 +29,7 @@
 #define END_TIMED_BLOCK(ID)
 #endif
 
-#define Assert(Expression) if(!(Expression)) {__debugbreak();}
+#define Assert(Expression) if(!(Expression)) {printf("Assert in File %s line %i.\n", __FILE__, __LINE__);  fflush(stdout); __debugbreak();}
 #define InvalidDefaultCase \
 default: \
 {\
