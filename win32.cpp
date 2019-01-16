@@ -1093,7 +1093,7 @@ ClipCursor(&windowRect);
    f32 gameUpdateHz = (float)(monitorRefreshHz);
    f32 targetSecondsPerFrame = 1.0f / (f32)gameUpdateHz;
    
-   gameState = InitGame(windowWidth, windowHeight, &workHandler, constantArena);
+   InitGame(windowWidth, windowHeight, &workHandler, constantArena);
    
    Clear(frameArena);
    

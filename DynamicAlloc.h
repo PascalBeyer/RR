@@ -187,12 +187,15 @@ static BuddyAllocator CreateBuddyAllocator(Arena *arena, u32 size, u32 minimumBl
 	Assert(minimumBlockSize == (1u << logMinimumBlockSize));
 	u32 amountOfBlocks = size >> logMinimumBlockSize;
    
+   ret.blocksUsed = 0;
+   
 	ret.logMinimumBlockSize = logMinimumBlockSize;
 	ret.treeDepth = IntegerLogarithm(amountOfBlocks);
 	// a tree with 2^n leafs needs 2^(n+ 1) - 1 vertecies by geometric sum
 	ret.implicitBinaryTree = PushZeroArray(arena, BuddyBlockNodeState, 2 * amountOfBlocks - 1); 
 	ret.size = size;
 	ret.base = PushData(arena, u8, size);
+   
 	return ret;
 };
 

@@ -431,7 +431,6 @@ static Entity *CreateEntity(EditorEntities *editorEntities, EntityType type, u32
 	ret.serialNumber = editorEntities->entitySerializer++;
 	ret.type = type;
 	ret.flags = flags;
-	ret.interpolation = {};
 	
 	u32 arrayIndex = ArrayAdd(&editorEntities->entities, ret);
    
@@ -454,7 +453,6 @@ static void RestoreEntity(EditorEntities *editorEntities, u32 serial, u32 meshID
 	ret.serialNumber = serial;
 	ret.type = type;
 	ret.flags = flags;
-	ret.interpolation = {};
    
 	u32 arrayIndex = ArrayAdd(&editorEntities->entities, ret);
    

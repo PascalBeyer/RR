@@ -4,10 +4,9 @@ static u32 GetHotUnit(EntityManager *entityManager, AssetHandler *assetHandler, 
 	v3 camP = camera.pos; // todo camera or debugCamera? Maybe we should again unify them
 	v3 camD = ScreenZeroToOneToDirecion(camera, mousePosZeroToOne);
    
-	For(entityManager->entities)
+	For(entityManager->units)
 	{
-		if (it->type != Entity_Dude) continue;
-		Entity *e = it;
+		Entity *e = GetEntity(entityManager, it->serial);
 		m4x4 mat = QuaternionToMatrix4(Inverse(e->orientation));
 		v3 rayP = mat * (camP - GetRenderPos(*e));
 		v3 rayD = mat * camD;
@@ -15,7 +14,7 @@ static u32 GetHotUnit(EntityManager *entityManager, AssetHandler *assetHandler, 
 		MeshInfo *info = GetMeshInfo(assetHandler, e->meshId);
 		if (!info)continue;
 		AABB aabb = info->aabb;
-		aabb.maxDim *= e->scale; // todo can pre compute this
+		aabb.maxDim *= e->scale;
 		aabb.minDim *= e->scale;
 		f32 curIntersectionMin = MAXF32;
       
@@ -70,7 +69,7 @@ static u32 GetHotUnit(EntityManager *entityManager, AssetHandler *assetHandler, 
 		}
 		v3 curExit = rayD * curIntersectionMin + rayP;
       
-		if (PointInAABB(aabb, curExit)) return e->serialNumber;
+		if (PointInAABB(aabb, curExit)) return (u32)(it - entityManager->units.data);
 	}
    
 	return 0xFFFFFFFF;
@@ -97,27 +96,15 @@ static void PathCreatorHandleEvent(EntityManager *entityManager, ExecuteData *ex
                      break;
                   }
                   
-                  Entity *e = GetEntity(entityManager, unitIndex);
-                  
-                  if (message.flag & KeyState_ControlDown)
-                  {
-                     Die;
-#if 0
-                     RemoveEntityFromTree(entityManager, e);
-                     ChangeExecuteState(entityManager, exe, Execute_PlacingUnits);
-                     ArrayAdd(&exe->placingUnits.unitsToPlace, e);
-#endif
-                     break;
-                  }
-                  
                   pathCreator->hotUnit = unitIndex;
                   pathCreator->state = PathCreator_CreatingPath;
                   
                   ResetEntityManager(entityManager);
+                  f32 dt = 1.0f;
                   
-                  For(e->instructions)
+                  For(entityManager->units[unitIndex].instructions)
                   {
-                     AdvanceGameState(entityManager, exe, false);
+                     GameExecuteUpdate(entityManager, exe, dt);
                   }
                }break;
                case Key_F6:
@@ -144,8 +131,9 @@ static void PathCreatorHandleEvent(EntityManager *entityManager, ExecuteData *ex
                      break;
                   }
                   
-                  Entity *entity = GetEntity(entityManager, pathCreator->hotUnit);
-                  auto program = &entity->instructions;
+                  UnitData *data = entityManager->units + pathCreator->hotUnit;
+                  Entity *entity = GetEntity(entityManager, data->serial);
+                  auto program = &data->instructions;
                   if (PointInRectangle(pathCreator->resetUnitButton, input.mouseZeroToOne))
                   {
                      program->amount = 0;
@@ -188,8 +176,8 @@ static void PathCreatorHandleEvent(EntityManager *entityManager, ExecuteData *ex
                }break;
                case Key_rightMouse:
                {
-                  Entity *e = GetEntity(entityManager, pathCreator->hotUnit);
-                  auto program = &e->instructions;
+                  UnitData *data = entityManager->units + pathCreator->hotUnit;
+                  auto program = &data->instructions;
                   if (!program->amount) break;
                   --program->amount;
                }break;

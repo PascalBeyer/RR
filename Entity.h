@@ -1,18 +1,13 @@
 #ifndef RR_ENTITY
 #define RR_ENTITY
 
-#define MaxUnitInstructions 100
-
 enum EntityType
 {
 	Entity_None,
    
 	Entity_Dude,
 	Entity_Wall,
-	Entity_Block,
-	Entity_Spawner,
-	Entity_Goal,
-   
+	
 	Entity_Count,
 };
 
@@ -20,41 +15,19 @@ enum EntityFlags
 {
 	EntityFlag_SupportsUnit = 0x1,
 	EntityFlag_BlocksUnit = 0x2,
-	EntityFlag_Dead = 0x4,
-	EntityFlag_PushAble = 0x8,
-	EntityFlag_CanBeCarried = 0x800,
+   
    EntityFlag_IsDynamic = 0x200,
    
    // dynamic flags
-	EntityFlag_IsFalling = 0x10,
 	EntityFlag_IsMoving = 0x20,
 	EntityFlag_InTree = 0x40,
 	
-   EntityFlag_FrameResetFlag = EntityFlag_IsFalling | EntityFlag_IsMoving,
-	
-	BlockFlag_TryingToSpawn = 0x400,
+   EntityFlag_FrameResetFlag = EntityFlag_IsMoving,
 	
 };
 
-enum InterpolationType
-{
-	Interpolation_None,
-	Interpolation_Blocked,
-	Interpolation_Push,
-	Interpolation_Carried,
-	Interpolation_Move,
-	Interpolation_Fall,
-	Interpolation_Teleport,
-};
 
-struct EntityInterpolation
-{
-	InterpolationType type;
-	v3i dir;
-};
-
-DefineDynamicArray(EntityInterpolation);
-
+#define MaxUnitInstructions 100
 enum UnitInstruction
 {
 	Unit_Wait,
@@ -65,11 +38,20 @@ enum UnitInstruction
 };
 DefineDynamicArray(UnitInstruction);
 
+struct UnitData
+{
+   UnitInstructionDynamicArray instructions;
+   u32 serial;
+   u32 at;
+   f32 startTime;
+};
+DefineDynamicArray(UnitData);
+
+
 struct Entity
 {
    // general entity data header if you will
    EntityType type;
-	u64 flags;
    u32 serialNumber;
    
    // render stuff
@@ -81,16 +63,10 @@ struct Entity
    v4 frameColor;
    
    // simulation stuff, also needed for render
-	EntityInterpolation interpolation;
    v3i physicalPos;
 	v3i initialPos;
-	
-   // specific stuff
-	union
-	{
-		UnitInstructionDynamicArray instructions;
-	};
-	
+	u64 flags;
+   
 };
 
 typedef Entity* EntityPtr;
@@ -105,44 +81,11 @@ static v3 GetRenderPos(Entity e)
 	return V3(e.physicalPos) + e.offset;
 }
 
+
 static v3 GetRenderPos(Entity e, f32 interpolationT)
 {
 	f32 t = interpolationT;
 	v3 moveOffset = V3();
-	
-	if (e.flags & EntityFlag_IsMoving)
-	{
-		switch (e.interpolation.type)
-		{
-         case Interpolation_Carried:
-         case Interpolation_Move:
-         case Interpolation_Push:
-         {
-            v3 delta = -V3(e.interpolation.dir);
-            f32 ease = -2.0f * t * t * t + 3.0f * t * t;
-            moveOffset = (1.0f - ease) * delta;
-         }break;
-         case Interpolation_Fall:
-         {
-            v3 delta = -V3(e.interpolation.dir);
-            f32 lin = 1.0f - t;
-            moveOffset = lin * delta;
-         }break;
-         case Interpolation_Blocked:
-         {
-            v3 delta = V3(e.interpolation.dir);
-            f32 ease = t * (1.0f - t);
-            moveOffset = ease * delta;
-         }break;
-         case Interpolation_Teleport:
-         {
-            v3 delta = -V3(e.interpolation.dir);
-            f32 ease = (t < 0.5f);
-            moveOffset = ease * delta;
-         }break;
-         InvalidDefaultCase;
-		}
-	}
    
 	return V3(e.physicalPos) + e.offset + moveOffset;
 }
@@ -355,20 +298,18 @@ static void RemoveAllEntities(TileOctTree *tree)
 #endif
 
 
-
-
 struct EntityManager
 {
    String levelName;
    TileOctTree entityTree;
-   // todo make some sort of bucketed array.
-   // todo make an array thing for each entity type
+   
+   UnitDataDynamicArray units;
+   
    EntityDynamicArray entities;
    BuddyAllocator alloc;
    
    u32 entitySerializer;
-   u32DynamicArray entitySerialMap; // this is just huge and that fine
-   
+   u32DynamicArray entitySerialMap; // this is just huge and that fine???
 };
 
 static Entity *GetEntity(EntityManager *entityManager, u32 serialNumber)
@@ -626,7 +567,6 @@ static Entity *CreateEntityInternal(EntityManager *entityManager, u32 meshID, f3
    ret.serialNumber = entityManager->entitySerializer++;
    ret.type = type;
    ret.flags = flags;
-   ret.interpolation = {};
    
    u32 arrayIndex = ArrayAdd(&entityManager->entities, ret);
    
@@ -653,7 +593,7 @@ static void RestoreEntity(EntityManager *entityManager, u32 serial, u32 meshID, 
    ret.serialNumber = serial;
    ret.type = type;
    ret.flags = flags;
-   ret.interpolation = {};
+   
    
    u32 arrayIndex = ArrayAdd(&entityManager->entities, ret);
    
@@ -697,8 +637,7 @@ static void ResetEntityManager(EntityManager *entityManager)
       if (it->flags & EntityFlag_IsDynamic)
       {
          it->physicalPos = it->initialPos;
-         it->flags &= ~(EntityFlag_IsFalling | EntityFlag_IsMoving);
-         it->interpolation = {};
+         it->flags &= ~EntityFlag_FrameResetFlag;
          InsertEntity(entityManager, it);
       }
    }
@@ -714,21 +653,9 @@ static u64 GetStandardFlags(EntityType type)
       }break;
       case Entity_Dude:
       {
-         return EntityFlag_BlocksUnit | EntityFlag_PushAble | EntityFlag_SupportsUnit | EntityFlag_IsDynamic | EntityFlag_CanBeCarried;
+         return EntityFlag_BlocksUnit | EntityFlag_SupportsUnit | EntityFlag_IsDynamic;
       }break;
       case Entity_Wall:
-      {
-         return EntityFlag_BlocksUnit | EntityFlag_SupportsUnit;
-      }break;
-      case Entity_Block:
-      {
-         return EntityFlag_BlocksUnit | EntityFlag_PushAble | EntityFlag_SupportsUnit | EntityFlag_IsDynamic | EntityFlag_CanBeCarried;
-      }break;
-      case Entity_Spawner:
-      {
-         return EntityFlag_BlocksUnit | EntityFlag_SupportsUnit;
-      }break;
-      case Entity_Goal:
       {
          return EntityFlag_BlocksUnit | EntityFlag_SupportsUnit;
       }break;
@@ -742,33 +669,20 @@ static Entity CreateDude(EntityManager *entityManager, v3i pos, f32 scale = 1.0f
    u64 flags = GetStandardFlags(Entity_Dude);
    Entity *e = CreateEntityInternal(entityManager, meshId, scale, orientation, pos, offset, color, Entity_Dude, flags);
    
-   e->instructions = UnitInstructionCreateDynamicArray(&entityManager->alloc, 100);
+   UnitData data;
+   data.at = 0;
+   data.startTime = 0.0f;
+   data.serial = e->serialNumber;
+   data.instructions = UnitInstructionCreateDynamicArray(&entityManager->alloc);
+   ArrayAdd(&entityManager->units, data);
    
    return *e;
-}
-
-static Entity CreateBlock(EntityManager *entityManager, v3i pos, f32 scale = 1.0f, Quaternion orientation = { 0.707106769f, -0.707106769f, 0, 0 }, v3 offset = V3(0, 0, 0.27f), v4 color = V4(1, 1, 1, 1), u32 meshId = 0xFFFFFFFF)
-{
-   u64 flags = GetStandardFlags(Entity_Block);
-   return *CreateEntityInternal(entityManager, meshId, scale, orientation, pos, offset, color, Entity_Block, flags);
 }
 
 static Entity CreateWall(EntityManager *entityManager, u32 meshId, v3i pos, f32 scale = 1.0f, Quaternion orientation = { 1, 0, 0, 0 }, v3 offset = V3(), v4 color = V4(1, 1, 1, 1))
 {
    u64 flags = GetStandardFlags(Entity_Wall);
    return *CreateEntityInternal(entityManager, meshId, scale, orientation, pos, offset, color, Entity_Wall, flags);
-}
-
-static Entity CreateSpawner(EntityManager *entityManager, u32 meshId, v3i pos, f32 scale = 1.0f, Quaternion orientation = { 1, 0, 0, 0 }, v3 offset = V3(), v4 color = V4(1, 1, 1, 1))
-{
-   u64 flags = GetStandardFlags(Entity_Spawner);
-   return *CreateEntityInternal(entityManager, meshId, scale, orientation, pos, offset, color, Entity_Spawner, flags);
-}
-
-static Entity CreateGoal(EntityManager *entityManager, u32 meshId, v3i pos, f32 scale = 1.0f, Quaternion orientation = { 1, 0, 0, 0 }, v3 offset = V3(), v4 color = V4(1, 1, 1, 1))
-{
-   u64 flags = GetStandardFlags(Entity_Goal);
-   return *CreateEntityInternal(entityManager, meshId, scale, orientation, pos, offset, color, Entity_Goal, flags);
 }
 
 // this seems pretty bad in retrospect
@@ -788,20 +702,6 @@ static Entity CreateEntity(EntityManager *entityManager, EntityType type, u32 me
       {
          return CreateWall(entityManager, meshId, pos, scale, orientation, offset, color);
       }break;
-      case Entity_Spawner:
-      {
-         return CreateSpawner(entityManager, meshId, pos, scale, orientation, offset, color);
-      }break;
-      
-      case Entity_Goal:
-      {
-         return CreateGoal(entityManager, meshId, pos, scale, orientation, offset, color);
-      }break;
-      
-      case Entity_Block:
-      {
-         return CreateBlock(entityManager, pos, scale, orientation, offset, color, meshId);
-      }break;
       
       InvalidDefaultCase;
    }
@@ -809,24 +709,23 @@ static Entity CreateEntity(EntityManager *entityManager, EntityType type, u32 me
    return {};
 }
 
-static EntityManager InitEntityManager(Arena *currentStateArena, Level *level)
+static void InitEntityManager(EntityManager *entityManager, Arena *currentStateArena, Level *level)
 {
-   EntityManager ret;
    
-   ret.levelName = CopyString(level->name, currentStateArena);
-   ret.entitySerializer = 0;
-   ret.entityTree = InitOctTree(currentStateArena, 100); // todo hardcoded.
+   entityManager->levelName = CopyString(level->name, currentStateArena);
+   entityManager->entitySerializer = 0;
+   entityManager->entityTree = InitOctTree(currentStateArena, 100); // todo hardcoded.
    
-   ret.alloc = CreateBuddyAllocator(currentStateArena, MegaBytes(64), 1024);
-   ret.entities = EntityCreateDynamicArray(&ret.alloc, level->entities.amount);
-   ret.entitySerialMap = u32CreateDynamicArray(&ret.alloc, level->entities.amount);
+   entityManager->alloc = CreateBuddyAllocator(currentStateArena, MegaBytes(64), 1024);
+   entityManager->entities = EntityCreateDynamicArray(&entityManager->alloc, level->entities.amount);
+   entityManager->entitySerialMap = u32CreateDynamicArray(&entityManager->alloc, level->entities.amount);
+   entityManager->units = UnitDataCreateDynamicArray(&entityManager->alloc);
    
    For(level->entities)
    {
-      CreateEntity(&ret, it->type, it->meshId, it->physicalPos, it->scale, it->orientation, it->offset, it->color, it->flags);
+      CreateEntity(entityManager, it->type, it->meshId, it->physicalPos, it->scale, it->orientation, it->offset, it->color, it->flags);
    }
    
-   return ret;
 }
 
 

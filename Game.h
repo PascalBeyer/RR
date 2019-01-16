@@ -38,8 +38,6 @@
 #include "SoundMixer.h"
 #include "Renderer.h"
 
-#include "PathCreator.h"
-
 #include "Simulate.h"
 
 #include "Lighting.h"
@@ -109,7 +107,7 @@ static void SwitchGameMode(GameState *state, GameMode mode)
          Level level = LoadLevel(editor->levelInfo.name, frameArena, assetHandler);
          Clear(state->currentStateArena);
          
-         state->entityManager = InitEntityManager(state->currentStateArena, &level);
+         InitEntityManager(&state->entityManager, state->currentStateArena, &level);
          state->executeData.camera = level.camera;
          state->executeData.debugCamera = level.camera;
          state->executeData.t = 0.0f;
@@ -142,38 +140,38 @@ static void SwitchGameMode(GameState *state, GameMode mode)
 
 static bool viewLighting = false;
 
-static GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHandler, Arena *constantArena)
+static void InitGame(int screenWidth, int screenHeight, WorkHandler *workHandler, Arena *constantArena)
 {
-	GameState ret = {};
+	GameState *ret = &gameState;
    
-	ret.constantArena = constantArena;
+	ret->constantArena = constantArena;
 	
-	ret.workHandler = workHandler;
-	ret.font = LoadFont("consola.ttf", constantArena);
-	globalFont = ret.font;
+	ret->workHandler = workHandler;
+	ret->font = LoadFont("consola.ttf", constantArena);
+	globalFont = ret->font;
 	InitConsole(constantArena);
-	ret.assetHandler = CreateAssetHandler(constantArena);
-	ret.soundMixer = {};
-	ret.editor = InitEditor(constantArena);
+	ret->assetHandler = CreateAssetHandler(constantArena);
+	ret->soundMixer = {};
+	ret->editor = InitEditor(constantArena);
 	
 	u32 constantArenaRestCapacity = constantArena->capacity - (u32)(constantArena->current - constantArena->base) - 1;
    
-	ret.currentStateArena = InitArena(PushData(constantArena, u8, constantArenaRestCapacity), constantArenaRestCapacity);
+	ret->currentStateArena = InitArena(PushData(constantArena, u8, constantArenaRestCapacity), constantArenaRestCapacity);
    
    // todo load this together with level
-   Level level = LoadLevel(CreateString("bridge"), ret.currentStateArena, &ret.assetHandler);
-	ret.entityManager = InitEntityManager(ret.currentStateArena, &level);
-	ret.executeData = InitExecute();
+   Level level = LoadLevel(CreateString("Intro1"), ret->currentStateArena, &ret->assetHandler);
+	InitEntityManager(&ret->entityManager, ret->currentStateArena, &level);
+	ret->executeData = InitExecute();
    
-	ChangeExecuteState(&ret.entityManager, &ret.executeData, Execute_PathCreator);
+	ChangeExecuteState(&ret->entityManager, &ret->executeData, Execute_PathCreator);
    
 #if 0
-	For(ret.assetHandler.textureCatalog)
+	For(ret->assetHandler.textureCatalog)
 	{
 		u8 *restore = frameArena->current;
       
-		Bitmap *bit = GetTexture(&ret.assetHandler, it->id);
-		AssetInfo info = GetAssetInfo(&ret.assetHandler, it->id);
+		Bitmap *bit = GetTexture(ret->assetHandler, it->id);
+		AssetInfo info = GetAssetInfo(ret->assetHandler, it->id);
 		String name = FormatCString("textures/%s", info.name);
 		Bitmap down = DownSampleTexture(*bit);
 		WriteTexture(name.cstr, down);
@@ -184,9 +182,7 @@ static GameState InitGame(int screenWidth, int screenHeight, WorkHandler *workHa
 	
 	
    
-	SwitchGameMode(&ret, Game_Editor);
-	
-	return ret;
+	SwitchGameMode(ret, Game_Editor);
 }
 
 static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands, Input input, SoundBuffer *soundBuffer)
@@ -319,6 +315,7 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
    }
    
    
+#if 0
    { // animation test
       
       static f32 t = 0.0f;
@@ -370,7 +367,7 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
       
       PushAnimatedMesh(rg, mesh, QuaternionId(), v3(), 1.0f, V4(1, 1, 1, 1), bones);
    }
-   
+#endif
    
    Tweekable(b32, drawCamera);
    

@@ -57,16 +57,18 @@ static void RenderPathCreator(RenderGroup *rg, EntityManager *entityManager, Exe
 {
 	if (pathCreator->hotUnit != 0xFFFFFFFF)
 	{
-		Entity *e = GetEntity(entityManager, pathCreator->hotUnit);
-		auto path = e->instructions;
+      UnitData *data = entityManager->units + pathCreator->hotUnit;
       
+		auto path = data->instructions;
+      Entity *e = GetEntity(entityManager, data->serial);
 		u32 pathCounter = 0;
 		ResetEntityManager(entityManager);
-      
+      exe->at = 0;
+      exe->t = 0.0f;
 		For(path)
 		{
 			DrawNumberOnTile(rg, pathCounter, e->physicalPos);
-			AdvanceGameState(entityManager,  exe, false);
+			GameExecuteUpdate(entityManager, exe, 1.0f); // dt should be how long the action takes.
 			pathCounter++;
 		}
       
@@ -123,11 +125,6 @@ static void RenderPathCreator(RenderGroup *rg, EntityManager *entityManager, Exe
          {
             PushTriangleMesh(rg, it->meshId, it->orientation, V3((it->physicalPos)) + it->offset, it->scale, V4(0.75f, 0.0f, 0.0f, 0.0f));
             PushTriangleMesh(rg, it->meshId, it->orientation, V3((it->initialPos)) + it->offset, it->scale, it->color * it->frameColor);
-         }break;
-         case Entity_Block:
-         {
-            PushTriangleMesh(rg, it->meshId, it->orientation, V3(it->physicalPos) + it->offset, it->scale, V4(0.75f, 0.0f, 0.0f, 0.0f));
-            PushTriangleMesh(rg, it->meshId, it->orientation, V3(it->initialPos) + it->offset, it->scale, it->color * it->frameColor);
          }break;
          default:
          {
@@ -396,10 +393,6 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor, Font font)
                {
                   PushString(rg, writePos, "None", editorPanelFontSize, font);
                }break;
-               case Entity_Block:
-               {
-                  PushString(rg, writePos, "Block", editorPanelFontSize, font);
-               }break;
                case Entity_Dude:
                {
                   PushString(rg, writePos, "Dude", editorPanelFontSize, font);
@@ -407,14 +400,6 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor, Font font)
                case Entity_Wall:
                {
                   PushString(rg, writePos, "Wall", editorPanelFontSize, font);
-               }break;
-               case Entity_Goal:
-               {
-                  PushString(rg, writePos, "Goal", editorPanelFontSize, font);
-               }break;
-               case Entity_Spawner:
-               {
-                  PushString(rg, writePos, "Spawner", editorPanelFontSize, font);
                }break;
                
             }
