@@ -155,7 +155,7 @@ struct ExecuteData
 	Camera debugCamera;
    LightSource lightSource;
    
-	u32 at;
+	u32 at; // are these used?
 	f32 t;
    
 	PathCreator pathCreator;
@@ -187,6 +187,9 @@ static void ChangeExecuteState(EntityManager *entityManager, ExecuteData *exe, E
       case Execute_Simulation:
       {
          exe->simData.timeScale = 1.0f;
+         exe->at = 0;
+         exe->t = 0.0f;
+         
          exe->simData.blocksCollected = 0;
          exe->simData.blocksNeeded = 1000;
          ResetEntityManager(entityManager);

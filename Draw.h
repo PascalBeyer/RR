@@ -178,7 +178,6 @@ static void RenderSimulate(RenderGroup *rg, EntityManager *entityManager, Execut
          {
             Entity *e = GetEntity(entityManager, it->serial);
             
-            
             PushAnimatedMesh(rg, e->meshId, e->orientation, GetRenderPos(*e, exe->t), e->scale, e->color, it->boneStates);
          }
       }

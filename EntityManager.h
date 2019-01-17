@@ -551,9 +551,7 @@ static Entity CreateDude(EntityManager *entityManager, v3i pos, f32 scale = 1.0f
    u64 flags = GetStandardFlags(Entity_Dude);
    Entity *e = CreateEntityInternal(entityManager, meshId, scale, orientation, pos, offset, color, Entity_Dude, flags);
    
-   UnitData data;
-   data.at = 0;
-   data.t= 0.0f;
+   UnitData data = {};
    data.serial = e->serial;
    data.instructions = UnitInstructionCreateDynamicArray(&entityManager->alloc);
    ArrayAdd(&entityManager->unitData, data);

@@ -146,6 +146,7 @@ static void PathCreatorHandleEvent(EntityManager *entityManager, ExecuteData *ex
                   i32 xSign = (d.x > 0) ? 1 : -1;
                   i32 ySign = (d.y > 0) ? 1 : -1;
                   
+                  // todo maybe combine these with render? so we are sure that these are always doing the same thing
                   if (BoxNorm(d) < 0.5f)
                   {
                      ArrayAdd(program, Unit_Wait);
