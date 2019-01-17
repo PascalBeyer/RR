@@ -1845,9 +1845,11 @@ static void InitLighting(LightingSolution *light, Arena *constantArena)
 
 static void PushLightingImage(RenderGroup *rg)
 {
+#if 0
 	PushRenderSetup(rg, {}, {}, Setup_Orthogonal);
 	UpdateWrapingTexture(globalLightingBitmap);
 	PushBitmap(rg, V2(), globalLightingBitmap);
+#endif
 }
 
 static void CalculateLightingSolution(EntityManager *entityManager, AssetHandler *assetHandler)

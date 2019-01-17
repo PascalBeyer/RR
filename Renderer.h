@@ -25,22 +25,21 @@ enum RenderGroupEntryType
    RenderGroup_EntryAnimatedMesh,
 };
 
-enum RenderSetUpFlags
+enum OpenGLShaderFlags : u32
 {
-	Setup_Projective         = 0x0,
-	Setup_Orthogonal         = 0x1,
-	Setup_OrthoZeroToOne     = 0x2, 
+   ShaderFlags_None           = 0x0,
+   ShaderFlags_Textured       = 0x1,
+   ShaderFlags_ShadowMapping  = 0x2,
+   ShaderFlags_Phong          = 0x4,
+   ShaderFlags_Animated       = 0x8,
+   ShaderFlags_ZBias          = 0x10,
    
-   Setup_Type_Mask     = 0x3,
-   
-	Setup_ShadowMapping = 0x8,
-   Setup_Animating     = 0x10,
-   
+   ShaderArray_Size           = 0x20, // right now this does not have to be a hash map I guess..
 };
 
 struct RenderSetup
 {
-	u32 flag;
+	u32 flags;
    m4x4 projection;
 	m4x4 cameraTransform;
    m4x4 shadowMat;
@@ -177,55 +176,60 @@ static RenderGroupEntryHeader *PushRenderEntry_(RenderGroup *rg, u32 size, Rende
 	return result;
 }
 
-
-// todo not sure how to make this good. we could make a lot of little special purpose ones, to get rid of arguments, but that also makes it more complicated.
-static void PushRenderSetup(RenderGroup *rg, Camera camera, LightSource lightSource, u32 flag)
+static void PushOrthogonalSetup(RenderGroup *rg, b32 zeroToOne, u32 flags)
 {
    TimedBlock;
    
    RenderCommands *commands = rg->commands;
-   
    EntryChangeRenderSetup *entry = PushRenderEntry(EntryChangeRenderSetup);
-   
    RenderSetup *setup = &entry->setup;
    
-   switch (flag & Setup_Type_Mask)
+   
+   if(zeroToOne)
    {
-      case Setup_Projective:
-      {
-         setup->projection = Projection(commands->aspectRatio, camera.focalLength);
-         setup->cameraTransform = CameraTransform(camera.orientation, camera.pos);;
-         
-      }break;
-      case Setup_Orthogonal:
-      {
-         m4x4 ortho = Orthogonal((f32)commands->width, (f32)commands->height);
-         
-         setup->projection = Translate(ortho, V3(-1.0f, 1.0f, 0.0f));
-         setup->cameraTransform = Identity();
-         
-      }break;
-      case Setup_OrthoZeroToOne:
-      {
-         m4x4 ortho = Orthogonal(1.0f, 1.0f);
-         
-         setup->projection = Translate(ortho, V3(-1.0f, 1.0f, 0.0f));
-         setup->cameraTransform = Identity();
-         
-      }break;
-      default:
-      Assert(!"Unhandled");
-      break;
+      m4x4 ortho = Orthogonal(1.0f, 1.0f);
+      
+      setup->projection = Translate(ortho, V3(-1.0f, 1.0f, 0.0f));
+      setup->cameraTransform = Identity();
+      
+   }
+   else
+   {
+      m4x4 ortho = Orthogonal((f32)commands->width, (f32)commands->height);
+      
+      setup->projection = Translate(ortho, V3(-1.0f, 1.0f, 0.0f));
+      setup->cameraTransform = Identity();
+      
+   }
+   rg->currentLines = NULL;
+   rg->currentTriangles = NULL;
+   rg->currentQuads = NULL;
+   
+   setup->flags = flags;
+   rg->setup = *setup;
+}
+
+
+static void PushProjectiveSetup(RenderGroup *rg, Camera camera, LightSource lightSource, u32 flags)
+{
+   TimedBlock;
+   
+   RenderCommands *commands = rg->commands;
+   EntryChangeRenderSetup *entry = PushRenderEntry(EntryChangeRenderSetup);
+   RenderSetup *setup = &entry->setup;
+   
+   {//projective Codes
+      setup->projection = Projection(commands->aspectRatio, camera.focalLength);
+      setup->cameraTransform = CameraTransform(camera.orientation, camera.pos);;
+      setup->transformedLightP = (setup->cameraTransform * V4(lightSource.pos, 1.0f)).xyz;
+      setup->shadowMat = CameraTransform(lightSource.orientation, lightSource.pos);
    }
    
    rg->currentLines = NULL;
    rg->currentTriangles = NULL;
    rg->currentQuads = NULL;
    
-   setup->transformedLightP = (setup->cameraTransform * V4(lightSource.pos, 1.0f)).xyz;
-   setup->shadowMat = CameraTransform(lightSource.orientation, lightSource.pos);
-   setup->flag = flag;
-   
+   setup->flags = flags;
    rg->setup = *setup;
 }
 

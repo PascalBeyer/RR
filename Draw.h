@@ -65,6 +65,9 @@ static void RenderPathCreator(RenderGroup *rg, EntityManager *entityManager, Exe
 		ResetEntityManager(entityManager);
       exe->at = 0;
       exe->t = 0.0f;
+      
+      PushProjectiveSetup(rg, exe->camera, exe->lightSource, ShaderFlags_Textured|ShaderFlags_ZBias);
+      
 		For(path)
 		{
 			DrawNumberOnTile(rg, pathCounter, e->physicalPos);
@@ -117,6 +120,7 @@ static void RenderPathCreator(RenderGroup *rg, EntityManager *entityManager, Exe
       
 	}
    
+   PushProjectiveSetup(rg, exe->camera, exe->lightSource, ShaderFlags_ShadowMapping|ShaderFlags_Textured);
    for(u32 i = 0; i < Entity_Count; i++)
    {
       if(i == Entity_Dude)
@@ -193,6 +197,7 @@ static void RenderSimulate(RenderGroup *rg, EntityManager *entityManager, Execut
 
 static void RenderExecute(RenderGroup *rg, EntityManager *entityManager, ExecuteData *exe, AssetHandler *assetHandler, Input input)
 {
+   
    switch (exe->state)
    {
       case Execute_PathCreator:
@@ -883,4 +888,3 @@ static void DrawSkeletonBones(RenderGroup *rg, m4x4Array boneStates)
       PushLine(rg, p1, p2);
    }
 }
-

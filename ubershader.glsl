@@ -67,7 +67,7 @@ smooth out v3 specular;
 #endif
 
 #ifdef Animated
-const int Max_Num_Bones = 100;
+const int Max_Num_Bones = 50;
 uniform mat4x4 boneStates[Max_Num_Bones];
 in v4i boneIndices;
 in v4  boneWeights;

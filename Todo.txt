@@ -92,7 +92,7 @@ when exactly do we call resetEntity tree.// noone!
 // RANDOM NOTES:
 when we actually decide, that we only have blocks and dudes, we know that only dudes are dynmic, so the unitArray could just be static and openended.
 get rid of meshes having color? lighting should go into a seperate buffer that stores those colors
-
+I had the pathCreator render the tiles in black, and it looked quite sweet.
 
 Asset:
 Get PNG loader
@@ -166,3 +166,4 @@ my current 'renderCode' is in entity.h "GetRenderPos"
 
 Right now the cleanest seems to ignore the usual entity data and just manipulate the root bone...
 GetRenderpos does nothing
+we are not considering the "node" that the mesh has right not.... I think this only matters for the bind shape?

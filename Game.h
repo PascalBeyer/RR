@@ -268,16 +268,17 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
          f32 aspectRatio = cam->aspectRatio; // todo, this does not really belong in the camera.
          f32 focalLength = cam->focalLength;
          
-         
+         // update
          UpdateColorPickers(editor, input);
          GameExecuteUpdate(entityManager, exe, assetHandler, dt);
          
-         // :ExecuteDraw
-         PushRenderSetup(rg, *cam, exe->lightSource, (Setup_Projective | Setup_ShadowMapping));
+         // Render
+         RenderExecute(rg, entityManager, exe, assetHandler, input);
          
          Tweekable(b32, DrawMeshOutlines);
          if (DrawMeshOutlines)
          {
+            PushProjectiveSetup(rg, *cam, exe->lightSource, ShaderFlags_None);
             for(u32 i = 0; i < Entity_Count; i++)
             {
                For(entityManager->entityArrays[i])
@@ -286,18 +287,20 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
                }
             }
          }
+         
          Tweekable(b32, drawEntityTree, 1);
          if (drawEntityTree)
          {
+            PushProjectiveSetup(rg, *cam, exe->lightSource, ShaderFlags_None);
             RenderEntityQuadTree(rg, &entityManager->entityTree.root);
          }
          
-         RenderExecute(rg, entityManager, exe, assetHandler, input);
+         
          
       }break;
       case Game_Editor:
       {
-         PushRenderSetup(rg, editor->camera, editor->levelInfo.lightSource, (Setup_Projective | Setup_ShadowMapping));
+         PushProjectiveSetup(rg, editor->camera, editor->levelInfo.lightSource, ShaderFlags_ShadowMapping);
          
          UpdateEditor(editor, input);
          RenderEditor(rg, assetHandler, state->editor, input);
@@ -313,9 +316,10 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
       
       t += dt;
       
-      u32 animationID               = RegisterAsset(assetHandler, Asset_Animation, "easy.animation");
+      //u32 animationID = RegisterAsset(assetHandler, Asset_Animation, "easy.animation");
+      u32 animationID = RegisterAsset(assetHandler, Asset_Animation, "Push.animation");
       KeyFramedAnimation *animation = GetAnimation(assetHandler, animationID);
-      u32 guyId          = RegisterAsset(assetHandler, Asset_Mesh, "easy.mesh");
+      u32 guyId          = RegisterAsset(assetHandler, Asset_Mesh, "Push.mesh");
       TriangleMesh *mesh = GetMesh(assetHandler, guyId);
       
       InterpolationDataArray local = GetLocalTransforms(animation, t);
@@ -347,7 +351,7 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
          PushLine(rg, headPos, bones[3] * V3(0, -1, 0), 0xFF00FFFF);
          PushLine(rg, headPos, headPos +  CrossProduct(oldForward, point - headPos), 0xFFFFFF00);
 #endif
-         ApplyIK(mesh->skeleton.bones, local, bones, 3, point);
+         //ApplyIK(mesh->skeleton.bones, local, bones, 3, point);
          
       }
       
@@ -407,7 +411,7 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
 #endif
    }
    
-   PushRenderSetup(rg, {}, {}, Setup_OrthoZeroToOne); 
+   PushOrthogonalSetup(rg, true, ShaderFlags_None); 
    
    switch (state->mode)
    {

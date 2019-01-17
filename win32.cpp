@@ -528,8 +528,8 @@ typedef HGLRC WINAPI wgl_create_context_attribs_ARB(HDC hdC, HGLRC sharedContext
 #define WGL_ALPHA_BITS_ARB                      0x201B
 #define WGL_DEPTH_BITS_ARB                      0x2022
 #define WGL_STENCIL_BITS_ARB					0x2024
-#define WGL_SAMPLE_BUFFERS_ARB					0x2041
-#define WGL_SAMPLES_ARB							0x2042
+#define WGL_SAMPLE_BUFFERS_ARB				  0x2041
+#define WGL_SAMPLES_ARB						 0x2042
 
 
 
@@ -1173,29 +1173,25 @@ ClipCursor(&windowRect);
       float screenWidth = (f32)renderCommands.width;
       float screenHeight = (f32)renderCommands.height;
       
-      PushRenderSetup(rg, {}, {}, Setup_Orthogonal);
+      PushOrthogonalSetup(rg, false, ShaderFlags_Textured);
       
       PushString(rg, V2(20.1f, 10.1f), s, 20, font);
       
-      PushRenderSetup(rg, {}, {}, Setup_OrthoZeroToOne);
+      PushOrthogonalSetup(rg, true, ShaderFlags_Textured);
       
       DrawDebugRecords(rg, gameState.font, targetSecondsPerFrame, input);
       //DrawTweekers(rg, font);
       
 #endif
-      
       OpenGlRenderGroupToOutput(&renderCommands, &openGLContext);
       
       displayImageBuffer(deviceContext);
       
       Clear(frameArena);
    }
-   //ClipCursor(NULL);
    
    return 0;
 }
-//todo clean this file up really good....
-
 
 u32 const debugRecordsAmount = __COUNTER__;
 DebugBlockInfo debugInfoArray[debugRecordsAmount];
