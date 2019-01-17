@@ -23,23 +23,23 @@
 #include "Random.h"
 #include "Input.h"
 #include "Camera.h"
-#include "Entity.h"
+
 
 #include "AssetTypes.h"
 
 
 #include "AssetHandler.h"
 #include "Animation.h"
+#include "EntityManager.h"
 
 #include "Generation.h"
-
-#include "KdTree.h"
 
 #include "SoundMixer.h"
 #include "Renderer.h"
 
 #include "Simulate.h"
 
+#include "KdTree.h"
 #include "Lighting.h"
 
 #include "Editor.h"
@@ -158,7 +158,6 @@ static void InitGame(int screenWidth, int screenHeight, WorkHandler *workHandler
    
 	ret->currentStateArena = InitArena(PushData(constantArena, u8, constantArenaRestCapacity), constantArenaRestCapacity);
    
-   
    // todo load this together with level
    Level level = LoadLevel(CreateString("Intro1"), ret->currentStateArena, &ret->assetHandler);
 	InitEntityManager(&ret->entityManager, ret->currentStateArena, &level);
@@ -271,9 +270,7 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
          
          
          UpdateColorPickers(editor, input);
-         GameExecuteUpdate(entityManager, exe, dt);
-         
-         AnimateUnits(entityManager);
+         GameExecuteUpdate(entityManager, exe, assetHandler, dt);
          
          // :ExecuteDraw
          PushRenderSetup(rg, *cam, exe->lightSource, (Setup_Projective | Setup_ShadowMapping));
@@ -323,7 +320,7 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
       
       InterpolationDataArray local = GetLocalTransforms(animation, t);
       
-      m4x4Array bones = LocalToSpace(&mesh->skeleton, local);
+      m4x4Array bones = LocalToWorld(&mesh->skeleton, local); 
       
       { // Head IK test
          

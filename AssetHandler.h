@@ -1,6 +1,7 @@
 #ifndef RR_ASSETHANDLER
 #define RR_ASSETHANDLER
 
+
 enum AssetType
 {
 	Asset_Texture,

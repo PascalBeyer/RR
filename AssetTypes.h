@@ -1,4 +1,160 @@
 
+enum EntityType // warning gets used in  files
+{
+	Entity_None,
+   
+	Entity_Dude,
+   Entity_Wall,
+	
+   Entity_Count,
+};
+
+enum EntityFlags
+{
+	EntityFlag_SupportsUnit = 0x1,
+	EntityFlag_BlocksUnit = 0x2,
+   
+   EntityFlag_IsDynamic = 0x200,
+   
+   // dynamic flags
+	EntityFlag_IsMoving = 0x20,
+	EntityFlag_InTree = 0x40,
+	
+   EntityFlag_FrameResetFlag = EntityFlag_IsMoving,
+	
+};
+
+
+struct Entity
+{
+   // general entity data header if you will
+   EntityType type;
+   u32 serial;
+   
+   // render stuff
+   u32 meshId;
+	f32 scale;
+	Quaternion orientation;
+   v3 offset;
+	v4 color;
+   v4 frameColor;
+   
+   // simulation stuff, also needed for render
+   v3i physicalPos;
+	v3i initialPos;
+	u64 flags;
+   
+};
+
+typedef Entity* EntityPtr;
+DefineDynamicArray(Entity);
+DefineDynamicArray(EntityPtr);
+DefineArray(Entity);
+DefineArray(EntityPtr);
+DefineDFArray(EntityPtr);
+
+static v3 GetRenderPos(Entity e)
+{
+	return V3(e.physicalPos) + e.offset;
+}
+
+
+static v3 GetRenderPos(Entity e, f32 interpolationT)
+{
+	f32 t = interpolationT;
+	v3 moveOffset = V3();
+   
+	return V3(e.physicalPos) + e.offset + moveOffset;
+}
+
+
+struct EntityCopyData
+{
+   Quaternion orientation;
+   v3i physicalPos;
+   v3 offset;
+   v4 color;
+   f32 scale;
+   
+   EntityType type;
+   u64 flags;
+   
+	u32 meshId;
+};
+static EntityCopyData EntityToData(Entity e)
+{
+	EntityCopyData ret;
+   
+	ret.color = e.color;
+	ret.flags = e.flags;
+	ret.orientation = e.orientation;
+	ret.meshId = e.meshId;
+	ret.scale = e.scale;
+	ret.type = e.type;
+	ret.physicalPos = e.physicalPos;
+	ret.offset = e.offset;
+	return ret;
+   
+}
+
+DefineArray(EntityCopyData);
+DefineDynamicArray(EntityCopyData);
+
+struct LightSource
+{
+   v3 pos;
+   Quaternion orientation;
+   v3 color;
+};
+
+// todo right now I do not see a reason why this should be an asset, so where should it live?
+struct Level
+{
+   String name;
+   
+	Camera camera;
+   LightSource lightSource;
+	EntityCopyDataArray entities;
+	u32 blocksNeeded;
+   
+	//u32 amountOfDudes; right now not used.
+};
+
+
+static v3 GetRenderPos(EntityCopyData e)
+{
+	return V3(e.physicalPos) + e.offset;
+}
+
+
+struct AABBi
+{
+	v3i minDim;
+	v3i maxDim;
+};
+
+static AABBi CreateAABBi(v3i minDim, v3i maxDim)
+{
+	AABBi ret;
+	ret.minDim = minDim;
+	ret.maxDim = maxDim;
+	return ret;
+}
+
+static b32 PointInAABBi(AABBi aabb, v3i point)
+{
+	return
+      (
+		aabb.minDim.x <  point.x &&
+		aabb.minDim.y <  point.y &&
+		aabb.minDim.z <  point.z &&
+		aabb.maxDim.x >= point.x &&
+		aabb.maxDim.y >= point.y &&
+		aabb.maxDim.z >= point.z
+      );
+}
+
+
 struct Bitmap
 {
 	u32 *pixels;

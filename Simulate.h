@@ -28,7 +28,7 @@ static PathCreator InitPathCreator()
 
 
 // todo copy and paste of editor.h, they will differ eventrually, because this shout utilize the entity tree.
-static Entity *GetHotEntity(Camera cam, EntityManager *entityManager, AssetHandler *handler, v2 mousePosZeroToOne)
+static Entity *GetHotEntity(Camera cam, EntityManager *entityManager, AssetHandler *handler,v2 mousePosZeroToOne)
 {
    
    
@@ -221,12 +221,11 @@ static b32 MaybeMoveEntity(Entity *e, v3i dir, EntityManager *entityManager)
    return true;
 }
 
-static void GameExecuteUpdate(EntityManager *entityManager, ExecuteData *exe, f32 dt)
+static void GameExecuteUpdate(EntityManager *entityManager, ExecuteData *exe, AssetHandler *assetHandler, f32 dt)
 {
 	
    f32 timePassed = dt * exe->simData.timeScale;
    exe->t += timePassed;
-   
    
    For(entityManager->unitData)
    {
@@ -260,6 +259,41 @@ static void GameExecuteUpdate(EntityManager *entityManager, ExecuteData *exe, f3
          it->needsReupdate = true;
          continue;
       }
+      
+      u32 animationID = RegisterAsset(assetHandler, Asset_Animation, "dudeTry1Run.animation");
+      AddAnimation(entityManager->animationStates + (u32)(it - entityManager->unitData.data), animationID, 1.0f, 0.0f);
+      
    }
    
+   For(s, entityManager->animationStates)
+   {
+      ForC(s->animations)
+      {
+         it->t += it->timeScale * dt;
+      }
+      //s->animationLerpT -= dt;
+   }
+   
+   For(state, entityManager->animationStates)
+   {
+      AnimationInput *first  = &state->animations[0];
+      AnimationInput *second = &state->animations[1];
+      
+      if(first->animationId == 0xFFFFFFFF) continue;
+      
+      KeyFramedAnimation *animation = GetAnimation(assetHandler, first->animationId);
+      TriangleMesh *mesh = GetMesh(assetHandler, state->meshId);
+      InterpolationDataArray local = GetLocalTransforms(animation, first->t);
+      
+      state->localTransforms = local;
+      
+      // todo at  IK stuff here
+      
+      m4x4Array bones = LocalToWorld(&mesh->skeleton, state->localTransforms);
+      for (u32 i = 0; i < mesh->skeleton.bones.amount; i++)
+      {
+         bones[i] = bones[i] * mesh->skeleton.bones[i].inverseBindShapeMatrix;
+      }
+      state->boneStates = bones;
+   }
 }

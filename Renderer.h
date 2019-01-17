@@ -425,6 +425,12 @@ static void PushAnimatedMesh(RenderGroup *rg, TriangleMesh *mesh, Quaternion ori
    meshHeader->meshType = mesh->type;
 }
 
+static void PushAnimatedMesh(RenderGroup *rg, u32 meshId, Quaternion orientation, v3 pos, f32 scale, v4 scaleColor, m4x4Array boneStates)
+{
+   
+   PushAnimatedMesh(rg, GetMesh(rg->assetHandler, meshId), orientation, pos, scale, scaleColor, boneStates);
+}
+
 static void PushAnimatedMeshImmidiet(RenderGroup *rg, TriangleMesh *mesh, Quaternion orientation, v3 pos, f32 scale, v4 scaleColor, m4x4Array boneStates)
 {
    Skeleton *skeleton = &mesh->skeleton;

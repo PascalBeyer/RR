@@ -104,7 +104,7 @@ static void PathCreatorHandleEvent(EntityManager *entityManager, ExecuteData *ex
                   
                   For(entityManager->unitData[unitIndex].instructions)
                   {
-                     GameExecuteUpdate(entityManager, exe, dt);
+                     GameExecuteUpdate(entityManager, exe, assetHandler, dt);
                   }
                }break;
                case Key_F6:

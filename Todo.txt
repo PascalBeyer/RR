@@ -164,3 +164,4 @@ lets do exactly what the dude does.
 
 my current 'renderCode' is in entity.h "GetRenderPos"
 
+Right now the cleanest seems to ignore the usual entity data and just manipulate the root bone...

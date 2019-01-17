@@ -53,7 +53,7 @@ static void DrawNumberOnTile(RenderGroup *rg, u32 number, v3i pos, v4 color = V4
 	}
 }
 
-static void RenderPathCreator(RenderGroup *rg, EntityManager *entityManager, ExecuteData *exe, PathCreator *pathCreator, Input input)
+static void RenderPathCreator(RenderGroup *rg, EntityManager *entityManager, ExecuteData *exe, PathCreator *pathCreator, AssetHandler *assetHandler, Input input)
 {
 	if (pathCreator->hotUnit != 0xFFFFFFFF)
 	{
@@ -68,7 +68,7 @@ static void RenderPathCreator(RenderGroup *rg, EntityManager *entityManager, Exe
 		For(path)
 		{
 			DrawNumberOnTile(rg, pathCounter, e->physicalPos);
-			GameExecuteUpdate(entityManager, exe, 1.0f); // dt should be how long the action takes.
+			GameExecuteUpdate(entityManager, exe, assetHandler, 1.0f); // dt should be how long the action takes.
 			pathCounter++;
 		}
       
@@ -169,11 +169,25 @@ static void RenderSimulateUI(RenderGroup *rg, SimData *sim)
 
 static void RenderSimulate(RenderGroup *rg, EntityManager *entityManager, ExecuteData *exe)
 {
+   
    for(u32 i = 0; i < Entity_Count; i++)
    {
-      For(entityManager->entityArrays[i])
+      if(i == Entity_Dude)
       {
-         PushTriangleMesh(rg, it->meshId, it->orientation, GetRenderPos(*it, exe->t), it->scale, it->color * it->frameColor);
+         For(entityManager->animationStates)
+         {
+            Entity *e = GetEntity(entityManager, it->serial);
+            
+            
+            PushAnimatedMesh(rg, e->meshId, e->orientation, GetRenderPos(*e, exe->t), e->scale, e->color, it->boneStates);
+         }
+      }
+      else
+      {
+         For(entityManager->entityArrays[i])
+         {
+            PushTriangleMesh(rg, it->meshId, it->orientation, GetRenderPos(*it, exe->t), it->scale, it->color * it->frameColor);
+         }
       }
    }
 }
@@ -184,7 +198,7 @@ static void RenderExecute(RenderGroup *rg, EntityManager *entityManager, Execute
    {
       case Execute_PathCreator:
       {
-         RenderPathCreator(rg, entityManager, exe, &exe->pathCreator, input);
+         RenderPathCreator(rg, entityManager, exe, &exe->pathCreator, assetHandler, input);
       }break;
       case Execute_Simulation:
       {

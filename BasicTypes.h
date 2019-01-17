@@ -56,13 +56,7 @@ static bool operator!(type##Array arr)											\
 
 #define For(...) Expand(GET_MACRO3(__VA_ARGS__, Ignored, ForVarArr, ForArr)(__VA_ARGS__))
 
-#if 0
-#define ForArrValue(arr) for (auto &it = *arr.data; &it < arr.data + arr.amount; it = (&it) + 1)
-#define ForArrVarValue(it, arr) for (auto &it = *arr.data; &it < arr.data + arr.amount; &it = (&it) + 1)
-
-#define ForRef(...) Expand(GET_MACRO3(__VA_ARGS__, Ignored, ForArrVarValue, ForArrValue)(__VA_ARGS__))
-#endif
-
+#define ForC(arr) for(auto it = arr; it < arr + ArrayCount(arr); it++)
 
 #include <stdint.h>
 

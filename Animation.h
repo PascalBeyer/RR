@@ -71,7 +71,7 @@ static InterpolationDataArray GetLocalTransforms(KeyFramedAnimation *animation, 
    return ret;
 }
 
-static m4x4Array LocalToSpace(Skeleton *skeleton, InterpolationDataArray data)
+static m4x4Array LocalToWorld(Skeleton *skeleton, InterpolationDataArray data)
 {
    m4x4Array ret = PushArray(frameArena, m4x4, skeleton->bones.amount);
    
@@ -118,33 +118,71 @@ static void ApplyIK(BoneArray bones, InterpolationDataArray local, m4x4Array spa
    
 }
 
-
-
-struct AnimationPlayer
+struct AnimationInput // unused if animationId = 0xFFFFFFFF
 {
-   
+   u32 animationId;
+   f32 timeScale;
+   f32 t;
 };
 
-static void AnimateUnits(EntityManager *entityManager)
+struct IKInput // unused if boneIndex = 0xFFFFFFFF
 {
-   u32 animationID = RegisterAsset(assetHandler, Asset_Animation, "dudeTry1Run.animation");
-   KeyFramedAnimation *animation = GetAnimation(assetHandler, animationID);
-   
-   For(entityManager->unitData)
+   v3 focusP;
+   Char axis;
+   u32 depth;
+   u32 iterations;
+   u32 boneIndex;
+};
+
+struct AnimationState
+{
+   u32 meshId;
+   u32 serial;
+   //f32 animationLerpT;
+   AnimationInput animations[2];
+   IKInput iks[5]; // we should make this like an enum IK_Head, IK_LArm, ... orsth
+   InterpolationDataArray localTransforms;
+   m4x4Array boneStates;
+};
+
+DefineDynamicArray(AnimationState);
+
+
+static void AddAnimation(AnimationState *state, u32 animationId, f32 timeScale, f32 startT)
+{
+   AnimationInput toAdd;
+   toAdd.animationId = animationId;
+   toAdd.timeScale = timeScale;
+   toAdd.t = startT;
+   if(state->animations[0].animationId == 0xFFFFFFFF)
    {
-      Entity *e = GetEntity(entityManager, it->serial);
-      if(it->isWalking)
+      state->animations[0] = toAdd;
+   }
+   else if(state->animations[1].animationId == 0xFFFFFFFF)
+   {
+      state->animations[1] = toAdd;
+   }
+   else
+   {
+      u32 place = (state->animations[0].t > state->animations[1].t); // not sure.
+      state->animations[place] = toAdd;
+   }
+}
+
+static void AddIK(AnimationState *state, u32 boneIndex, v3 focusP, Char axis, u32 iterations, u32 depth)
+{
+   for(u32 i = 0; i < 3; i++)
+   {
+      if(state->iks[i].boneIndex != 0xFFFFFFFF)
       {
-         TriangleMesh *mesh = GetMesh(assetHandler, e->meshId);
-         InterpolationDataArray local = GetLocalTransforms(animation, it->t);
-         m4x4Array bones = LocalToSpace(&mesh->skeleton, local);
+         IKInput toAdd;
+         toAdd.boneIndex = boneIndex;
+         toAdd.focusP = focusP;
+         toAdd.axis = axis;
+         toAdd.iterations = iterations;
+         toAdd.depth = depth;
          
-         for (u32 i = 0; i < mesh->skeleton.bones.amount; i++)
-         {
-            bones[i] = bones[i] * mesh->skeleton.bones[i].inverseBindShapeMatrix;
-         }
-         
-         
+         state->iks[i] = toAdd;
          return;
       }
    }
