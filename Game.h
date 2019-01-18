@@ -148,6 +148,7 @@ static void InitGame(int screenWidth, int screenHeight, WorkHandler *workHandler
 	
 	ret->workHandler = workHandler;
 	ret->font = LoadFont("consola.ttf", constantArena);
+   ret->font.textureIndex = {};
 	globalFont = ret->font;
 	InitConsole(constantArena);
 	ret->assetHandler = CreateAssetHandler(constantArena);

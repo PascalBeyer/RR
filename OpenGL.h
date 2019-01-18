@@ -1212,7 +1212,6 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
          case RenderGroup_EntryTexturedQuads:
          {
             EntryTexturedQuads *quadHeader = (EntryTexturedQuads *)header;
-            Bitmap *bitmaps = quadHeader->quadBitmaps;
             
             OpenGLUniformInfo uniforms;
             uniforms.shadowMat = shadowMat;
@@ -1226,8 +1225,6 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             
             for (u32 vertIndex = 0; vertIndex < quadHeader->vertexCount; vertIndex += 4)
             {
-               Bitmap bitmap = bitmaps[vertIndex >> 2];
-               
                glDrawArrays(GL_TRIANGLE_STRIP, vertIndex, 4);
             }
             

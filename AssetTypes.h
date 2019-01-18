@@ -196,6 +196,7 @@ typedef CharInfo CharData;
 struct Font
 {
 	Bitmap bitmap;
+   TextureIndex textureIndex;
 	CharInfo *charData;
 	u32 amountOfChars = 0;
 	f32 charHeight;

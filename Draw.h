@@ -20,7 +20,7 @@ static void DrawNumberOnTile(RenderGroup *rg, u32 number, v3i pos, v4 color = V4
       
 		CharData data = globalFont.charData['0' + number];
       
-		PushTexturedQuad(rg, p1, p2, p3, p4, globalFont.bitmap, V4(1, 1, 1, 1), true, data.minUV, data.maxUV);
+		PushTexturedQuad(rg, p1, p2, p3, p4, globalFont.textureIndex,  true, data.minUV, data.maxUV);
 	}
 	else if (number < 100)
 	{
@@ -37,7 +37,7 @@ static void DrawNumberOnTile(RenderGroup *rg, u32 number, v3i pos, v4 color = V4
          
 			CharData data = globalFont.charData['0' + first];
          
-			PushTexturedQuad(rg, p1, p2, p3, p4, globalFont.bitmap, V4(1, 1, 1, 1), true, data.minUV, data.maxUV);
+			PushTexturedQuad(rg, p1, p2, p3, p4, globalFont.textureIndex, true, data.minUV, data.maxUV);
 		}
       
 		{
@@ -48,7 +48,7 @@ static void DrawNumberOnTile(RenderGroup *rg, u32 number, v3i pos, v4 color = V4
          
 			CharData data = globalFont.charData['0' + second];
          
-			PushTexturedQuad(rg, p1, p2, p3, p4, globalFont.bitmap, V4(1, 1, 1, 1), true, data.minUV, data.maxUV);
+			PushTexturedQuad(rg, p1, p2, p3, p4, globalFont.textureIndex, true, data.minUV, data.maxUV);
 		}
 	}
 }

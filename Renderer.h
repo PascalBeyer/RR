@@ -1,7 +1,7 @@
 #ifndef RR_RENDERER
 #define RR_RENDERER
 
-// this is kind of a windows thing, thats why it was in buffers.h...
+// this is kind of a Platform thing, thats why it was in buffers.h...
 struct RenderCommands
 {
 	u32 maxBufferSize;
@@ -103,25 +103,15 @@ struct EntryAnimatedMesh
    
    u32 vertexVBO;
 	u32 indexVBO;
-   
 };
 
 struct EntryTexturedQuads
 {
 	RenderGroupEntryHeader header;
-   VertexFormatPCU *data;
+   VertexFormatPCUI *data;
 	u32 vertexCount;
 	u32 maxAmount;
-	Bitmap *quadBitmaps;
 };
-
-#if 0
-struct EntryUpdateTexture
-{
-	RenderGroupEntryHeader header;
-	Bitmap bitmap;
-};
-#endif
 
 struct RenderGroup
 {	
@@ -203,6 +193,8 @@ static void PushOrthogonalSetup(RenderGroup *rg, b32 zeroToOne, u32 flags)
       setup->cameraTransform = Identity();
       
    }
+   
+   // todo reuse the rest of the memory!
    rg->currentLines = NULL;
    rg->currentTriangles = NULL;
    rg->currentQuads = NULL;
@@ -236,36 +228,47 @@ static void PushProjectiveSetup(RenderGroup *rg, Camera camera, LightSource ligh
 }
 
 // this is just used as the return of this function
-struct TexturedQuad
+struct GetTexturedQuadMemoryReturn
 {
-   VertexFormatPCU *verts;
-   Bitmap *bitmap;
+   b32 success;
+   VertexFormatPCUI *verts;
 };
 
-static TexturedQuad GetTexturedQuadMemory(RenderGroup *rg)
+static GetTexturedQuadMemoryReturn GetTexturedQuadMemory(RenderGroup *rg)
 {
+   if (!rg->currentQuads)
+   {
+      EntryTexturedQuads *quads = PushRenderEntry(EntryTexturedQuads);
+      if(quads)
+      {
+         quads->maxAmount = 1000;
+         quads->data = PushData(frameArena, VertexFormatPCUI, quads->maxAmount);
+         quads->vertexCount = 0;
+         
+         rg->currentQuads = quads;
+         
+         u32 quadAmount = quads->maxAmount / 4;
+      }
+      else
+      {
+         Die;
+         return {};
+      }
+   }
+   
+   
    if (rg->currentQuads->vertexCount + 4 <= rg->currentQuads->maxAmount)
    {
-      Bitmap *bitmap = rg->currentQuads->quadBitmaps + (rg->currentQuads->vertexCount >> 2);
-      VertexFormatPCU *verts = rg->currentQuads->data + rg->currentQuads->vertexCount;
+      VertexFormatPCUI *verts = rg->currentQuads->data + rg->currentQuads->vertexCount;
       rg->currentQuads->vertexCount += 4;
-      TexturedQuad ret;
-      ret.bitmap = bitmap;
+      GetTexturedQuadMemoryReturn ret;
       ret.verts = verts;
+      ret.success = true;
       return ret;
    }
    else
    {
-      EntryTexturedQuads *quads = PushRenderEntry(EntryTexturedQuads);
-      quads->maxAmount = 1000;
-      quads->data = PushData(frameArena, VertexFormatPCU, quads->maxAmount);
-      quads->vertexCount = 0;
-      
-      rg->currentQuads = quads;
-      
-      u32 bitmapAmount = quads->maxAmount / 4;
-      rg->currentQuads->quadBitmaps = PushData(frameArena, Bitmap, bitmapAmount);
-      
+      rg->currentQuads = NULL;
       return GetTexturedQuadMemory(rg);
    }
 }
@@ -279,7 +282,7 @@ static VertexFormatPC *GetVertexMemory(RenderGroup *rg, RenderGroupEntryType typ
          if (!rg->currentLines)
          {
             EntryColoredVertices *lines = PushRenderEntryType(EntryColoredVertices, EntryLines);
-            lines->maxAmount = 65536;
+            lines->maxAmount = 5536;
             lines->data = PushData(frameArena, VertexFormatPC, lines->maxAmount);
             lines->vertexCount = 0;
             
@@ -306,7 +309,7 @@ static VertexFormatPC *GetVertexMemory(RenderGroup *rg, RenderGroupEntryType typ
          if (!rg->currentTriangles)
          {
             EntryColoredVertices *triangles = PushRenderEntryType(EntryColoredVertices, EntryTriangles);
-            triangles->maxAmount = 65536;
+            triangles->maxAmount = 5536;
             triangles->data = PushData(frameArena, VertexFormatPC, triangles->maxAmount);
             triangles->vertexCount = 0;
             
@@ -771,22 +774,11 @@ static void PushCenteredRectangle(RenderGroup *rg, v2 pos, float width, float he
 
 #undef Orthogonal_Rectangle_OFFSET
 
-static void PushTexturedQuad(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, Bitmap bitmap, v4 color, bool inverted, v2 minUV, v2 maxUV)
+static void PushTexturedQuad(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, TextureIndex textureIndex,bool inverted = false,  v2 minUV = {0, 0}, v2 maxUV = {1, 1}, v4 color = {1, 1, 1, 1})
 {
-   if (!rg->currentQuads)
-   {
-      EntryTexturedQuads *quads = PushRenderEntry(EntryTexturedQuads);
-      quads->maxAmount = 1000;
-      quads->data = PushData(frameArena, VertexFormatPCU, quads->maxAmount);
-      quads->vertexCount = 0;
-      
-      rg->currentQuads = quads;
-      
-      u32 bitmapAmount = quads->maxAmount / 4;
-      rg->currentQuads->quadBitmaps = PushData(frameArena, Bitmap, bitmapAmount);
-   }
+   GetTexturedQuadMemoryReturn mem = GetTexturedQuadMemory(rg);
    
-   TexturedQuad mem = GetTexturedQuadMemory(rg);
+   if(!mem.success) return;
    
    mem.verts[0].p = p1;
    mem.verts[1].p = p2;
@@ -814,45 +806,24 @@ static void PushTexturedQuad(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, Bitmap
    mem.verts[2].c = Pack4x8(color);
    mem.verts[3].c = Pack4x8(color);
    
-   *mem.bitmap = bitmap;
+   u16 castTextureIndex = (u16)textureIndex.index;
+   Assert(castTextureIndex == textureIndex.index);
+   
+   mem.verts[0].textureIndex = castTextureIndex;
+   mem.verts[1].textureIndex = castTextureIndex;
+   mem.verts[2].textureIndex = castTextureIndex;
+   mem.verts[3].textureIndex = castTextureIndex;
 }
 
-static void PushTexturedQuad(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, Bitmap bitmap, v4 color)
-{
-   PushTexturedQuad(rg, p1, p2, p3, p4, bitmap, color, false, V2(), V2(1, 1));
-}
-
-//Setup_BitmapsOnTop = 0x8, // for orthogonal UI stuff,	this is a general rule for now
-static void PushTexturedRect(RenderGroup *rg, v2 p1, f32 width, f32 height, Bitmap bitmap, v4 color, bool inverted, v2 minUV, v2 maxUV)
-{
-   v2 p2 = p1 + V2(width, 0);
-   v2 p3 = p1 + V2(0, height);
-   v2 p4 = p1 + V2(width, height);
-   PushTexturedQuad(rg, i12(p1), i12(p2), i12(p3), i12(p4), bitmap, color, inverted, minUV, maxUV);
-}
-
-static void PushTexturedRect(RenderGroup *rg, v2 p1, f32 width, f32 height, Bitmap bitmap)
+static void PushTexturedRect(RenderGroup *rg, v2 p1, f32 width, f32 height, TextureIndex textureIndex,  bool inverted = false, v2 minUV = {0, 0}, v2 maxUV = {1, 1}, v4 color = {1, 1, 1, 1})
 {
    v2 p2 = p1 + V2(width, 0);
    v2 p3 = p1 + V2(0, height);
    v2 p4 = p1 + V2(width, height);
-   PushTexturedQuad(rg, i12(p1), i12(p2), i12(p3), i12(p4), bitmap, V4(1, 1, 1, 1), false, V2(), V2(1, 1));
+   PushTexturedQuad(rg, i12(p1), i12(p2), i12(p3), i12(p4), textureIndex, inverted, minUV, maxUV, color);
 }
 
-static void PushTexturedRect(RenderGroup *rg, v2 p1, f32 width, f32 height, Bitmap bitmap, bool inverted)
-{
-   v2 p2 = p1 + V2(width, 0);
-   v2 p3 = p1 + V2(0, height);
-   v2 p4 = p1 + V2(width, height);
-   PushTexturedQuad(rg, i12(p1), i12(p2), i12(p3), i12(p4), bitmap, V4(1, 1, 1, 1), inverted, V2(), V2(1, 1));
-}
 
-static void PushBitmap(RenderGroup *rg, v2 pos, Bitmap bitmap, v4 color = V4(1, 1, 1, 1))
-{
-   PushTexturedRect(rg, pos, (f32)bitmap.width, (f32)bitmap.height, bitmap, color, false, V2(0, 0), V2(1, 1));
-}
-
-// returns actual string width
 static f32 PushString(RenderGroup *rg, v2 pos, unsigned char* string, u32 stringLength, f32 size, Font font, v4 color = V4(1, 1, 1, 1))
 {
    TimedBlock;
@@ -878,7 +849,7 @@ static f32 PushString(RenderGroup *rg, v2 pos, unsigned char* string, u32 string
          
          v2 writePos = V2(x + offSetX, y + offSetY);
          
-         PushTexturedRect(rg, writePos, scaledWidth, scaledHeight, font.bitmap, color, true, data.minUV, data.maxUV);
+         PushTexturedRect(rg, writePos, scaledWidth, scaledHeight, font.textureIndex, true, data.minUV, data.maxUV);
          float actualFloatWidth = data.xAdvance * fScale;
          x += actualFloatWidth;
          
