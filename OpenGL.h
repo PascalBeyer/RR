@@ -636,39 +636,46 @@ struct OpenGLUniformInfo
    u32 textureIndex;
 };
 
-static void BeginUseProgram(OpenGLContext *context, OpenGLProgram *prog, RenderSetup setup, OpenGLUniformInfo uniforms)
+static void BeginUseProgram(OpenGLContext *context, OpenGLProgram *prog, RenderSetup setup, m4x4 shadowMat)
 {
-   
 	glUseProgram(prog->program);
    
-   // this can be in the setup
+   // this can be in the setup of the programs
    glBindTexture(GL_TEXTURE_2D_ARRAY, globalTextureArray);
-   
-   m4x4 mat = setup.cameraTransform * uniforms.objectTransform;
-   glUniformMatrix4fv(prog->cameraTransform, 1, GL_TRUE, mat.a[0]);
-	glUniformMatrix4fv(prog->projection, 1, GL_TRUE, setup.projection.a[0]);
-   
-   glUniform4f(prog->scaleColor, uniforms.scaleColor.r, uniforms.scaleColor.g, uniforms.scaleColor.b, uniforms.scaleColor.a); // rgba?
-   
+   glUniformMatrix4fv(prog->projection, 1, GL_TRUE, setup.projection.a[0]);
    
    if (prog->flags & ShaderFlags_ShadowMapping)
    {
-      m4x4 shadowMat = uniforms.shadowMat * uniforms.objectTransform;
-      glUniformMatrix4fv(prog->shadowTransform, 1, GL_TRUE, shadowMat.a[0]);
       glActiveTexture(GL_TEXTURE1);
       glBindTexture(GL_TEXTURE_2D, context->shadowBuffer.depth);
       glActiveTexture(GL_TEXTURE0);
-   }
-   
-   if(prog->flags & ShaderFlags_Animated)
-   {
-      glUniformMatrix4fv(prog->boneStates, uniforms.boneStates.amount, GL_TRUE, (GLfloat *)uniforms.boneStates.data);
    }
    
    if(prog->flags & ShaderFlags_Phong)
    {
       v3 lightP = setup.transformedLightP;
       glUniform3f(prog->lightP, lightP.x, lightP.y, lightP.z);
+   }
+   
+}
+
+static void SetUpUniforms(OpenGLProgram *prog, RenderSetup setup, OpenGLUniformInfo uniforms)
+{
+   m4x4 mat = setup.cameraTransform * uniforms.objectTransform;
+   glUniformMatrix4fv(prog->cameraTransform, 1, GL_TRUE, mat.a[0]);
+	
+   
+   glUniform4f(prog->scaleColor, uniforms.scaleColor.r, uniforms.scaleColor.g, uniforms.scaleColor.b, uniforms.scaleColor.a); // rgba?
+   
+   if (prog->flags & ShaderFlags_ShadowMapping)
+   {
+      m4x4 shadowMat = uniforms.shadowMat * uniforms.objectTransform;
+      glUniformMatrix4fv(prog->shadowTransform, 1, GL_TRUE, shadowMat.a[0]);
+   }
+   
+   if(prog->flags & ShaderFlags_Animated)
+   {
+      glUniformMatrix4fv(prog->boneStates, uniforms.boneStates.amount, GL_TRUE, (GLfloat *)uniforms.boneStates.data);
    }
    
    if(prog->flags & ShaderFlags_Textured)
@@ -678,11 +685,6 @@ static void BeginUseProgram(OpenGLContext *context, OpenGLProgram *prog, RenderS
    
    glBindBuffer(GL_ARRAY_BUFFER, uniforms.vertexBuffer);
    if(uniforms.indexBuffer != 0xFFFFFFFF) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, uniforms.indexBuffer);
-   
-}
-static void EndUseProgram(OpenGLProgram *prog)
-{
-	glUseProgram(0);
 }
 
 static void BeginAttribArraysPC(OpenGLProgram *prog)
@@ -1044,10 +1046,6 @@ static u32 HeaderSize(RenderGroupEntryHeader *header)
       {
          return sizeof(EntryColoredVertices);
       }break;
-      case RenderGroup_EntryAnimatedMesh:
-      {
-         return sizeof(EntryAnimatedMesh);
-      }break;
       default:
       {
          Die;
@@ -1080,6 +1078,8 @@ static void RenderIntoShadowMap(RenderCommands *rg, OpenGLContext *context)
    
    glUseProgram(prog->program);
    
+   
+   
    glBindFramebuffer(GL_FRAMEBUFFER, context->shadowBuffer.id);
    
    glViewport(0, 0, context->shadowBuffer.width, context->shadowBuffer.height);  // is this per framebuffer?
@@ -1100,6 +1100,7 @@ static void RenderIntoShadowMap(RenderCommands *rg, OpenGLContext *context)
             EntryChangeRenderSetup *setupHeader = (EntryChangeRenderSetup *)header;
             currentSetup = setupHeader->setup;
             currentSetup.cameraTransform = currentSetup.shadowMat;
+            BeginUseProgram(context, prog, currentSetup, currentSetup.shadowMat);
             
             pBufferIt += sizeof(*setupHeader);
          }break;
@@ -1113,7 +1114,7 @@ static void RenderIntoShadowMap(RenderCommands *rg, OpenGLContext *context)
             uniforms.vertexBuffer    = meshHeader->vertexVBO;
             uniforms.indexBuffer     = meshHeader->indexVBO;
             
-            BeginUseProgram(context, prog, currentSetup, uniforms);
+            SetUpUniforms(prog, currentSetup, uniforms);
             
             BeginAttribArrays(prog, meshHeader->vertexType);
             
@@ -1138,7 +1139,6 @@ static void RenderIntoShadowMap(RenderCommands *rg, OpenGLContext *context)
                
             }
             EndAttribArrays(prog);
-            EndUseProgram(prog);
             
             pBufferIt += sizeof(*meshHeader);
          }break;
@@ -1201,6 +1201,8 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             shadowMat = biasMatrix * currentSetup.projection * currentSetup.shadowMat;
             prog = GetOpenGLProgram(context, currentSetup.flags);
             
+            BeginUseProgram(context, prog, currentSetup, shadowMat);
+            
             // todo do this in the setup, so we do not have to do it for every pass.
             pBufferIt += sizeof(*setupHeader);
          }break;
@@ -1213,7 +1215,7 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             uniforms.vertexBuffer = context->vertexBuffer;
             uniforms.indexBuffer  = context->indexBuffer;
             
-            BeginUseProgram(context, prog, currentSetup, uniforms);
+            SetUpUniforms(prog, currentSetup, uniforms);
             BeginAttribArraysPCUI(prog);
             
             glBufferData(GL_ARRAY_BUFFER, 4u * quadHeader->count * sizeof(quadHeader->vertexBuffer[0]), quadHeader->vertexBuffer, GL_STREAM_DRAW);
@@ -1221,10 +1223,7 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             
             glDrawElements(GL_TRIANGLES, 6u * quadHeader->count, GL_UNSIGNED_SHORT, 0);
             
-            glBindTexture(GL_TEXTURE_2D, 0);
-            
             EndAttribArrays(prog);
-            EndUseProgram(prog);
             
             pBufferIt += sizeof(*quadHeader);
          }break;
@@ -1236,14 +1235,14 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             uniforms.shadowMat = shadowMat;
             uniforms.vertexBuffer = context->vertexBuffer;
             
-            BeginUseProgram(context, prog, currentSetup, uniforms);
+            SetUpUniforms(prog, currentSetup, uniforms);
             
             BeginAttribArraysPC(prog);
             
             glBufferData(GL_ARRAY_BUFFER, trianglesHeader->vertexCount * sizeof(VertexFormatPC), trianglesHeader->data, GL_STREAM_COPY);
             glDrawArrays(GL_TRIANGLES, 0, trianglesHeader->vertexCount);
             
-            EndUseProgram(prog);
+            EndAttribArrays(prog);
             
             pBufferIt += sizeof(*trianglesHeader);
          }break;
@@ -1257,54 +1256,9 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             uniforms.scaleColor      = meshHeader->scaleColor;
             uniforms.vertexBuffer    = meshHeader->vertexVBO;
             uniforms.indexBuffer     = meshHeader->indexVBO;
-            
-            BeginUseProgram(context, prog, currentSetup, uniforms);
-            
-            BeginAttribArrays(prog, meshHeader->vertexType);
-            
-            for(u32 i = 0; i < meshHeader->indexSets.amount; i++)
-            {
-               auto it = &meshHeader->indexSets[i];
-               
-               glUniform1f(prog->specularExponent, it->mat.specularExponent);
-               glUniform3f(prog->ka, it->mat.ka.x, it->mat.ka.y, it->mat.ka.z);
-               glUniform3f(prog->kd, it->mat.kd.x, it->mat.kd.y, it->mat.kd.z);
-               glUniform3f(prog->ks, it->mat.ks.x, it->mat.ks.y, it->mat.ks.z);
-               glUniform1i(prog->textureIndex, meshHeader->textureIDs[i]);
-               
-               switch (meshHeader->meshType)
-               {
-                  case TriangleMeshType_List:
-                  {
-                     glDrawElements(GL_TRIANGLES, it->amount, GL_UNSIGNED_SHORT, (void *) ((u64)it->offset * sizeof(u16)));
-                  }break;
-                  case TrianlgeMeshType_Strip:
-                  {
-                     glDrawElements(GL_TRIANGLE_STRIP, it->amount, GL_UNSIGNED_SHORT, (void *)((u64)it->offset * sizeof(u16)));
-                  }break;
-                  default:
-                  {
-                     Die;
-                  }break;
-               }
-            }
-            
-            EndUseProgram(prog);
-            pBufferIt += sizeof(*meshHeader);
-         }break;
-         case RenderGroup_EntryAnimatedMesh:
-         {
-            EntryAnimatedMesh *meshHeader = (EntryAnimatedMesh *)header;
-            
-            OpenGLUniformInfo uniforms;
-            uniforms.objectTransform = meshHeader->objectTransform;
-            uniforms.shadowMat       = shadowMat;
-            uniforms.scaleColor      = meshHeader->scaleColor;
-            uniforms.vertexBuffer    = meshHeader->vertexVBO;
-            uniforms.indexBuffer     = meshHeader->indexVBO;
             uniforms.boneStates      = meshHeader->boneStates;
             
-            BeginUseProgram(context, prog, currentSetup, uniforms);
+            SetUpUniforms(prog, currentSetup, uniforms);
             
             BeginAttribArrays(prog, meshHeader->vertexType);
             
@@ -1312,7 +1266,6 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             {
                auto it = &meshHeader->indexSets[i];
                
-               // hmmm... thinking... todo
                glUniform1f(prog->specularExponent, it->mat.specularExponent);
                glUniform3f(prog->ka, it->mat.ka.x, it->mat.ka.y, it->mat.ka.z);
                glUniform3f(prog->kd, it->mat.kd.x, it->mat.kd.y, it->mat.kd.z);
@@ -1335,8 +1288,8 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
                   }break;
                }
             }
+            EndAttribArrays(prog);
             
-            EndUseProgram(prog);
             pBufferIt += sizeof(*meshHeader);
          }break;
          case RenderGroup_EntryClear:
@@ -1354,14 +1307,15 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             OpenGLUniformInfo uniforms;
             uniforms.vertexBuffer = context->vertexBuffer;
             
-            BeginUseProgram(context, prog, currentSetup, uniforms);
+            SetUpUniforms(prog, currentSetup, uniforms);
             
             BeginAttribArraysPC(prog);
             glBufferData(GL_ARRAY_BUFFER, lineHeader->vertexCount * sizeof(VertexFormatPC), lineHeader->data, GL_STREAM_COPY);
             glDrawArrays(GL_LINES, 0, lineHeader->vertexCount);
             
             EndAttribArrays(prog);
-            EndUseProgram(prog);
+            
+            
             pBufferIt += sizeof(*lineHeader);
          }break;
          

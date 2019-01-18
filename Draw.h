@@ -120,12 +120,11 @@ static void RenderPathCreator(RenderGroup *rg, EntityManager *entityManager, Exe
       
 	}
    
-   PushProjectiveSetup(rg, exe->camera, exe->lightSource, ShaderFlags_ShadowMapping|ShaderFlags_Textured);
+   PushProjectiveSetup(rg, exe->camera, exe->lightSource, ShaderFlags_ShadowMapping|ShaderFlags_Textured|ShaderFlags_Phong);
    for(u32 i = 0; i < Entity_Count; i++)
    {
       if(i == Entity_Dude)
       {
-         
          For(entityManager->unitArray)
          {
             PushTriangleMesh(rg, it->meshId, it->orientation, V3((it->physicalPos)) + it->offset, it->scale, V4(0.75f, 0.0f, 0.0f, 0.0f));
@@ -178,7 +177,7 @@ static void RenderSimulate(RenderGroup *rg, EntityManager *entityManager, Execut
    {
       if(i == Entity_Dude)
       {
-         PushProjectiveSetup(rg, exe->camera, exe->lightSource, ShaderFlags_ShadowMapping|ShaderFlags_Textured|ShaderFlags_Animated);
+         PushProjectiveSetup(rg, exe->camera, exe->lightSource, ShaderFlags_ShadowMapping|ShaderFlags_Textured|ShaderFlags_Animated|ShaderFlags_Phong);
          For(entityManager->animationStates)
          {
             Entity *e = GetEntity(entityManager, it->serial);
@@ -618,7 +617,7 @@ static void RenderEditor(RenderGroup *rg, AssetHandler *assetHandler, Editor edi
    //PushDebugPointCuboid(rg, editor.focusPoint);
    
    EditorEntities *editorEntities = &editor.editorEntities;
-   PushProjectiveSetup(rg, editor.camera, editor.levelInfo.lightSource, ShaderFlags_Textured);
+   PushProjectiveSetup(rg, editor.camera, editor.levelInfo.lightSource, ShaderFlags_Textured|ShaderFlags_Phong|ShaderFlags_ShadowMapping);
    For(editorEntities->entities)
    {
       PushTriangleMesh(rg, it->meshId, it->orientation, GetRenderPos(*it), it->scale, it->color * it->frameColor);
@@ -661,11 +660,17 @@ static void RenderEditor(RenderGroup *rg, AssetHandler *assetHandler, Editor edi
    
    //v3 averagePos = GetAveragePosForSelection(&editor);
    //PushDebugPointCuboid(rg, V3(averagePos.xy, 0.0f));
-   
    For(editor.hotEntitySerials)
    {
       Entity *e = GetEntity(editorEntities, *it);
-      PushDebugPointCuboid(rg, V3(e->physicalPos), V4(1.0f, 0.3f, 0.6f, 0.1f));
+      PushDebugPointCuboid(rg, V3(e->physicalPos), V4(1.0f, 1.0f, 0.3f, 0.2f));
+   }
+   
+   
+   PushProjectiveSetup(rg, editor.camera, editor.levelInfo.lightSource, ShaderFlags_None);
+   For(editor.hotEntitySerials)
+   {
+      Entity *e = GetEntity(editorEntities, *it);
       AABB transformedAABB = GetMesh(assetHandler, e->meshId)->aabb;
       
       transformedAABB.minDim *= e->scale;

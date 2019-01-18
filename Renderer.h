@@ -22,7 +22,6 @@ enum RenderGroupEntryType
 	RenderGroup_EntryLines,
 	RenderGroup_EntryTriangles,
 	RenderGroup_EntryTriangleMesh,
-   RenderGroup_EntryAnimatedMesh,
 };
 
 enum OpenGLShaderFlags : u32
@@ -75,22 +74,6 @@ struct EntryClear
 struct EntryTriangleMesh
 {
    RenderGroupEntryHeader header;
-   VertexFormatType vertexType;
-   
-   u32 meshType;
-   m4x4 objectTransform;
-   v4 scaleColor;
-   
-   IndexSetArray indexSets;
-   u32Array textureIDs;
-   
-   u32 vertexVBO;
-	u32 indexVBO;
-};
-
-struct EntryAnimatedMesh
-{
-	RenderGroupEntryHeader header;
    VertexFormatType vertexType;
    
    u32 meshType;
@@ -353,10 +336,10 @@ static void PushTriangleMesh(RenderGroup *rg, TriangleMesh *mesh, Quaternion ori
    meshHeader->indexSets = mesh->indexSets;
    meshHeader->textureIDs = arr;
    
-   meshHeader->objectTransform =InterpolationDataToMatrix(pos, orientation, scale);
+   meshHeader->objectTransform = InterpolationDataToMatrix(pos, orientation, scale);
    meshHeader->scaleColor = scaleColor;
-   meshHeader->meshType = mesh->type;
-   
+   meshHeader->meshType   = mesh->type;
+   meshHeader->boneStates = {};
 }
 
 static void PushTriangleMesh(RenderGroup *rg, u32 meshId, Quaternion orientation, v3 pos, f32 scale, v4 scaleColor)
@@ -366,11 +349,12 @@ static void PushTriangleMesh(RenderGroup *rg, u32 meshId, Quaternion orientation
    PushTriangleMesh(rg, mesh, orientation, pos, scale, scaleColor);
 }
 
+
 static void PushAnimatedMesh(RenderGroup *rg, TriangleMesh *mesh, Quaternion orientation, v3 pos, f32 scale, v4 scaleColor, m4x4Array boneStates)
 {
    if (!mesh) return; // todo think about this, we want this if we redo our mesh write
    
-   EntryAnimatedMesh *meshHeader = PushRenderEntry(EntryAnimatedMesh);
+   EntryTriangleMesh *meshHeader = PushRenderEntry(EntryTriangleMesh);
    u32Array arr = PushArray(frameArena, u32, mesh->indexSets.amount);
    for (u32 i = 0; i < arr.amount; i++)
    {

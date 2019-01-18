@@ -660,7 +660,7 @@ static OpenGLContext win32InitOpenGL(HWND window)
    
 	if (wglMakeCurrent(windowDC, context))
 	{
-		// vsinc
+		// vsync
 		wgl_swap_inverval_ext *wglSwapIntervalEXT= (wgl_swap_inverval_ext *)wglGetProcAddress("wglSwapIntervalEXT");
 		if (wglSwapIntervalEXT)
 		{

@@ -280,7 +280,7 @@ static void DrawDebugRecords(RenderGroup *rg, f32 secondsPerFrame, Input input)
             PushRectangle(rg, pos, width, debugDisplayBarSize, color, color, color, color);
             if (PointInRectangle(pos, width, debugDisplayBarSize, input.mouseZeroToOne))
             {
-               PushOrthogonalSetup(rg, true, ShaderFlags_Textured);
+               PushOrthogonalSetup(rg, true, ShaderFlags_MultiTextured);
                PushString(rg, input.mouseZeroToOne, debugInfoArray[it->debugRecordIndex].function, debugDisplayBarSize);
                PushOrthogonalSetup(rg, true, ShaderFlags_None);
             }
