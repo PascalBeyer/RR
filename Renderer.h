@@ -108,9 +108,11 @@ struct EntryAnimatedMesh
 struct EntryTexturedQuads
 {
 	RenderGroupEntryHeader header;
-   VertexFormatPCUI *data;
-	u32 vertexCount;
-	u32 maxAmount;
+   VertexFormatPCUI *vertexBuffer;
+   u16 *indexBuffer;
+   
+	u32 count;
+   u32 maxAmount;
 };
 
 struct RenderGroup
@@ -225,52 +227,6 @@ static void PushProjectiveSetup(RenderGroup *rg, Camera camera, LightSource ligh
    
    setup->flags = flags;
    rg->setup = *setup;
-}
-
-// this is just used as the return of this function
-struct GetTexturedQuadMemoryReturn
-{
-   b32 success;
-   VertexFormatPCUI *verts;
-};
-
-static GetTexturedQuadMemoryReturn GetTexturedQuadMemory(RenderGroup *rg)
-{
-   if (!rg->currentQuads)
-   {
-      EntryTexturedQuads *quads = PushRenderEntry(EntryTexturedQuads);
-      if(quads)
-      {
-         quads->maxAmount = 1000;
-         quads->data = PushData(frameArena, VertexFormatPCUI, quads->maxAmount);
-         quads->vertexCount = 0;
-         
-         rg->currentQuads = quads;
-         
-         u32 quadAmount = quads->maxAmount / 4;
-      }
-      else
-      {
-         Die;
-         return {};
-      }
-   }
-   
-   
-   if (rg->currentQuads->vertexCount + 4 <= rg->currentQuads->maxAmount)
-   {
-      VertexFormatPCUI *verts = rg->currentQuads->data + rg->currentQuads->vertexCount;
-      rg->currentQuads->vertexCount += 4;
-      GetTexturedQuadMemoryReturn ret;
-      ret.verts = verts;
-      ret.success = true;
-      return ret;
-   }
-   else
-   {
-      rg->currentQuads = NULL;
-      return GetTexturedQuadMemory(rg);
-   }
 }
 
 static VertexFormatPC *GetVertexMemory(RenderGroup *rg, RenderGroupEntryType type)
@@ -664,16 +620,124 @@ static void PushClear(RenderGroup *rg, v4 color)
    }
 }
 
-static void PushQuadrilateral(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, u32 c1, u32 c2, u32 c3, u32 c4)
+static VertexFormatPCUI *GetTexturedQuadMemory(RenderGroup *rg)
 {
-   PushTriangle(rg, p1, p2, p3, c1, c2, c3);
-   PushTriangle(rg, p4, p2, p3, c4, c2, c3);
+   if (!rg->currentQuads)
+   {
+      EntryTexturedQuads *quads = PushRenderEntry(EntryTexturedQuads);
+      if(quads)
+      {
+         quads->maxAmount    = 1000;
+         quads->vertexBuffer = PushData(frameArena, VertexFormatPCUI, 4u * quads->maxAmount);
+         quads->indexBuffer  = PushData(frameArena, u16, 6u * quads->maxAmount);
+         quads->count  = 0;
+         
+         rg->currentQuads = quads;
+      }
+      else
+      {
+         Die;
+         return NULL;
+      }
+   }
+   
+   
+   if (rg->currentQuads->count < rg->currentQuads->maxAmount)
+   {
+      VertexFormatPCUI *verts = rg->currentQuads->vertexBuffer + 4u * rg->currentQuads->count;
+      
+      u16 vertsAt = (u16)(4u * rg->currentQuads->count);
+      Assert(vertsAt == (4u * rg->currentQuads->count));
+      u32 indexAt = 6u * rg->currentQuads->count;
+      
+      u16 *indices = rg->currentQuads->indexBuffer + indexAt;
+      *indices++ = (vertsAt + 0);
+      *indices++ = (vertsAt + 1);
+      *indices++ = (vertsAt + 2);
+      
+      *indices++ = (vertsAt + 2);
+      *indices++ = (vertsAt + 1);
+      *indices++ = (vertsAt + 3);
+      
+      rg->currentQuads->count++;
+      return verts;
+   }
+   else
+   {
+      rg->currentQuads = NULL;
+      return GetTexturedQuadMemory(rg);
+   }
+}
+
+static void PushTexturedQuad(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, TextureIndex textureIndex, bool inverted = false,  v2 minUV = {0, 0}, v2 maxUV = {1, 1}, v4 color = {1, 1, 1, 1})
+{
+   VertexFormatPCUI *verts = GetTexturedQuadMemory(rg);
+   if(!verts) return;
+   
+   verts[0].p = p1;
+   verts[1].p = p2;
+   verts[2].p = p3;
+   verts[3].p = p4;
+   
+   if (inverted)
+   {
+      verts[0].uv = V2(minUV.x, minUV.y); // 0 0 
+      verts[1].uv = V2(maxUV.x, minUV.y); // 1 0
+      verts[2].uv = V2(minUV.x, maxUV.y); // 0 1
+      verts[3].uv = V2(maxUV.x, maxUV.y); // 1 1
+   }
+   else
+   {
+      verts[0].uv = V2(minUV.x, maxUV.y); // 0 1
+      verts[1].uv = V2(maxUV.x, maxUV.y); // 1 1
+      verts[2].uv = V2(minUV.x, minUV.y); // 0 0
+      verts[3].uv = V2(maxUV.x, minUV.y); // 1 0
+      
+   }
+   
+   u32 c = Pack4x8(color);
+   verts[0].c = c;
+   verts[1].c = c;
+   verts[2].c = c;
+   verts[3].c = c;
+   
+   u16 castTextureIndex = (u16)textureIndex.index;
+   Assert(castTextureIndex == textureIndex.index);
+   
+   verts[0].textureIndex = castTextureIndex;
+   verts[1].textureIndex = castTextureIndex;
+   verts[2].textureIndex = castTextureIndex;
+   verts[3].textureIndex = castTextureIndex;
+}
+
+static void PushTexturedQuad(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, u32 textureId, bool inverted = false,  v2 minUV = {0, 0}, v2 maxUV = {1, 1}, v4 color = {1, 1, 1, 1})
+{
+   TextureIndex textureIndex = GetTexture(rg->assetHandler, textureId);
+   PushTexturedQuad(rg, p1, p2, p3, p4, textureIndex, inverted, minUV, maxUV, color);
+}
+
+static void PushTexturedRect(RenderGroup *rg, v2 p1, f32 width, f32 height, TextureIndex textureIndex,  bool inverted = false, v2 minUV = {0, 0}, v2 maxUV = {1, 1}, v4 color = {1, 1, 1, 1})
+{
+   v2 p2 = p1 + V2(width, 0);
+   v2 p3 = p1 + V2(0, height);
+   v2 p4 = p1 + V2(width, height);
+   PushTexturedQuad(rg, i12(p1), i12(p2), i12(p3), i12(p4), textureIndex, inverted, minUV, maxUV, color);
+}
+
+static void PushTexturedRect(RenderGroup *rg, v2 p1, f32 width, f32 height, u32 textureId,  bool inverted = false, v2 minUV = {0, 0}, v2 maxUV = {1, 1}, v4 color = {1, 1, 1, 1})
+{
+   TextureIndex textureIndex = GetTexture(rg->assetHandler, textureId);
+   
+   v2 p2 = p1 + V2(width, 0);
+   v2 p3 = p1 + V2(0, height);
+   v2 p4 = p1 + V2(width, height);
+   PushTexturedQuad(rg, i12(p1), i12(p2), i12(p3), i12(p4), textureIndex, inverted, minUV, maxUV, color);
 }
 
 static void PushQuadrilateral(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, v4 color)
 {
-   PushTriangle(rg, p1, p2, p3, color);
-   PushTriangle(rg, p4, p2, p3, color);
+   TextureIndex textureIndex = GetTexture(rg->assetHandler, rg->assetHandler->whiteTextureId);
+   PushTexturedQuad(rg, p1, p2, p3, p4, textureIndex, false, {0, 0}, {1, 1}, color);
 }
 
 static void PushRectangle(RenderGroup *rg, v3 pos, v3 vec1, v3 vec2, v4 color)
@@ -682,12 +746,6 @@ static void PushRectangle(RenderGroup *rg, v3 pos, v3 vec1, v3 vec2, v4 color)
 }
 
 #define Orthogonal_Rectangle_OFFSET 0.0000001f
-
-// note : these are a bit "back" so they render behind the "text" / all bit maps
-static void PushRectangle(RenderGroup *rg, v2 pos, v2 vec1, v2 vec2, v4 color)
-{
-   PushQuadrilateral(rg, V3(pos, Orthogonal_Rectangle_OFFSET), V3(pos + vec1, Orthogonal_Rectangle_OFFSET), V3(pos + vec2, Orthogonal_Rectangle_OFFSET), V3(pos + vec1 + vec2, Orthogonal_Rectangle_OFFSET), color);
-}
 
 static void PushRectangle(RenderGroup *rg, v2 min, v2 max, v4 color)
 {
@@ -699,6 +757,16 @@ static void PushRectangle(RenderGroup *rg, v2 min, v2 max, v4 color)
    PushQuadrilateral(rg, V3(p1, Orthogonal_Rectangle_OFFSET), V3(p2, Orthogonal_Rectangle_OFFSET), V3(p3, Orthogonal_Rectangle_OFFSET), V3(p4, Orthogonal_Rectangle_OFFSET), color);
 }
 
+static void PushRectangle(RenderGroup *rg, v2 min, v2 max, u32 c)
+{
+   v2 p1 = min;
+   v2 p2 = V2(max.x, min.y);
+   v2 p3 = V2(min.x, max.y);
+   v2 p4 = max;
+   
+   PushQuadrilateral(rg, V3(p1, Orthogonal_Rectangle_OFFSET), V3(p2, Orthogonal_Rectangle_OFFSET), V3(p3, Orthogonal_Rectangle_OFFSET), V3(p4, Orthogonal_Rectangle_OFFSET), Unpack4x8(c));
+}
+
 static void PushRectangle(RenderGroup *rg, v2 pos, f32 width, f32 height, f32 zOffset, v4 color)
 {
    v2 vec1 = V2(width, 0.0f);
@@ -707,48 +775,12 @@ static void PushRectangle(RenderGroup *rg, v2 pos, f32 width, f32 height, f32 zO
    PushQuadrilateral(rg, V3(pos, zOffset), V3(pos + vec1, zOffset), V3(pos + vec2, zOffset), V3(pos + vec1 + vec2, zOffset), color);
 }
 
-static void PushRectangle(RenderGroup *rg, v2 pos, f32 width, f32 height, f32 zOffset, u32 c1, u32 c2, u32 c3, u32 c4)
-{
-   v2 vec1 = V2(width, 0.0f);
-   v2 vec2 = V2(0.0f, height);
-   
-   PushQuadrilateral(rg, V3(pos, zOffset), V3(pos + vec1, zOffset), V3(pos + vec2, zOffset), V3(pos + vec1 + vec2, zOffset), c1, c2, c3, c4);
-}
-
-static void PushRectangle(RenderGroup *rg, v2 min, v2 max, u32 c1, u32 c2, u32 c3, u32 c4)
-{
-   v2 p1 = min;
-   v2 p2 = V2(max.x, min.y);
-   v2 p3 = V2(min.x, max.y);
-   v2 p4 = max;
-   
-   PushQuadrilateral(rg, V3(p1, Orthogonal_Rectangle_OFFSET), V3(p2, Orthogonal_Rectangle_OFFSET), V3(p3, Orthogonal_Rectangle_OFFSET), V3(p4, Orthogonal_Rectangle_OFFSET), c1, c2, c3, c4);
-}
-
-static void PushRectangle(RenderGroup *rg, v2 min, v2 max, u32 c)
-{
-   v2 p1 = min;
-   v2 p2 = V2(max.x, min.y);
-   v2 p3 = V2(min.x, max.y);
-   v2 p4 = max;
-   
-   PushQuadrilateral(rg, V3(p1, Orthogonal_Rectangle_OFFSET), V3(p2, Orthogonal_Rectangle_OFFSET), V3(p3, Orthogonal_Rectangle_OFFSET), V3(p4, Orthogonal_Rectangle_OFFSET), c, c, c, c);
-}
-
-static void PushRectangle(RenderGroup *rg, v2 pos, f32 width, f32 height, u32 c1, u32 c2, u32 c3, u32 c4)
-{
-   v2 vec1 = V2(width, 0.0f);
-   v2 vec2 = V2(0.0f, height);
-   
-   PushQuadrilateral(rg, V3(pos, Orthogonal_Rectangle_OFFSET), V3(pos + vec1, Orthogonal_Rectangle_OFFSET), V3(pos + vec2, Orthogonal_Rectangle_OFFSET), V3(pos + vec1 + vec2, Orthogonal_Rectangle_OFFSET), c1, c2, c3, c4);
-}
-
 static void PushRectangle(RenderGroup *rg, v2 pos, f32 width, f32 height, u32 c)
 {
    v2 vec1 = V2(width, 0.0f);
    v2 vec2 = V2(0.0f, height);
    
-   PushQuadrilateral(rg, V3(pos, Orthogonal_Rectangle_OFFSET), V3(pos + vec1, Orthogonal_Rectangle_OFFSET), V3(pos + vec2, Orthogonal_Rectangle_OFFSET), V3(pos + vec1 + vec2, Orthogonal_Rectangle_OFFSET), c, c, c, c);
+   PushQuadrilateral(rg, V3(pos, Orthogonal_Rectangle_OFFSET), V3(pos + vec1, Orthogonal_Rectangle_OFFSET), V3(pos + vec2, Orthogonal_Rectangle_OFFSET), V3(pos + vec1 + vec2, Orthogonal_Rectangle_OFFSET), Unpack4x8(c));
 }
 
 static void PushRectangle(RenderGroup *rg, v2 pos, f32 width, f32 height, v4 color)
@@ -772,104 +804,66 @@ static void PushCenteredRectangle(RenderGroup *rg, v2 pos, float width, float he
    PushQuadrilateral(rg, V3(p1, Orthogonal_Rectangle_OFFSET), V3(p2, Orthogonal_Rectangle_OFFSET), V3(p3, Orthogonal_Rectangle_OFFSET), V3(p4, Orthogonal_Rectangle_OFFSET), color);
 }
 
+static void PushRectangle(RenderGroup *rg, v2 pos, f32 width, f32 height, u32 c1, u32 c2, u32 c3, u32 c4)
+{
+   v2 p1 = pos;
+   v2 p2 = V2(pos.x + width, pos.y);
+   v2 p3 = V2(pos.x, pos.y + height);
+   v2 p4 = pos + V2(width, height);
+   
+   PushTriangle(rg, i12(p1), i12(p2), i12(p3), c1, c2, c3);
+   PushTriangle(rg, i12(p2), i12(p3), i12(p4), c2, c3, c4);
+}
+
 #undef Orthogonal_Rectangle_OFFSET
 
-static void PushTexturedQuad(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, TextureIndex textureIndex,bool inverted = false,  v2 minUV = {0, 0}, v2 maxUV = {1, 1}, v4 color = {1, 1, 1, 1})
-{
-   GetTexturedQuadMemoryReturn mem = GetTexturedQuadMemory(rg);
-   
-   if(!mem.success) return;
-   
-   mem.verts[0].p = p1;
-   mem.verts[1].p = p2;
-   mem.verts[2].p = p3;
-   mem.verts[3].p = p4;
-   
-   if (inverted)
-   {
-      mem.verts[0].uv = V2(minUV.x, minUV.y); // 0 0 
-      mem.verts[1].uv = V2(maxUV.x, minUV.y); // 1 0
-      mem.verts[2].uv = V2(minUV.x, maxUV.y); // 0 1
-      mem.verts[3].uv = V2(maxUV.x, maxUV.y); // 1 1
-   }
-   else
-   {
-      mem.verts[0].uv = V2(minUV.x, maxUV.y); // 0 1
-      mem.verts[1].uv = V2(maxUV.x, maxUV.y); // 1 1
-      mem.verts[2].uv = V2(minUV.x, minUV.y); // 0 0
-      mem.verts[3].uv = V2(maxUV.x, minUV.y); // 1 0
-      
-   }
-   
-   mem.verts[0].c = Pack4x8(color);
-   mem.verts[1].c = Pack4x8(color);
-   mem.verts[2].c = Pack4x8(color);
-   mem.verts[3].c = Pack4x8(color);
-   
-   u16 castTextureIndex = (u16)textureIndex.index;
-   Assert(castTextureIndex == textureIndex.index);
-   
-   mem.verts[0].textureIndex = castTextureIndex;
-   mem.verts[1].textureIndex = castTextureIndex;
-   mem.verts[2].textureIndex = castTextureIndex;
-   mem.verts[3].textureIndex = castTextureIndex;
-}
 
-static void PushTexturedRect(RenderGroup *rg, v2 p1, f32 width, f32 height, TextureIndex textureIndex,  bool inverted = false, v2 minUV = {0, 0}, v2 maxUV = {1, 1}, v4 color = {1, 1, 1, 1})
-{
-   v2 p2 = p1 + V2(width, 0);
-   v2 p3 = p1 + V2(0, height);
-   v2 p4 = p1 + V2(width, height);
-   PushTexturedQuad(rg, i12(p1), i12(p2), i12(p3), i12(p4), textureIndex, inverted, minUV, maxUV, color);
-}
-
-
-static f32 PushString(RenderGroup *rg, v2 pos, unsigned char* string, u32 stringLength, f32 size, Font font, v4 color = V4(1, 1, 1, 1))
+static f32 PushString(RenderGroup *rg, v2 pos, unsigned char* string, u32 stringLength, f32 size, v4 color = V4(1, 1, 1, 1))
 {
    TimedBlock;
    
    f32 x = pos.x;
+   
+   Font font = rg->assetHandler->currentlyLoadedFont;
+   
    float fScale = size / (f32)font.charHeight;
+   TextureIndex tex = GetTexture(rg->assetHandler, font.textureId);
    
-   Assert(font.amountOfChars);
-   
-   for (u32 i = 0; i < stringLength; i++)
+   for(u32 i = 0; i < stringLength; i++)
    {
-      if (string[i] < font.amountOfChars)
-      {
-         CharData data = font.charData[string[i]];
-         
-         f32 offSetX = fScale * data.xOff;
-         f32 offSetY = fScale * data.yOff;
-         
-         f32 scaledWidth = fScale * (f32)data.width;
-         f32 scaledHeight = fScale * (f32)data.height;
-         
-         f32 y = pos.y + (f32)size;
-         
-         v2 writePos = V2(x + offSetX, y + offSetY);
-         
-         PushTexturedRect(rg, writePos, scaledWidth, scaledHeight, font.textureIndex, true, data.minUV, data.maxUV);
-         float actualFloatWidth = data.xAdvance * fScale;
-         x += actualFloatWidth;
-         
-      }
-      else
+      if(string[i] >= font.charData.amount)
       {
          Assert(!"Not handled font symbol");
       }
+      
+      CharData data = font.charData[string[i]];
+      
+      f32 offSetX = fScale * data.xOff;
+      f32 offSetY = fScale * data.yOff;
+      
+      f32 scaledWidth = fScale * (f32)data.width;
+      f32 scaledHeight = fScale * (f32)data.height;
+      
+      f32 y = pos.y + (f32)size;
+      
+      v2 writePos = V2(x + offSetX, y + offSetY);
+      
+      PushTexturedRect(rg, writePos, scaledWidth, scaledHeight, tex, true, data.minUV, data.maxUV);
+      float actualFloatWidth = data.xAdvance * fScale;
+      x += actualFloatWidth;
+      
    }
    
    return (x - pos.x);
 }
-static f32 PushString(RenderGroup *rg, v2 pos, const char* string, f32 size, Font font, v4 color = V4(1, 1, 1, 1))
+static f32 PushString(RenderGroup *rg, v2 pos, const char* string, f32 size, v4 color = V4(1, 1, 1, 1))
 {
-   return PushString(rg, pos, (unsigned char *)string, NullTerminatedStringLength(string), size, font, color);
+   return PushString(rg, pos, (unsigned char *)string, NullTerminatedStringLength(string), size, color);
 }
 
-static f32 PushString(RenderGroup *rg, v2 pos, String string, f32 size, Font font, v4 color = V4(1, 1, 1, 1))
+static f32 PushString(RenderGroup *rg, v2 pos, String string, f32 size, v4 color = V4(1, 1, 1, 1))
 {
-   return PushString(rg, pos, string.data, string.length, size, font, color);
+   return PushString(rg, pos, string.data, string.length, size, color);
 }
 
 

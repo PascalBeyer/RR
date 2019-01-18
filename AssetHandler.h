@@ -8,8 +8,9 @@ enum AssetType
 	Asset_Material,
 	Asset_Mesh,
 	Asset_Animation,
+   Asset_Font,
    
-	Asset_Type_Count,
+   Asset_Type_Count,
 };
 #define Asset_Type_Offset 25
 #define Asset_Texture_Amount 10
@@ -97,6 +98,7 @@ struct AssetHandler
 			AssetCatalog materialCatalog;
 			AssetCatalog meshCatalog;
 			AssetCatalog animationCatalog;
+         AssetCatalog fontCatalog;
 		};
 		AssetCatalog catalogs[Asset_Type_Count];
 	};
@@ -105,7 +107,10 @@ struct AssetHandler
    
 	LoadedTextureList textureList;
 	LoadedMeshList meshList;
+   Font currentlyLoadedFont;
 	KeyFramedAnimationDynamicArray animations;
+   
+   u32 whiteTextureId;
 };
 
 
@@ -252,251 +257,264 @@ static bool ConvertNewAssets(AssetHandler *handler, Arena *currentStateArena)
 			ConsoleOutput("Converted .dae %c* to .animation %c*", nameToLoad, nameToSave);
 			imported = true;
 		}
-	}
+      else if (type == "ttf")
+      {
+         if(!ConvertTTF(nameToLoad))
+         {
+            ConsoleOutputError("Tried loading TTF %c*, but we failed!", nameToLoad);
+         }
+      }
+   }
    
-	return imported;
+   return imported;
 }
 
 // todo loading everything only for a frame?
 static AssetHandler CreateAssetHandler(Arena *arena)
 {
-	AssetHandler ret;
+   AssetHandler ret;
    
-	u8 *arenaReset = arena->current;
+   u8 *arenaReset = arena->current;
    
-	ret.textureCatalog = LoadAssetCatalog("textures/", ".texture", Asset_Texture, arena);
-	ret.meshCatalog = LoadAssetCatalog("mesh/", ".mesh", Asset_Mesh, arena);
-	ret.animationCatalog = LoadAssetCatalog("animation/", ".animation", Asset_Animation, arena);
+   ret.textureCatalog = LoadAssetCatalog("textures/", ".texture", Asset_Texture, arena);
+   ret.meshCatalog = LoadAssetCatalog("mesh/", ".mesh", Asset_Mesh, arena);
+   ret.animationCatalog = LoadAssetCatalog("animation/", ".animation", Asset_Animation, arena);
+   ret.fontCatalog = LoadAssetCatalog("font/", ".font", Asset_Font, arena);
    
-	if (ConvertNewAssets(&ret, arena))
-	{
-		arena->current = arena->current;
+   ret.currentlyLoadedFont = LoadFont(&ret, "font/consola.font");
+   globalFont = ret.currentlyLoadedFont;
+   
+   if (ConvertNewAssets(&ret, arena))
+   {
+      arena->current = arena->current;
       
-		ret.textureCatalog = LoadAssetCatalog("textures/", ".texture", Asset_Texture, arena);
-		ret.meshCatalog = LoadAssetCatalog("mesh/", ".mesh", Asset_Mesh, arena);
-		ret.animationCatalog = LoadAssetCatalog("animation/", ".animation", Asset_Animation, arena);
-	}
+      ret.textureCatalog = LoadAssetCatalog("textures/", ".texture", Asset_Texture, arena);
+      ret.meshCatalog = LoadAssetCatalog("mesh/", ".mesh", Asset_Mesh, arena);
+      ret.animationCatalog = LoadAssetCatalog("animation/", ".animation", Asset_Animation, arena);
+      ret.fontCatalog = LoadAssetCatalog("font/", ".font", Asset_Font, arena);
+   }
    
-	// todo growing arena?
-	ret.infoArena = PushArena(arena, ret.textureCatalog.amount * sizeof(TextureInfo) + ret.meshCatalog.amount * sizeof(MeshInfo) + ret.animationCatalog.amount * sizeof(AnimationInfo));
+   // todo growing arena?
+   ret.infoArena = PushArena(arena, ret.textureCatalog.amount * sizeof(TextureInfo) + ret.meshCatalog.amount * sizeof(MeshInfo) + ret.animationCatalog.amount * sizeof(AnimationInfo));
    
-	ret.textureList.base = PushData(arena, LoadedTexture, Asset_Texture_Amount);
-	ret.textureList.front = ret.textureList.base;
-	ret.textureList.back = ret.textureList.front + Asset_Texture_Amount - 1;
-	for(auto it = ret.textureList.front; it < ret.textureList.front + Asset_Texture_Amount; it++)
-	{
+   ret.textureList.base = PushData(arena, LoadedTexture, Asset_Texture_Amount);
+   ret.textureList.front = ret.textureList.base;
+   ret.textureList.back = ret.textureList.front + Asset_Texture_Amount - 1;
+   for(auto it = ret.textureList.front; it < ret.textureList.front + Asset_Texture_Amount; it++)
+   {
       u32 it_index = (u32)(ret.textureList.front - it);
-		it->textureIndex.index = it_index;
-		it->entry = NULL;
-		it->next = it + 1;
-		it->prev = it - 1;
-	}
-	ret.textureList.front->prev = NULL;
-	ret.textureList.back->next = NULL;
-	
-	ret.meshList.base = PushData(arena, LoadedMesh, Asset_Mesh_Amount);
-	ret.meshList.front = ret.meshList.base;
-	ret.meshList.back = ret.meshList.front + Asset_Mesh_Amount - 1;
-	for (auto it = ret.meshList.front; it < ret.meshList.front + Asset_Mesh_Amount; it++)
-	{
-		it->mesh = {};
-		it->entry = NULL;
-		it->next = it + 1;
-		it->prev = it - 1;
-	}
-	ret.meshList.front->prev = NULL;
-	ret.meshList.back->next = NULL;
+      it->textureIndex.index = it_index;
+      it->entry = NULL;
+      it->next = it + 1;
+      it->prev = it - 1;
+   }
+   ret.textureList.front->prev = NULL;
+   ret.textureList.back->next = NULL;
    
-	ret.animations = KeyFramedAnimationCreateDynamicArray(globalAlloc);
+   ret.meshList.base = PushData(arena, LoadedMesh, Asset_Mesh_Amount);
+   ret.meshList.front = ret.meshList.base;
+   ret.meshList.back = ret.meshList.front + Asset_Mesh_Amount - 1;
+   for (auto it = ret.meshList.front; it < ret.meshList.front + Asset_Mesh_Amount; it++)
+   {
+      it->mesh = {};
+      it->entry = NULL;
+      it->next = it + 1;
+      it->prev = it - 1;
+   }
+   ret.meshList.front->prev = NULL;
+   ret.meshList.back->next = NULL;
+   ret.animations = KeyFramedAnimationCreateDynamicArray(globalAlloc);
    
-	return ret;
+   ret.whiteTextureId = RegisterAsset(&ret, Asset_Texture, "white.texture");
+   
+   return ret;
 }
 
 
 static AssetInfo GetAssetInfo(AssetHandler *handler, u32 id)
 {
-	u32 type = (id >> Asset_Type_Offset);
-	u32 index = id - (type << Asset_Type_Offset);
+   u32 type = (id >> Asset_Type_Offset);
+   u32 index = id - (type << Asset_Type_Offset);
    
-	return handler->catalogs[type][index]; // do fail?
+   return handler->catalogs[type][index]; // do fail?
 }
 
 static MeshInfo *GetMeshInfo(AssetHandler *handler, u32 id)
 {
-	AssetInfo info = GetAssetInfo(handler, id);
+   AssetInfo info = GetAssetInfo(handler, id);
    
-	return info.meshInfo;
+   return info.meshInfo;
 }
 
 static TextureInfo *GetTextureInfo(AssetHandler *handler, u32 id)
 {
-	AssetInfo info = GetAssetInfo(handler, id);
+   AssetInfo info = GetAssetInfo(handler, id);
    
-	return info.textureInfo;
+   return info.textureInfo;
 }
 
 static AnimationInfo *GetAnimationInfo(AssetHandler *handler, u32 id)
 {
-	AssetInfo info = GetAssetInfo(handler, id);
+   AssetInfo info = GetAssetInfo(handler, id);
    
-	return info.animationInfo;
+   return info.animationInfo;
 }
 
 static TextureIndex GetTexture(AssetHandler *handler, u32 id)
 {
-	TimedBlock;
-	u32 type = (id >> Asset_Type_Offset);
-	Assert(type == Asset_Texture);
-	u32 index = id - (type << Asset_Type_Offset);
+   TimedBlock;
+   u32 type = (id >> Asset_Type_Offset);
+   Assert(type == Asset_Texture);
+   u32 index = id - (type << Asset_Type_Offset);
    
-	AssetInfo *entry = &handler->textureCatalog[id];
-	LoadedTexture *listBase = handler->textureList.base;
+   AssetInfo *entry = &handler->textureCatalog[id];
+   LoadedTexture *listBase = handler->textureList.base;
    
-	if (entry->currentlyLoaded)
-	{
-		Assert(entry->loadedIndex < Asset_Texture_Amount);
+   if (entry->currentlyLoaded)
+   {
+      Assert(entry->loadedIndex < Asset_Texture_Amount);
       
-		LoadedTexture *tex = listBase + entry->loadedIndex;
+      LoadedTexture *tex = listBase + entry->loadedIndex;
       
-		if (tex->prev) tex->prev->next = tex->next;
-		if (tex->next) tex->next->prev = tex->prev;
+      if (tex->prev) tex->prev->next = tex->next;
+      if (tex->next) tex->next->prev = tex->prev;
       
-		tex->prev = NULL;
-		tex->next = handler->textureList.front;
-		handler->textureList.front->prev = tex;
-		handler->textureList.front = tex;
+      tex->prev = NULL;
+      tex->next = handler->textureList.front;
+      handler->textureList.front->prev = tex;
+      handler->textureList.front = tex;
       
-		return tex->textureIndex;
-	}
+      return tex->textureIndex;
+   }
    
-	LoadedTexture *toAlter = handler->textureList.back;
-	handler->textureList.back = handler->textureList.back->prev;
+   LoadedTexture *toAlter = handler->textureList.back;
+   handler->textureList.back = handler->textureList.back->prev;
    
-	toAlter->entry = entry;
-	toAlter->entry->loadedIndex = (u32)(toAlter - handler->textureList.base);
+   toAlter->entry = entry;
+   toAlter->entry->loadedIndex = (u32)(toAlter - handler->textureList.base);
    
-	char *filePath = FormatCString("textures/%s", entry->name);
+   char *filePath = FormatCString("textures/%s", entry->name);
    Bitmap bitmap = LoadTexture(filePath);
    if(!bitmap.pixels) {return {};}
    
    
    if (!entry->textureInfo)
-	{
-		TextureInfo *info = PushStruct(handler->infoArena, TextureInfo);
-		info->width  = bitmap.width;
-		info->height = bitmap.height;
-		entry->textureInfo = info;
-	}
+   {
+      TextureInfo *info = PushStruct(handler->infoArena, TextureInfo);
+      info->width  = bitmap.width;
+      info->height = bitmap.height;
+      entry->textureInfo = info;
+   }
    
-	if (handler->textureList.back->entry)
-	{
-		handler->textureList.back->entry->currentlyLoaded = false;
-	}
+   if (handler->textureList.back->entry)
+   {
+      handler->textureList.back->entry->currentlyLoaded = false;
+   }
    
-	handler->textureList.front->prev = toAlter;
-	toAlter->next = handler->textureList.front;
-	handler->textureList.front = toAlter;
-	toAlter->prev = NULL;
+   handler->textureList.front->prev = toAlter;
+   toAlter->next = handler->textureList.front;
+   handler->textureList.front = toAlter;
+   toAlter->prev = NULL;
    
-	entry->currentlyLoaded = true;
+   entry->currentlyLoaded = true;
    // really not neccesary... As this was allready true
    toAlter->textureIndex = CreateTextureIndex(entry->loadedIndex); 
-	UpdateWrapingTexture(toAlter->textureIndex, bitmap.width, bitmap.height, bitmap.pixels);
+   UpdateWrapingTexture(toAlter->textureIndex, bitmap.width, bitmap.height, bitmap.pixels);
    
-	return toAlter->textureIndex;
+   return toAlter->textureIndex;
 }
 
 // todo  for now animations and Meshes are dynamically allocated...
 // todo not sure about this, this feels a bit stupid... on the other hand, we have to have an array somewhere :)
 static KeyFramedAnimation *GetAnimation(AssetHandler *handler, u32 id)
 {
-	TimedBlock;
-	Assert((id >> Asset_Type_Offset) == Asset_Animation);
-	u32 index = id - (Asset_Animation << Asset_Type_Offset);
+   TimedBlock;
+   Assert((id >> Asset_Type_Offset) == Asset_Animation);
+   u32 index = id - (Asset_Animation << Asset_Type_Offset);
    
-	AssetInfo *entry = &handler->animationCatalog[index];
-	if (entry->currentlyLoaded)
-	{
-		KeyFramedAnimation *ret = handler->animations + entry->loadedIndex;
+   AssetInfo *entry = &handler->animationCatalog[index];
+   if (entry->currentlyLoaded)
+   {
+      KeyFramedAnimation *ret = handler->animations + entry->loadedIndex;
       
-		return ret;
-	}
+      return ret;
+   }
    
-	entry->currentlyLoaded = true;
+   entry->currentlyLoaded = true;
    
-	char* filePath = FormatCString("animation/%s", entry->name);
-	KeyFramedAnimation animation = LoadAnimation(filePath);
+   char* filePath = FormatCString("animation/%s", entry->name);
+   KeyFramedAnimation animation = LoadAnimation(filePath);
    
    u32 loadedIndex = ArrayAdd(&handler->animations, animation);
    entry->loadedIndex = loadedIndex;
-	return handler->animations + loadedIndex;
+   return handler->animations + loadedIndex;
 }
 
 static TriangleMesh *GetMesh(AssetHandler *handler, u32 id)
 {
-	TimedBlock;
+   TimedBlock;
    
-	Assert((id >> Asset_Type_Offset) == Asset_Mesh);
-	u32 index = id - (Asset_Mesh << Asset_Type_Offset);
+   Assert((id >> Asset_Type_Offset) == Asset_Mesh);
+   u32 index = id - (Asset_Mesh << Asset_Type_Offset);
    
-	AssetInfo *entry = &handler->meshCatalog[index];
+   AssetInfo *entry = &handler->meshCatalog[index];
    
-	if (entry->currentlyLoaded)
-	{
-		Assert(entry->loadedIndex < Asset_Mesh_Amount);
+   if (entry->currentlyLoaded)
+   {
+      Assert(entry->loadedIndex < Asset_Mesh_Amount);
       
-		LoadedMesh *mesh = handler->meshList.base + entry->loadedIndex;
+      LoadedMesh *mesh = handler->meshList.base + entry->loadedIndex;
       
-		if (mesh != handler->meshList.front)
-		{
-			mesh->prev->next = mesh->next;
-			if (mesh->next) mesh->next->prev = mesh->prev;
+      if (mesh != handler->meshList.front)
+      {
+         mesh->prev->next = mesh->next;
+         if (mesh->next) mesh->next->prev = mesh->prev;
          
-			mesh->prev = NULL;
-			mesh->next = handler->meshList.front;
-			handler->meshList.front->prev = mesh;
-			handler->meshList.front = mesh;
-		}
+         mesh->prev = NULL;
+         mesh->next = handler->meshList.front;
+         handler->meshList.front->prev = mesh;
+         handler->meshList.front = mesh;
+      }
       
-		return &mesh->mesh;
-	}
+      return &mesh->mesh;
+   }
    
-	if (handler->meshList.back->entry)
-	{
-		UnloadMesh(handler->meshList.back->entry);
-		handler->meshList.back->entry->currentlyLoaded = false;
-	}
+   if (handler->meshList.back->entry)
+   {
+      UnloadMesh(handler->meshList.back->entry);
+      handler->meshList.back->entry->currentlyLoaded = false;
+   }
    
    
-	LoadedMesh *toAlter = handler->meshList.back;
-	handler->meshList.back = handler->meshList.back->prev;
+   LoadedMesh *toAlter = handler->meshList.back;
+   handler->meshList.back = handler->meshList.back->prev;
    
-	entry->currentlyLoaded = true;
-	entry->loadedIndex = (u32)(toAlter - handler->meshList.base);
+   entry->currentlyLoaded = true;
+   entry->loadedIndex = (u32)(toAlter - handler->meshList.base);
    
-	toAlter->entry = entry;
-	
-	handler->meshList.front->prev = toAlter;
-	toAlter->next = handler->meshList.front;
-	handler->meshList.front = toAlter;
-	toAlter->prev = NULL;
+   toAlter->entry = entry;
    
-	char* filePath = FormatCString("mesh/%s", entry->name);
+   handler->meshList.front->prev = toAlter;
+   toAlter->next = handler->meshList.front;
+   handler->meshList.front = toAlter;
+   toAlter->prev = NULL;
    
-	void *filePtr = NULL;
+   char* filePath = FormatCString("mesh/%s", entry->name);
    
-	toAlter->mesh = LoadMesh(handler, filePath, &filePtr);
+   void *filePtr = NULL;
    
-	if (!entry->meshInfo)
-	{
-		MeshInfo *info = PushStruct(handler->infoArena, MeshInfo);
-		info->aabb = toAlter->mesh.aabb;
-		info->type = toAlter->mesh.type;
-		entry->meshInfo = info;
-		entry->meshInfo->fileLocation = filePtr;
-	}
+   toAlter->mesh = LoadMesh(handler, filePath, &filePtr);
    
-	return &toAlter->mesh;
+   if (!entry->meshInfo)
+   {
+      MeshInfo *info = PushStruct(handler->infoArena, MeshInfo);
+      info->aabb = toAlter->mesh.aabb;
+      info->type = toAlter->mesh.type;
+      entry->meshInfo = info;
+      entry->meshInfo->fileLocation = filePtr;
+   }
+   
+   return &toAlter->mesh;
    
 }
 

@@ -262,7 +262,8 @@ struct FrameBuffer
 struct OpenGLContext
 {
    OpenGLInfo info;
-   GLuint vertexBuffer;
+   GLuint vertexBuffer; 
+   GLuint indexBuffer; 
    GLuint defaultInternalTextureFormat;
    
    File shaderFile;
@@ -726,6 +727,7 @@ static void BeginAttribArraysPCUI(OpenGLProgram *prog)
    
    if(prog->flags & ShaderFlags_MultiTextured)
    {
+      Assert(!(prog->flags & ShaderFlags_Textured));
       glEnableVertexAttribArray(prog->vertUV);
 		glVertexAttribPointer(prog->vertUV, 2, GL_FLOAT, false, sizeof(VertexFormatPCUI), (void *)OffsetOf(VertexFormatPCUI, uv));
       glEnableVertexAttribArray(prog->textureIndex);
@@ -857,17 +859,10 @@ static OpenGLContext OpenGLInit(bool modernContext)
    glGenVertexArrays(1, &DummyVertexArray);
    glBindVertexArray(DummyVertexArray);
    
-   
-   GLuint vertexBuffer;
-   glGenBuffers(1, &vertexBuffer);
-   glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
-   
-   ret.vertexBuffer = vertexBuffer;
-   
-#if 0
-   glGenBuffers(1, &elementBuffer);
-   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementBuffer);
-#endif
+   glGenBuffers(1, &ret.vertexBuffer);
+   glBindBuffer(GL_ARRAY_BUFFER, ret.vertexBuffer);
+   glGenBuffers(1, &ret.indexBuffer);
+   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ret.indexBuffer);
    
    ret.shaderFile = LoadFile("src/ubershader.glsl", globalAlloc);
    
@@ -1216,17 +1211,15 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             OpenGLUniformInfo uniforms;
             uniforms.shadowMat = shadowMat;
             uniforms.vertexBuffer = context->vertexBuffer;
+            uniforms.indexBuffer  = context->indexBuffer;
             
             BeginUseProgram(context, prog, currentSetup, uniforms);
-            BeginAttribArraysPCU(prog);
+            BeginAttribArraysPCUI(prog);
             
-            glBufferData(GL_ARRAY_BUFFER, quadHeader->vertexCount * sizeof(VertexFormatPCU), quadHeader->data, GL_STREAM_DRAW);
+            glBufferData(GL_ARRAY_BUFFER, 4u * quadHeader->count * sizeof(quadHeader->vertexBuffer[0]), quadHeader->vertexBuffer, GL_STREAM_DRAW);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, 6u * quadHeader->count * sizeof(quadHeader->indexBuffer[0]), quadHeader->indexBuffer, GL_STREAM_DRAW);
             
-            
-            for (u32 vertIndex = 0; vertIndex < quadHeader->vertexCount; vertIndex += 4)
-            {
-               glDrawArrays(GL_TRIANGLE_STRIP, vertIndex, 4);
-            }
+            glDrawElements(GL_TRIANGLES, 6u * quadHeader->count, GL_UNSIGNED_SHORT, 0);
             
             glBindTexture(GL_TEXTURE_2D, 0);
             

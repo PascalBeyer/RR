@@ -20,7 +20,7 @@ static void DrawNumberOnTile(RenderGroup *rg, u32 number, v3i pos, v4 color = V4
       
 		CharData data = globalFont.charData['0' + number];
       
-		PushTexturedQuad(rg, p1, p2, p3, p4, globalFont.textureIndex,  true, data.minUV, data.maxUV);
+		PushTexturedQuad(rg, p1, p2, p3, p4, globalFont.textureId,  true, data.minUV, data.maxUV);
 	}
 	else if (number < 100)
 	{
@@ -37,7 +37,7 @@ static void DrawNumberOnTile(RenderGroup *rg, u32 number, v3i pos, v4 color = V4
          
 			CharData data = globalFont.charData['0' + first];
          
-			PushTexturedQuad(rg, p1, p2, p3, p4, globalFont.textureIndex, true, data.minUV, data.maxUV);
+			PushTexturedQuad(rg, p1, p2, p3, p4, globalFont.textureId, true, data.minUV, data.maxUV);
 		}
       
 		{
@@ -48,7 +48,7 @@ static void DrawNumberOnTile(RenderGroup *rg, u32 number, v3i pos, v4 color = V4
          
 			CharData data = globalFont.charData['0' + second];
          
-			PushTexturedQuad(rg, p1, p2, p3, p4, globalFont.textureIndex, true, data.minUV, data.maxUV);
+			PushTexturedQuad(rg, p1, p2, p3, p4, globalFont.textureId, true, data.minUV, data.maxUV);
 		}
 	}
 }
@@ -66,7 +66,7 @@ static void RenderPathCreator(RenderGroup *rg, EntityManager *entityManager, Exe
       exe->at = 0;
       exe->t = 0.0f;
       
-      PushProjectiveSetup(rg, exe->camera, exe->lightSource, ShaderFlags_Textured|ShaderFlags_ZBias);
+      PushProjectiveSetup(rg, exe->camera, exe->lightSource, ShaderFlags_MultiTextured|ShaderFlags_ZBias);
       
 		For(path)
 		{
@@ -149,9 +149,9 @@ static void RenderPathCreatorUI(RenderGroup *rg, PathCreator *pathCreator)
       case PathCreator_CreatingPath:
       {
          PushRectangle(rg, pathCreator->finishButton.pos, pathCreator->finishButton.width, pathCreator->finishButton.height, V4(1.0f, 0.5, 0.7f, 0.5f));
-         PushString(rg, pathCreator->finishButton.pos, "Finish", 0.05f, globalFont);
+         PushString(rg, pathCreator->finishButton.pos, "Finish", 0.05f);
          PushRectangle(rg, pathCreator->resetUnitButton.pos, pathCreator->resetUnitButton.width, pathCreator->resetUnitButton.height, V4(1.0f, 0.7f, 0.3f, 0.5f));
-         PushString(rg, pathCreator->resetUnitButton.pos, "Reset", 0.05f, globalFont);
+         PushString(rg, pathCreator->resetUnitButton.pos, "Reset", 0.05f);
       }break;
    }
 }
@@ -167,7 +167,7 @@ static void RenderSimulateUI(RenderGroup *rg, SimData *sim)
    f32 percentage = (f32)sim->blocksCollected / (f32)sim->blocksNeeded;
    PushRectangle(rg, pos + V2(border, border), percentage * (width - 2.0f * border), (height - 2.0f * border), V4(1.0f, 0.4f, 0.6f, 0.9f));
    String progressString = FormatString("%u32/%u32", sim->blocksCollected, sim->blocksNeeded);
-   PushString(rg, pos + V2(border, border), progressString, (height - 2.0f * border), globalFont);
+   PushString(rg, pos + V2(border, border), progressString, (height - 2.0f * border));
    
 }
 
@@ -178,6 +178,7 @@ static void RenderSimulate(RenderGroup *rg, EntityManager *entityManager, Execut
    {
       if(i == Entity_Dude)
       {
+         PushProjectiveSetup(rg, exe->camera, exe->lightSource, ShaderFlags_ShadowMapping|ShaderFlags_Textured|ShaderFlags_Animated);
          For(entityManager->animationStates)
          {
             Entity *e = GetEntity(entityManager, it->serial);
@@ -187,6 +188,7 @@ static void RenderSimulate(RenderGroup *rg, EntityManager *entityManager, Execut
       }
       else
       {
+         PushProjectiveSetup(rg, exe->camera, exe->lightSource, ShaderFlags_ShadowMapping|ShaderFlags_Textured);
          For(entityManager->entityArrays[i])
          {
             PushTriangleMesh(rg, it->meshId, it->orientation, GetRenderPos(*it, exe->t), it->scale, it->color * it->frameColor);
@@ -220,7 +222,7 @@ static void RenderExecute(RenderGroup *rg, EntityManager *entityManager, Execute
 
 static void RenderVictoryUI(RenderGroup *rg)
 {
-   PushString(rg, V2(0.1f, 0.1f), "Victory", 0.2f, globalFont);
+   PushString(rg, V2(0.1f, 0.1f), "Victory", 0.2f);
 }
 
 static void RenderExecuteUI(RenderGroup *rg, ExecuteData *exe)
@@ -313,14 +315,14 @@ static void RenderColorPicker(RenderGroup *rg, ColorPicker *picker)
    Tweekable(f32, pickerFontSize);
    Tweekable(f32, pickerFontXIncrease);
    f32 fontY = picker->pos.y + picker->width - pickerFontSize;
-   PushString(rg, V2(picker->pos.x + 0.0f * pickerFontXIncrease * pickerFontSize, fontY), FormatString("a:%f32", picker->pickedColor->a), pickerFontSize, globalFont);
-   PushString(rg, V2(picker->pos.x + 1.0f * pickerFontXIncrease * pickerFontSize, fontY), FormatString("r:%f32", picker->pickedColor->r), pickerFontSize, globalFont);
-   PushString(rg, V2(picker->pos.x + 2.0f * pickerFontXIncrease * pickerFontSize, fontY), FormatString("g:%f32", picker->pickedColor->g), pickerFontSize, globalFont);
-   PushString(rg, V2(picker->pos.x + 3.0f * pickerFontXIncrease * pickerFontSize, fontY), FormatString("b:%f32", picker->pickedColor->b), pickerFontSize, globalFont);
+   PushString(rg, V2(picker->pos.x + 0.0f * pickerFontXIncrease * pickerFontSize, fontY), FormatString("a:%f32", picker->pickedColor->a), pickerFontSize);
+   PushString(rg, V2(picker->pos.x + 1.0f * pickerFontXIncrease * pickerFontSize, fontY), FormatString("r:%f32", picker->pickedColor->r), pickerFontSize);
+   PushString(rg, V2(picker->pos.x + 2.0f * pickerFontXIncrease * pickerFontSize, fontY), FormatString("g:%f32", picker->pickedColor->g), pickerFontSize);
+   PushString(rg, V2(picker->pos.x + 3.0f * pickerFontXIncrease * pickerFontSize, fontY), FormatString("b:%f32", picker->pickedColor->b), pickerFontSize);
    
 }
 
-static void RenderEditorPanel(RenderGroup *rg, Editor editor, Font font)
+static void RenderEditorPanel(RenderGroup *rg, Editor editor)
 {
    if (editor.state == EditorState_Rotating || editor.state == EditorState_Scaling || editor.state == EditorState_Moving)
    {
@@ -349,7 +351,7 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor, Font font)
    //header
    f32 widthWithoutBoarder = panelWidth - 2 * editorBorderWidth;
    PushRectangle(rg, p->pos + V2(editorBorderWidth, editorBorderWidth), widthWithoutBoarder, editorHeaderWidth, editorPanelHeaderColor);
-   PushString(rg, p->pos + V2(editorBorderWidth, editorBorderWidth), EditorStateToString(editor.state), 0.5f * editorHeaderWidth, font);
+   PushString(rg, p->pos + V2(editorBorderWidth, editorBorderWidth), EditorStateToString(editor.state), 0.5f * editorHeaderWidth);
    
    u32 xyz = editor.panel.hotValueXYZ;
    v2 valuePos = p->pos + V2(editorBorderWidth, editorBorderWidth + editorHeaderWidth);
@@ -357,7 +359,7 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor, Font font)
    {
       
       String name = FormatString("%s:", it->name);
-      f32 offset = PushString(rg, valuePos, name, editorPanelFontSize, font);
+      f32 offset = PushString(rg, valuePos, name, editorPanelFontSize);
       
       v2 writePos = valuePos + V2(0, editorPanelFontSize);
       v2 continuePos = valuePos + V2(offset + 3 * editorPanelFontSize, 0);
@@ -392,12 +394,12 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor, Font font)
             
             if (p->values.data + p->hotValue == it)
             {
-               PushString(rg, continuePos, p->textInput.string, editorPanelFontSize, font);
+               PushString(rg, continuePos, p->textInput.string, editorPanelFontSize);
                break;
             }
             
             String str = UtoS(*it->u);
-            PushString(rg, continuePos, str, editorPanelFontSize, font);
+            PushString(rg, continuePos, str, editorPanelFontSize);
          }break;
          case Tweeker_EntityType:
          {
@@ -409,15 +411,15 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor, Font font)
             {
                case Entity_None:
                {
-                  PushString(rg, writePos, "None", editorPanelFontSize, font);
+                  PushString(rg, writePos, "None", editorPanelFontSize);
                }break;
                case Entity_Dude:
                {
-                  PushString(rg, writePos, "Dude", editorPanelFontSize, font);
+                  PushString(rg, writePos, "Dude", editorPanelFontSize);
                }break;
                case Entity_Wall:
                {
-                  PushString(rg, writePos, "Wall", editorPanelFontSize, font);
+                  PushString(rg, writePos, "Wall", editorPanelFontSize);
                }break;
                
             }
@@ -434,12 +436,12 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor, Font font)
             PushRectangle(rg, valuePos, widthWithoutBoarder, height, editorPanelValueColor);
             if (p->values.data + p->hotValue == it)
             {
-               PushString(rg, continuePos, p->textInput.string, editorPanelFontSize, font);
+               PushString(rg, continuePos, p->textInput.string, editorPanelFontSize);
                break;
             }
             
             String str = FtoS(*it->f);
-            PushString(rg, continuePos, str, editorPanelFontSize, font);
+            PushString(rg, continuePos, str, editorPanelFontSize);
             
          }break;
          case Tweeker_v2:
@@ -449,12 +451,12 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor, Font font)
             if (xyz == 'x' && (p->values.data + p->hotValue == it))
             {
                String str = FormatString("x: %s", p->textInput.string);
-               PushString(rg, writePos, str, editorPanelFontSize, font);
+               PushString(rg, writePos, str, editorPanelFontSize);
             }
             else
             {
                String strx = FormatString("x: %s", FtoS(it->vec2->x));
-               PushString(rg, writePos, strx, editorPanelFontSize, font);
+               PushString(rg, writePos, strx, editorPanelFontSize);
             }
             
             writePos.y += editorPanelFontSize;
@@ -462,13 +464,13 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor, Font font)
             if (xyz == 'y' && (p->values.data + p->hotValue == it))
             {
                String str = FormatString("y: %s", p->textInput.string);
-               PushString(rg, writePos, str, editorPanelFontSize, font);
+               PushString(rg, writePos, str, editorPanelFontSize);
             }
             else
             {
                
                String stry = FormatString("y: %s", FtoS(it->vec2->y));
-               PushString(rg, writePos, stry, editorPanelFontSize, font);
+               PushString(rg, writePos, stry, editorPanelFontSize);
             }
             
          }break;
@@ -479,35 +481,35 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor, Font font)
             if (xyz == 'x' && (p->values.data + p->hotValue == it))
             {
                String str = FormatString("x: %s", p->textInput.string);
-               PushString(rg, writePos, str, editorPanelFontSize, font);
+               PushString(rg, writePos, str, editorPanelFontSize);
             }
             else
             {
                String strx = FormatString("x: %s", FtoS(it->vec3->x));
-               PushString(rg, writePos, strx, editorPanelFontSize, font);
+               PushString(rg, writePos, strx, editorPanelFontSize);
             }
             writePos.y += editorPanelFontSize;
             if (xyz == 'y' && (p->values.data + p->hotValue == it))
             {
                String str = FormatString("y: %s", p->textInput.string);
-               PushString(rg, writePos, str, editorPanelFontSize, font);
+               PushString(rg, writePos, str, editorPanelFontSize);
             }
             else
             {
                String stry = FormatString("y: %s", FtoS(it->vec3->y));
-               PushString(rg, writePos, stry, editorPanelFontSize, font);
+               PushString(rg, writePos, stry, editorPanelFontSize);
             }
             writePos.y += editorPanelFontSize;
             
             if (xyz == 'z' && (p->values.data + p->hotValue == it))
             {
                String str = FormatString("z: %s", p->textInput.string);
-               PushString(rg, writePos, str, editorPanelFontSize, font);
+               PushString(rg, writePos, str, editorPanelFontSize);
             }
             else
             {
                String strz = FormatString("z: %s", FtoS(it->vec3->z));
-               PushString(rg, writePos, strz, editorPanelFontSize, font);
+               PushString(rg, writePos, strz, editorPanelFontSize);
             }
          }break;
          case Tweeker_v3i:
@@ -517,35 +519,35 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor, Font font)
             if (xyz == 'x' && (p->values.data + p->hotValue == it))
             {
                String str = FormatString("x: %s", p->textInput.string);
-               PushString(rg, writePos, str, editorPanelFontSize, font);
+               PushString(rg, writePos, str, editorPanelFontSize);
             }
             else
             {
                String strx = FormatString("x: %s", ItoS(it->vec3i->x));
-               PushString(rg, writePos, strx, editorPanelFontSize, font);
+               PushString(rg, writePos, strx, editorPanelFontSize);
             }
             writePos.y += editorPanelFontSize;
             if (xyz == 'y' && (p->values.data + p->hotValue == it))
             {
                String str = FormatString("y: %s", p->textInput.string);
-               PushString(rg, writePos, str, editorPanelFontSize, font);
+               PushString(rg, writePos, str, editorPanelFontSize);
             }
             else
             {
                String stry = FormatString("y: %s", ItoS(it->vec3i->y));
-               PushString(rg, writePos, stry, editorPanelFontSize, font);
+               PushString(rg, writePos, stry, editorPanelFontSize);
             }
             writePos.y += editorPanelFontSize;
             
             if (xyz == 'z' && (p->values.data + p->hotValue == it))
             {
                String str = FormatString("z: %s", p->textInput.string);
-               PushString(rg, writePos, str, editorPanelFontSize, font);
+               PushString(rg, writePos, str, editorPanelFontSize);
             }
             else
             {
                String strz = FormatString("z: %s", ItoS(it->vec3i->z));
-               PushString(rg, writePos, strz, editorPanelFontSize, font);
+               PushString(rg, writePos, strz, editorPanelFontSize);
             }
          }break;
          case Tweeker_EulerAngle:
@@ -561,35 +563,35 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor, Font font)
             if (xyz == 'x' && (p->values.data + p->hotValue == it))
             {
                String str = FormatString("xRot: %s", p->textInput.string);
-               PushString(rg, writePos, str, editorPanelFontSize, font);
+               PushString(rg, writePos, str, editorPanelFontSize);
             }
             else
             {
                String strx = FormatString("xRot: %s", ItoS(val.x));
-               PushString(rg, writePos, strx, editorPanelFontSize, font);
+               PushString(rg, writePos, strx, editorPanelFontSize);
             }
             writePos.y += editorPanelFontSize;
             if (xyz == 'y' && (p->values.data + p->hotValue == it))
             {
                String str = FormatString("yRot: %s", p->textInput.string);
-               PushString(rg, writePos, str, editorPanelFontSize, font);
+               PushString(rg, writePos, str, editorPanelFontSize);
             }
             else
             {
                String stry = FormatString("yRot: %s", ItoS(val.y));
-               PushString(rg, writePos, stry, editorPanelFontSize, font);
+               PushString(rg, writePos, stry, editorPanelFontSize);
             }
             writePos.y += editorPanelFontSize;
             
             if (xyz == 'z' && (p->values.data + p->hotValue == it))
             {
                String str = FormatString("zRot: %s", p->textInput.string);
-               PushString(rg, writePos, str, editorPanelFontSize, font);
+               PushString(rg, writePos, str, editorPanelFontSize);
             }
             else
             {
                String strz = FormatString("zRot: %s", ItoS(val.z));
-               PushString(rg, writePos, strz, editorPanelFontSize, font);
+               PushString(rg, writePos, strz, editorPanelFontSize);
             }
          }break;
          case Tweeker_v4:
@@ -616,7 +618,7 @@ static void RenderEditor(RenderGroup *rg, AssetHandler *assetHandler, Editor edi
    //PushDebugPointCuboid(rg, editor.focusPoint);
    
    EditorEntities *editorEntities = &editor.editorEntities;
-   
+   PushProjectiveSetup(rg, editor.camera, editor.levelInfo.lightSource, ShaderFlags_Textured);
    For(editorEntities->entities)
    {
       PushTriangleMesh(rg, it->meshId, it->orientation, GetRenderPos(*it), it->scale, it->color * it->frameColor);
@@ -712,14 +714,15 @@ static void RenderEditor(RenderGroup *rg, AssetHandler *assetHandler, Editor edi
    
 }
 
-static void RenderEditorUI(RenderGroup *rg, Editor editor, Font font)
+static void RenderEditorUI(RenderGroup *rg, Editor editor)
 {
+   PushOrthogonalSetup(rg, true, ShaderFlags_MultiTextured);
    if (editor.state == EditorState_DeleteSelection)
    {
-      PushString(rg, V2(0.4f, 0.1f), "Delete?", 0.05f, font);
+      PushString(rg, V2(0.4f, 0.1f), "Delete?", 0.05f);
    }
    
-   RenderEditorPanel(rg, editor, font);
+   RenderEditorPanel(rg, editor);
    
    For(editor.colorPickers)
    {

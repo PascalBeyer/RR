@@ -192,13 +192,13 @@ struct CharInfo
 	f32 yOff;
 };
 typedef CharInfo CharData;
+DefineArray(CharInfo);
 
 struct Font
 {
-	Bitmap bitmap;
-   TextureIndex textureIndex;
-	CharInfo *charData;
-	u32 amountOfChars = 0;
+   void *mem;
+   u32 textureId;
+	CharInfoArray charData;
 	f32 charHeight;
 };
 
@@ -210,11 +210,11 @@ static f32 GetActualStringLength(String string, f32 fontSize, Font font)
 	f32 ret = 0.0f;
 	float fScale = fontSize / (f32)font.charHeight;
    
-	for (u32 i = 0; i < string.length; i++)
+	For(string)
 	{
-		if (string[i] < font.amountOfChars)
+		if (*it < font.charData.amount)
 		{
-			CharData data = font.charData[string[i]];
+			CharData data = font.charData[*it];
          
 			f32 scaledWidth = fScale * (f32)data.width;
 			float actualFloatWidth = data.xAdvance * fScale;

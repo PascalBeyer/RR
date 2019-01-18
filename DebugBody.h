@@ -52,7 +52,7 @@ enum DebugUIElementFlag
 };
 
 
-static void DrawTweekers(RenderGroup *rg, Font font)
+static void DrawTweekers(RenderGroup *rg)
 {
 	Tweekable(f32, tweekerFontSize);
 	DebugUITweekerFile *stack = NULL;
@@ -89,10 +89,10 @@ static void DrawTweekers(RenderGroup *rg, Font font)
 	u32 i = 1;
 	while (stack)
 	{
-		PushString(rg, V2(tweekerFontSize, i++ * 1.1f * tweekerFontSize), (char *)stack->function, tweekerFontSize, font);
+		PushString(rg, V2(tweekerFontSize, i++ * 1.1f * tweekerFontSize), (char *)stack->function, tweekerFontSize);
 		for (auto it = stack->first; it; it = it->next)
 		{
-			PushString(rg, V2(3.0f * tweekerFontSize, i++ * 1.1f * tweekerFontSize), it->tweeker->name, tweekerFontSize, font);
+			PushString(rg, V2(3.0f * tweekerFontSize, i++ * 1.1f * tweekerFontSize), it->tweeker->name, tweekerFontSize);
 		}
 		stack = stack->next;
 	}
@@ -198,7 +198,7 @@ static void CollectDebugRecords(f32 frameTime)
 
 //todo make left bound render for strings
 //todo maybe make it so that we can click on a frame and jump to it, by saving the gamestate. has a lot of issues I guess (rendering and such)... but may work
-static void DrawDebugRecords(RenderGroup *rg, Font font, f32 secondsPerFrame, Input input)
+static void DrawDebugRecords(RenderGroup *rg, f32 secondsPerFrame, Input input)
 {
 	
 	TimedBlock;
@@ -244,7 +244,7 @@ static void DrawDebugRecords(RenderGroup *rg, Font font, f32 secondsPerFrame, In
 		u32 it_index = (u32)(it - frameInfo.times.data);
 		if (!debugInfoArray[it_index].function) continue;
 		String toDisplay = FormatString("%25lbc* %9rbf32ms, %2rbu32hit", debugInfoArray[it_index].function, (f32)((f64)it->cycles * secondsPerCycle * 1000.0), it->hitCount);
-		PushString(rg, V2(0.1f, 0.2f + it_index * debugDisplayBarSize), toDisplay, debugDisplayBarSize, font);
+		PushString(rg, V2(0.1f, 0.2f + it_index * debugDisplayBarSize), toDisplay, debugDisplayBarSize);
 	}
    
 	f64 cycleMult = 1.0 / amountOfCyclesToDisplay;
@@ -255,7 +255,9 @@ static void DrawDebugRecords(RenderGroup *rg, Font font, f32 secondsPerFrame, In
 		PushLine(rg, V2(percent, 0.0f), V2(percent, 0.1f));
 	}
    
-	u32 depth = 0;	
+	u32 depth = 0;
+   PushOrthogonalSetup(rg, true, ShaderFlags_None);
+   
 	for (DebugEvent *it = firstEvent; it < firstEvent + amountOfEventsToHandle; it++)
 	{
 		switch (it->type)
@@ -275,10 +277,12 @@ static void DrawDebugRecords(RenderGroup *rg, Font font, f32 secondsPerFrame, In
             f32 width = (f32)(cycleD * cycleMult);
             
             u32 color = debugInfoArray[it->debugRecordIndex].color;
-            PushRectangle(rg, pos, width, debugDisplayBarSize, color);
+            PushRectangle(rg, pos, width, debugDisplayBarSize, color, color, color, color);
             if (PointInRectangle(pos, width, debugDisplayBarSize, input.mouseZeroToOne))
             {
-               PushString(rg, input.mouseZeroToOne, debugInfoArray[it->debugRecordIndex].function, debugDisplayBarSize, font);
+               PushOrthogonalSetup(rg, true, ShaderFlags_Textured);
+               PushString(rg, input.mouseZeroToOne, debugInfoArray[it->debugRecordIndex].function, debugDisplayBarSize);
+               PushOrthogonalSetup(rg, true, ShaderFlags_None);
             }
             
             depth--;

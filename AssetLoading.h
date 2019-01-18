@@ -2189,87 +2189,6 @@ static Bitmap CreateBitmap(char* fileName, Arena *arena, bool wrapping = false)
 	return ret;
 }
 
-static void DoNothing(void *x) { }
-
-#define STBTT_ifloor(x)   ((int) Floor(x))
-#define STBTT_iceil(x)    ((int) Ceil(x))
-#define STBTT_sqrt(x)      Sqrt(x)
-#define STBTT_pow(x,y)     pow(x,y)
-#define STBTT_fmod(x,y)    fmod(x,y)
-#define STBTT_cos(x)       cos(x)
-#define STBTT_acos(x)      acos(x)
-#define STBTT_fabs(x)      fabs(x)
-#define STBTT_malloc(x,u)  ((void)(u), (void *)PushData(frameArena, u8, (u32)(x)))
-#define STBTT_free(x,u)    ((void)(u), DoNothing(x));
-#define STBTT_assert(x)    {Assert(x)}
-#define STBTT_strlen(x)    NullTerminatedStringLength(x)
-#define STBTT_memcpy       memcpy
-#define STBTT_memset       memset
-
-#define STB_TRUETYPE_IMPLEMENTATION
-#include "stb_truetype.h"
-
-static Font CreateFontFromSTB(u32 width, u32 height, u8 *pixels, u32 amountOfChars, f32 charHeight, stbtt_bakedchar *charData, Arena *arena)
-{
-	Font ret;
-   
-	u32 *output = PushData(arena, u32, width * height);
-	u32 *out = output;
-	u8 *inp = pixels;
-   
-	for (u32 h = 0; h < height; h++)
-	{
-		for (u32 w = 0; w < width; w++)
-		{
-			u8 source = *inp++;
-			//u32 color = 0xFFFFFFFF;
-			u32 color = source << 24 | source << 16 | source << 8 | source << 0;
-			*out++ = color;
-		}
-	}
-   
-	ret.charData = PushData(arena, CharData, amountOfChars);
-	v2 scale = V2(1.0f / (f32)width, 1.0f / (f32)height);
-	for (u32 i = 0; i < amountOfChars; i++)
-	{
-		stbtt_bakedchar *cur = charData + i;
-		CharData data;
-      
-		data.xAdvance = cur->xadvance;
-		data.minUV = scale * V2(cur->x0, cur->y0);
-		data.maxUV = scale * V2(cur->x1, cur->y1);
-		data.width = cur->x1 - cur->x0;
-		data.height = cur->y1 - cur->y0;
-		data.xOff = cur->xoff;
-		data.yOff = cur->yoff;
-      
-		ret.charData[i] = data;
-	}
-   
-   
-	ret.bitmap = CreateBitmap(output, width, height);
-	ret.amountOfChars = amountOfChars;
-	ret.charHeight = charHeight;
-	return ret;
-}
-
-static Font LoadFont(char *fileName, Arena *arena)
-{
-	File file = LoadFile(fileName, frameArena);
-   
-	u32 width = 1024;
-	u32 height = 1024;
-	u8 *pixels = PushData(frameArena, u8, width * height);
-	
-	u32 amountOfChars = 255;
-	f32 charHeight = 64.0f;
-	stbtt_bakedchar *charData = PushData(frameArena, stbtt_bakedchar, amountOfChars);
-	stbtt_BakeFontBitmap((char *)file.memory, 0, charHeight, pixels, width, height, 0, amountOfChars, charData);
-   
-	return CreateFontFromSTB(width, height, pixels, amountOfChars, charHeight, charData, arena);
-}
-
-
 #define PullOff(type) *(type *)at; at += sizeof(type);
 
 #define PullOffArray(type, arr) \
@@ -2436,6 +2355,27 @@ static void WriteTriangleMesh(TriangleMesh mesh, char *fileName) // todo : when 
    WriteEntireFile(fileName, file);
 }
 
+
+static Font LoadFont(AssetHandler *assetHandler, char *fileName)
+{
+   File file = LoadFile(fileName, globalAlloc);
+   u8 *at = (u8 *)file.memory;
+   Font ret;
+   ret.mem = file.memory;
+   ret.charHeight = PullOff(f32);
+   PullOffArray(CharInfo, ret.charData);
+   
+   String head = S(fileName);
+   EatToCharFromBackReturnTail(&head, '.');
+   EatToCharReturnHead(&head, '/');
+   char *textureName = FormatCString("textures%stexture", head);
+   
+   u32 asset = RegisterAsset(assetHandler, Asset_Texture, textureName);
+   ret.textureId = asset;
+   
+   return ret;
+}
+
 static bool WriteAnimation(char *fileName, KeyFramedAnimation animation) // untested
 {
    File file = PushArray(frameArena, u8, 0);
@@ -2519,7 +2459,7 @@ static Bitmap LoadTexture(char *filefile)
 }
 
 
-static void WriteTexture(char *fileName, Bitmap bitmap)
+static bool WriteTexture(char *fileName, Bitmap bitmap)
 {
    DeferRestore(frameArena);
    
@@ -2538,7 +2478,7 @@ static void WriteTexture(char *fileName, Bitmap bitmap)
    u32 fileSize = (u32)(frameArena->current - data);
    
    File file = CreateFile(data, fileSize);
-   WriteEntireFile(fileName, file);
+   return WriteEntireFile(fileName, file);
 }
 
 static bool WriteLevel(char *fileName, Level level, AssetHandler *assetHandler)
@@ -2633,6 +2573,109 @@ static Level LoadLevel(String fileName, Arena *arena, AssetHandler *assetHandler
    
 	return level;
 }
+
+
+static void DoNothing(void *x) { }
+
+#define STBTT_ifloor(x)   ((int) Floor(x))
+#define STBTT_iceil(x)    ((int) Ceil(x))
+#define STBTT_sqrt(x)      Sqrt(x)
+#define STBTT_pow(x,y)     pow(x,y)
+#define STBTT_fmod(x,y)    fmod(x,y)
+#define STBTT_cos(x)       cos(x)
+#define STBTT_acos(x)      acos(x)
+#define STBTT_fabs(x)      fabs(x)
+#define STBTT_malloc(x,u)  ((void)(u), (void *)PushData(frameArena, u8, (u32)(x)))
+#define STBTT_free(x,u)    ((void)(u), DoNothing(x));
+#define STBTT_assert(x)    {Assert(x)}
+#define STBTT_strlen(x)    NullTerminatedStringLength(x)
+#define STBTT_memcpy       memcpy
+#define STBTT_memset       memset
+
+#define STB_TRUETYPE_IMPLEMENTATION
+#include "stb_truetype.h"
+
+#undef STBTT_ifloor
+#undef STBTT_iceil
+#undef STBTT_sqrt
+#undef STBTT_pow
+#undef STBTT_fmod
+#undef STBTT_cos
+#undef STBTT_acos
+#undef STBTT_fabs
+#undef STBTT_malloc
+#undef STBTT_free
+#undef STBTT_assert
+#undef STBTT_strlen
+#undef STBTT_memcpy
+#undef STBTT_memset
+
+static bool ConvertTTF(char *fileName)
+{
+	File inpFile = LoadFile(fileName, frameArena);
+   
+   if(!inpFile.amount) return false;
+   
+	u32 width = 1024;
+	u32 height = 1024;
+	u8 *pixels = PushData(frameArena, u8, width * height);
+	
+	u32 amountOfChars = 255;
+	f32 charHeight = 64.0f;
+	stbtt_bakedchar *charData = PushData(frameArena, stbtt_bakedchar, amountOfChars);
+	stbtt_BakeFontBitmap((char *)inpFile.memory, 0, charHeight, pixels, width, height, 0, amountOfChars, charData);
+   
+	u32 *output = PushData(frameArena, u32, width * height);
+	u32 *out = output;
+	u8 *inp = pixels;
+   
+	for (u32 h = 0; h < height; h++)
+	{
+		for (u32 w = 0; w < width; w++)
+		{
+			u8 source = *inp++;
+			//u32 color = 0xFFFFFFFF;
+			u32 color = source << 24 | source << 16 | source << 8 | source << 0;
+			*out++ = color;
+		}
+	}
+   
+	CharInfoArray charInfo = PushArray(frameArena, CharInfo, amountOfChars);
+	v2 scale = V2(1.0f / (f32)width, 1.0f / (f32)height);
+	for (u32 i = 0; i < amountOfChars; i++)
+	{
+		stbtt_bakedchar *cur = charData + i;
+		CharData data;
+      
+		data.xAdvance = cur->xadvance;
+		data.minUV = scale * V2(cur->x0, cur->y0);
+		data.maxUV = scale * V2(cur->x1, cur->y1);
+		data.width = cur->x1 - cur->x0;
+		data.height = cur->y1 - cur->y0;
+		data.xOff = cur->xoff;
+		data.yOff = cur->yoff;
+      
+		charInfo[i] = data;
+	}
+	Bitmap bitmap = CreateBitmap(output, width, height);
+	
+   String head = S(fileName);
+   EatToCharFromBackReturnTail(&head, '.');
+   EatToCharReturnHead(&head, '/');
+   char *textureName = FormatCString("textures%stexture", head);
+   char *fontName    = FormatCString("font%sfont", head);
+   
+   File writeFile = PushArray(frameArena, u8, 0);
+   Arena *arena = frameArena;
+   
+   PushOn(f32, charHeight);
+   PushOnArray(CharInfo, charInfo);
+   
+   EndArray(frameArena, u8, writeFile);
+   return (WriteEntireFile(fontName, writeFile) & WriteTexture(textureName, bitmap));
+}
+
+
 
 #undef PullOff
 #undef PullOffArray

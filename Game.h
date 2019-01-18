@@ -24,9 +24,7 @@
 #include "Input.h"
 #include "Camera.h"
 
-
 #include "AssetTypes.h"
-
 
 #include "AssetHandler.h"
 #include "Animation.h"
@@ -74,7 +72,6 @@ struct GameState
 	WorkHandler *workHandler;
 	AssetHandler assetHandler;
 	SoundMixer soundMixer;
-	Font font; // todo make this into an asset
    
 	// Mode specific stuff
    Arena *currentStateArena;
@@ -93,7 +90,6 @@ static void SwitchGameMode(GameState *state, GameMode mode)
    EntityManager *entityManager= &state->entityManager;
 	SoundMixer *soundMixer = &state->soundMixer;
 	Arena *currentStateArena = state->currentStateArena;
-	Font font = state->font;
 	ExecuteData *exe = &state->executeData;
    
    // this for now will just relay on the fact that there only these two game modes
@@ -147,9 +143,7 @@ static void InitGame(int screenWidth, int screenHeight, WorkHandler *workHandler
 	ret->constantArena = constantArena;
 	
 	ret->workHandler = workHandler;
-	ret->font = LoadFont("consola.ttf", constantArena);
-   ret->font.textureIndex = {};
-	globalFont = ret->font;
+   
 	InitConsole(constantArena);
 	ret->assetHandler = CreateAssetHandler(constantArena);
 	ret->soundMixer = {};
@@ -162,8 +156,7 @@ static void InitGame(int screenWidth, int screenHeight, WorkHandler *workHandler
    // todo load this together with level
    Level level = LoadLevel(CreateString("Intro1"), ret->currentStateArena, &ret->assetHandler);
 	InitEntityManager(&ret->entityManager, ret->currentStateArena, &level);
-   
-	ChangeExecuteState(&ret->entityManager, &ret->executeData, Execute_PathCreator);
+   ChangeExecuteState(&ret->entityManager, &ret->executeData, Execute_PathCreator);
    
 #if 0
 	For(ret->assetHandler.textureCatalog)
@@ -190,7 +183,6 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
 	Editor *editor = &state->editor;
 	SoundMixer *soundMixer = &state->soundMixer;
 	Arena *currentStateArena = state->currentStateArena;
-	Font font = state->font;
 	f32 dt = input.dt;
 	ExecuteData *exe = &state->executeData;
    EntityManager *entityManager= &state->entityManager;
@@ -412,13 +404,13 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
 #endif
    }
    
-   PushOrthogonalSetup(rg, true, ShaderFlags_None); 
+   PushOrthogonalSetup(rg, true, ShaderFlags_MultiTextured); 
    
    switch (state->mode)
    {
       case Game_Editor:
       {
-         RenderEditorUI(rg, state->editor, state->font);
+         RenderEditorUI(rg, state->editor);
       }break;
       case Game_Execute:
       {
@@ -426,8 +418,6 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
       }break;
       
    }
-   
-   
    
    //PushTexturedRect(rg, V2(0.1f, 0.1f), 0.5f, 0.5f, state->font.bitmap);
    
@@ -443,7 +433,7 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
    UpdateConsole(input);
    DrawConsole(rg);
    
-   PushString(rg, V2(0.75f, 0.01f), GameModeStrings[state->mode], 0.03f, font);
+   PushString(rg, V2(0.75f, 0.01f), GameModeStrings[state->mode], 0.03f);
    
    ToOutput(soundMixer, soundBuffer);
    

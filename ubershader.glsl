@@ -45,9 +45,9 @@ in vec3 vertP;
 in vec4 vertC;
 
 #ifdef MultiTextured
-in u32 textureIndex
+in u32 textureIndex;
 in v2 vertUV;
-flat out fragIndex;
+flat out u32 fragIndex;
 smooth out v2 fragCoord;
 #endif
 

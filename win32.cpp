@@ -1168,23 +1168,18 @@ ClipCursor(&windowRect);
 #if 1
       RenderGroup renderGroup = InitRenderGroup(&gameState.assetHandler, &renderCommands);
       RenderGroup *rg = &renderGroup;
-      Font font = gameState.font;
       
       String s = FtoS(deltaTime);
       
       float screenWidth = (f32)renderCommands.width;
       float screenHeight = (f32)renderCommands.height;
       
-      PushOrthogonalSetup(rg, false, ShaderFlags_Textured);
-      
-      PushString(rg, V2(20.1f, 10.1f), s, 20, font);
-      
-      PushOrthogonalSetup(rg, true, ShaderFlags_Textured);
-      
-      DrawDebugRecords(rg, gameState.font, targetSecondsPerFrame, input);
+      PushOrthogonalSetup(rg, true, ShaderFlags_MultiTextured);
+      PushString(rg, V2(0.001f, 0.001f), s, 0.02f);
       //DrawTweekers(rg, font);
-      
+      DrawDebugRecords(rg, targetSecondsPerFrame, input);
 #endif
+      
       OpenGlRenderGroupToOutput(&renderCommands, &openGLContext);
       
       displayImageBuffer(deviceContext);

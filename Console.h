@@ -184,7 +184,7 @@ static u32 GetBestCursorLocationForString(String string, float xPos, f32 xOffset
 	for (u32 i = 0; i < string.length; i++)
 	{
 		Char currentChar = string[i];
-		if (currentChar < font.amountOfChars)
+		if (currentChar < font.charData.amount)
 		{
 			CharData charData = font.charData[currentChar];
 			stringSize += charData.xAdvance * fScale;
@@ -815,6 +815,8 @@ static void DrawConsole(RenderGroup *rg)
    v2 p3 = V2(0, console.openness);
    v2 p4 = V2(1, console.openness);
    
+   
+   
    //mainField
    PushRectangle(rg, p1, V2(1 - console.scrollbarWidth, console.openness) - V2(0, console.textInputFieldSize), V4(1.0f, 0.5f, 0.6f, 0.85f));
    
@@ -940,15 +942,15 @@ static void DrawConsole(RenderGroup *rg)
    
    //typefield Text
    v2 typeFieldTextPos = p3 + V2(console.typeFieldXOffset - console.typeFieldTextScrollOffset, -console.textInputFieldSize);
-   PushString(rg, typeFieldTextPos - V2(0.001f, 0.001f), console.inputString, console.fontSize, globalFont, V4(1.0f, 0.5f, 0.5f, 0.5f));
-   PushString(rg, typeFieldTextPos, console.inputString, console.fontSize, globalFont, V4(1.0f, 1.0f, 1.0f, 1.0f)); 
+   PushString(rg, typeFieldTextPos - V2(0.001f, 0.001f), console.inputString, console.fontSize, V4(1.0f, 0.5f, 0.5f, 0.5f));
+   PushString(rg, typeFieldTextPos, console.inputString, console.fontSize, V4(1.0f, 1.0f, 1.0f, 1.0f)); 
    
    //History Text
    for (i32 i = bottomLine; i >= topLine; i--)
    {
       f32 pos = (f32)(console.historyLength - console.historyPos - i);
       v4 color = ColorForHistoryEntry(console.history[i].flag);
-      PushString(rg, consoleFieldFirstRow - pos * V2(0, lineSize), console.history[i].entry, console.fontSize, globalFont, color);
+      PushString(rg, consoleFieldFirstRow - pos * V2(0, lineSize), console.history[i].entry, console.fontSize, color);
    }
    
    //scrollbar
