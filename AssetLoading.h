@@ -2100,7 +2100,6 @@ static Bitmap CreateBitmap(u32* pixels, u32 width, u32 height)
 	ret.pixels = pixels;
 	ret.width = width;
 	ret.height = height;
-	ret.textureHandle = RegisterWrapingTexture(width, height, pixels);
 	return ret;
 }
 
@@ -2144,7 +2143,7 @@ static Bitmap CreateBitmap(char* fileName, Arena *arena, bool wrapping = false)
    
 	void *memPointer = tempFile.memory;
 	if (!memPointer) return ret;
-	ret.textureHandle = NULL;
+	
 	BitmapFileHeader *header = (BitmapFileHeader *)memPointer;
    
 	ret.width = header->biWidth;
@@ -2187,7 +2186,6 @@ static Bitmap CreateBitmap(char* fileName, Arena *arena, bool wrapping = false)
 		}
 	}
    
-	ret.textureHandle = RegisterWrapingTexture(ret.width, ret.height, ret.pixels);
 	return ret;
 }
 
@@ -2501,10 +2499,11 @@ static Bitmap DownSampleTexture(Bitmap bitmap)
    }
    return CreateBitmap(data, bitmapWidth, bitmapHeight);
 }
-static bool LoadBitmapIntoBitmap(char *filefile, Bitmap *texture)
+
+static Bitmap LoadTexture(char *filefile)
 {
    File file = LoadFile(filefile, frameArena);
-   if (!file.fileSize) return false;
+   if (!file.fileSize) return {};
    u8 *at = (u8 *)file.memory;
    u32 version = *(u32 *)at;
    Assert(version == 1);
@@ -2514,11 +2513,9 @@ static bool LoadBitmapIntoBitmap(char *filefile, Bitmap *texture)
    u32 height = *(u32 *)at;
    at += sizeof(u32);
    
-   memcpy(texture->pixels, at, width * height * sizeof(u32));
+   Bitmap bitmap = CreateBitmap((u32 *)at, width, height);
    
-   texture->height = height;
-   texture->width = width;
-   return true;
+   return bitmap;
 }
 
 

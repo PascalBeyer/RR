@@ -66,6 +66,7 @@
 #define GL_DEBUG_OUTPUT_SYNCHRONOUS       0x8242
 #define GL_DEBUG_SEVERITY_HIGH            0x9146
 
+#define GL_TEXTURE_2D_ARRAY               0x8C1A
 #define GL_TEXTURE0                       0x84C0
 #define GL_TEXTURE1                       0x84C1
 #define GL_TEXTURE2                       0x84C2
@@ -96,6 +97,8 @@ typedef ptrdiff_t GLsizeiptr;
 typedef void (APIENTRY *GLDEBUGPROC)(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, void *userParam);
 
 typedef const GLubyte* WINAPI glGetStringi_(GLenum name, GLuint index);
+typedef void WINAPI glTexSubImage3D_(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const GLvoid * data);
+
 typedef void WINAPI glTexImage2DMultisample_(GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLboolean fixedsamplelocations);
 typedef GLuint WINAPI glCreateShader_(GLenum type);
 typedef void WINAPI glShaderSource_(GLuint shader, GLsizei count, const GLchar *const*string, const GLint *length);
@@ -138,12 +141,10 @@ typedef void WINAPI glUniform1f_(GLint location, GLfloat v0);
 typedef void WINAPI glUniform2f_(GLint location, GLfloat v0, GLfloat v1);
 typedef void WINAPI glUniform3f_(GLint location, GLfloat v0, GLfloat v1, GLfloat v2);
 typedef void WINAPI glUniform4f_(GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3);
+typedef void WINAPI glTexImage3D_(GLenum target, GLint level, GLint internalFormat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLenum format, GLenum type, const GLvoid * data);
 
-
-//typedef void WINAPI glDrawElements_(GLenum mode, GLsizei count, GLenum type, const GLvoid * indices);
-
-
-//static glDrawElements_ *glDrawElements;
+static glTexImage3D_ *glTexImage3D;
+static glTexSubImage3D_ *glTexSubImage3D;
 static glGetStringi_ *glGetStringi;
 static glTexImage2DMultisample_ *glTexImage2DMultisample;
 static glUniform1f_ *glUniform1f;
@@ -235,6 +236,9 @@ struct OpenGLProgram
 	GLuint depthSampler;
 	GLuint textureSampler;
    
+   // this is either a uniform or an attribute, depending on 'MulitTextured'
+   GLuint textureIndex;
+   
 	//attributes
 	GLuint vertP;
 	GLuint vertC;
@@ -269,7 +273,10 @@ struct OpenGLContext
    OpenGLProgram shaders[ShaderArray_Size];
 };
 
-bool GLCStringEquals(char *first, u64 firstSize, char* second)
+// globals
+static GLuint globalTextureArray;
+
+static bool GLCStringEquals(char *first, u64 firstSize, char* second)
 {
 	char* at = second;
 	for (u64 i = 0; i < firstSize; i++, at++)
@@ -379,6 +386,10 @@ static OpenGLProgram OpenGLMakeProgram(char *shaderCode, u32 flags)
    {
       S("#define ZBias \n", frameArena);
    }
+   if(flags & ShaderFlags_MultiTextured)
+   {
+      S("#define MultiTextured \n", frameArena);
+   }
    
    *PushStruct(frameArena, Char) = '\0';
    EndArray(frameArena, Char, defines);
@@ -463,7 +474,7 @@ static OpenGLProgram OpenGLMakeProgram(char *shaderCode, u32 flags)
 	ret.projection = glGetUniformLocation(ret.program, "projection");
 	ret.cameraTransform = glGetUniformLocation(ret.program, "cameraTransform");
 	ret.depthSampler = glGetUniformLocation(ret.program, "depthTexture");
-	ret.textureSampler = glGetUniformLocation(ret.program, "texture");
+	ret.textureSampler = glGetUniformLocation(ret.program, "textureSampler");
 	ret.shadowTransform = glGetUniformLocation(ret.program, "shadowTransform");
 	ret.lightP = glGetUniformLocation(ret.program, "lightPos");
 	
@@ -472,8 +483,9 @@ static OpenGLProgram OpenGLMakeProgram(char *shaderCode, u32 flags)
    ret.kd = glGetUniformLocation(ret.program, "kd");
    ret.ks = glGetUniformLocation(ret.program, "ks");
    
+   ret.textureIndex = (flags & ShaderFlags_MultiTextured) ? glGetAttribLocation(ret.program, "textureIndex") : glGetUniformLocation(ret.program, "textureIndex");
    
-	ret.scaleColor = glGetUniformLocation(ret.program, "scaleColor");
+   ret.scaleColor = glGetUniformLocation(ret.program, "scaleColor");
    ret.boneStates = glGetUniformLocation(ret.program, "boneStates");
    
    glUniform1i(ret.textureSampler, Sampler_Texture);
@@ -486,22 +498,6 @@ static OpenGLProgram OpenGLMakeProgram(char *shaderCode, u32 flags)
    
    
 	return ret;
-}
-
-static void UpdateWrapingTexture(Bitmap bitmap)
-{
-	glBindTexture(GL_TEXTURE_2D, (GLuint)bitmap.textureHandle);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, bitmap.width, bitmap.height, 0, GL_BGRA_EXT, GL_UNSIGNED_BYTE, bitmap.pixels);
-   
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-   
-   
-	glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 static void RegisterTriangleMesh(TriangleMesh *mesh)
@@ -608,13 +604,14 @@ static void RegisterTriangleMesh(TriangleMesh *mesh)
    
 }
 
-// todo default internal texture format
-static u32 RegisterWrapingTexture(u32 width, u32 height, u32* pixels)
+static void UpdateWrapingTexture(TextureIndex textureIndex, u32 width, u32 height, u32 *pixels)
 {
-	GLuint handle;
-	glGenTextures(1, &handle);
-	glBindTexture(GL_TEXTURE_2D, handle);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_BGRA_EXT, GL_UNSIGNED_BYTE, pixels);
+#if 1
+   glBindTexture(GL_TEXTURE_2D_ARRAY, globalTextureArray);
+   glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, textureIndex.index, width, height, 1, GL_BGRA_EXT, GL_UNSIGNED_BYTE, pixels);
+#else
+   glBindTexture(GL_TEXTURE_2D, (GLuint)bitmap.textureHandle);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, bitmap.width, bitmap.height, 0, GL_BGRA_EXT, GL_UNSIGNED_BYTE, bitmap.pixels);
    
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -622,10 +619,9 @@ static u32 RegisterWrapingTexture(u32 width, u32 height, u32* pixels)
 	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+#endif
    
-   
-	glBindTexture(GL_TEXTURE_2D, 0);
-	return handle;
+   glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 struct OpenGLUniformInfo 
@@ -636,12 +632,16 @@ struct OpenGLUniformInfo
    m4x4 objectTransform = Identity();
    v4 scaleColor = V4(1.0f, 1.0f, 1.0f, 1.0f);
    m4x4Array boneStates = {};
+   u32 textureIndex;
 };
 
 static void BeginUseProgram(OpenGLContext *context, OpenGLProgram *prog, RenderSetup setup, OpenGLUniformInfo uniforms)
 {
    
 	glUseProgram(prog->program);
+   
+   // this can be in the setup
+   glBindTexture(GL_TEXTURE_2D_ARRAY, globalTextureArray);
    
    m4x4 mat = setup.cameraTransform * uniforms.objectTransform;
    glUniformMatrix4fv(prog->cameraTransform, 1, GL_TRUE, mat.a[0]);
@@ -670,7 +670,12 @@ static void BeginUseProgram(OpenGLContext *context, OpenGLProgram *prog, RenderS
       glUniform3f(prog->lightP, lightP.x, lightP.y, lightP.z);
    }
    
-	glBindBuffer(GL_ARRAY_BUFFER, uniforms.vertexBuffer);
+   if(prog->flags & ShaderFlags_Textured)
+   {
+      glUniform1i(prog->textureIndex, uniforms.textureIndex);
+   }
+   
+   glBindBuffer(GL_ARRAY_BUFFER, uniforms.vertexBuffer);
    if(uniforms.indexBuffer != 0xFFFFFFFF) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, uniforms.indexBuffer);
    
 }
@@ -705,19 +710,42 @@ static void BeginAttribArraysPCU(OpenGLProgram *prog)
 	}
 }
 
-static void BeginAttribArraysPCUN(OpenGLProgram *prog)
+static void BeginAttribArraysPCUI(OpenGLProgram *prog)
 {
    glEnableVertexAttribArray(prog->vertP);
 	glEnableVertexAttribArray(prog->vertC);
    
-   glVertexAttribPointer(prog->vertP, 3, GL_FLOAT, false, sizeof(VertexFormatPCUN), (void *)OffsetOf(VertexFormatPCUN, p));
-   glVertexAttribPointer(prog->vertC, 4, GL_UNSIGNED_BYTE, true, sizeof(VertexFormatPCUN), (void *)OffsetOf(VertexFormatPCUN, c));
+   glVertexAttribPointer(prog->vertP, 3, GL_FLOAT, false, sizeof(VertexFormatPCUI), (void *)OffsetOf(VertexFormatPCUI, p));
+   glVertexAttribPointer(prog->vertC, 4, GL_UNSIGNED_BYTE, true, sizeof(VertexFormatPCUI), (void *)OffsetOf(VertexFormatPCUI, c));
    
 	if(prog->flags & ShaderFlags_Textured)
 	{
       glEnableVertexAttribArray(prog->vertUV);
-		glVertexAttribPointer(prog->vertUV, 2, GL_FLOAT, false, sizeof(VertexFormatPCUN), (void *)OffsetOf(VertexFormatPCUN, uv));
+		glVertexAttribPointer(prog->vertUV, 2, GL_FLOAT, false, sizeof(VertexFormatPCUI), (void *)OffsetOf(VertexFormatPCUI, uv));
 	}
+   
+   if(prog->flags & ShaderFlags_MultiTextured)
+   {
+      glEnableVertexAttribArray(prog->vertUV);
+		glVertexAttribPointer(prog->vertUV, 2, GL_FLOAT, false, sizeof(VertexFormatPCUI), (void *)OffsetOf(VertexFormatPCUI, uv));
+      glEnableVertexAttribArray(prog->textureIndex);
+		glVertexAttribIPointer(prog->textureIndex, 1, GL_UNSIGNED_SHORT, sizeof(VertexFormatPCUI), (void *)OffsetOf(VertexFormatPCUI, textureIndex));
+   }
+}
+
+static void BeginAttribArraysPCUN(OpenGLProgram *prog)
+{
+   glEnableVertexAttribArray(prog->vertP);
+   glEnableVertexAttribArray(prog->vertC);
+   
+   glVertexAttribPointer(prog->vertP, 3, GL_FLOAT, false, sizeof(VertexFormatPCUN), (void *)OffsetOf(VertexFormatPCUN, p));
+   glVertexAttribPointer(prog->vertC, 4, GL_UNSIGNED_BYTE, true, sizeof(VertexFormatPCUN), (void *)OffsetOf(VertexFormatPCUN, c));
+   
+   if(prog->flags & ShaderFlags_Textured)
+   {
+      glEnableVertexAttribArray(prog->vertUV);
+      glVertexAttribPointer(prog->vertUV, 2, GL_FLOAT, false, sizeof(VertexFormatPCUN), (void *)OffsetOf(VertexFormatPCUN, uv));
+   }
    
    if(prog->flags & ShaderFlags_Phong)
    {
@@ -729,16 +757,16 @@ static void BeginAttribArraysPCUN(OpenGLProgram *prog)
 static void BeginAttribArraysPCUNBD(OpenGLProgram *prog)
 {
    glEnableVertexAttribArray(prog->vertP);
-	glEnableVertexAttribArray(prog->vertC);
+   glEnableVertexAttribArray(prog->vertC);
    
    glVertexAttribPointer(prog->vertP, 3, GL_FLOAT, false, sizeof(VertexFormatPCUNBD), (void *)OffsetOf(VertexFormatPCUNBD, p));
    glVertexAttribPointer(prog->vertC, 4, GL_UNSIGNED_BYTE, true, sizeof(VertexFormatPCUNBD), (void *)OffsetOf(VertexFormatPCUNBD, c));
    
-	if(prog->flags & ShaderFlags_Textured)
-	{
+   if(prog->flags & ShaderFlags_Textured)
+   {
       glEnableVertexAttribArray(prog->vertUV);
-		glVertexAttribPointer(prog->vertUV, 2, GL_FLOAT, false, sizeof(VertexFormatPCUNBD), (void *)OffsetOf(VertexFormatPCUNBD, uv));
-	}
+      glVertexAttribPointer(prog->vertUV, 2, GL_FLOAT, false, sizeof(VertexFormatPCUNBD), (void *)OffsetOf(VertexFormatPCUNBD, uv));
+   }
    
    if(prog->flags & ShaderFlags_Phong)
    {
@@ -846,11 +874,12 @@ static OpenGLContext OpenGLInit(bool modernContext)
    u32 amountOfMultiSamples = Min(info.amountOfMultiSamples, 4u);
    
    FrameBuffer renderBuffer;
+   // todo make this passed in
+   renderBuffer.width  = 1280;
+   renderBuffer.height = 720;
+   
 #if 1 // to work around renderdoc not working...
    {
-      renderBuffer.width = 1280;
-      renderBuffer.height = 720;
-      
       GLuint texture_map;
       glGenTextures(1, &texture_map);
       glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, texture_map);
@@ -880,9 +909,6 @@ static OpenGLContext OpenGLInit(bool modernContext)
    
 #else // not multisampled
    {
-      renderBuffer.width = 1280;
-      renderBuffer.height = 720;
-      
       // renderBuffer
       GLuint texture_map;
       glGenTextures(1, &texture_map);
@@ -893,7 +919,7 @@ static OpenGLContext OpenGLInit(bool modernContext)
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
       
-      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1280, 720, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, renderbuffer.width, renderbuffer.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
       
       renderBuffer.texture = texture_map;
       glBindTexture(GL_TEXTURE_2D, 0);
@@ -904,7 +930,7 @@ static OpenGLContext OpenGLInit(bool modernContext)
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-      glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, 1280, 720, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE, NULL);
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, renderBuffer.width, renderBuffer.height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE, NULL);
       
       renderBuffer.depth = depth_texture;
       
@@ -965,6 +991,20 @@ static OpenGLContext OpenGLInit(bool modernContext)
       GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
       Assert(status == GL_FRAMEBUFFER_COMPLETE);
    }
+   
+   
+   
+   {   // Build the textureArray
+      glGenTextures(1, &globalTextureArray);
+      glBindTexture(GL_TEXTURE_2D_ARRAY, globalTextureArray);
+      glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, ret.defaultInternalTextureFormat, Asset_Bitmap_Size, Asset_Bitmap_Size, Asset_Texture_Amount, 0, GL_BGRA_EXT, GL_UNSIGNED_INT, 0);
+      
+      glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+      glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+      glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+      glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+   }
+   
    
    //glEnable(GL_PRIMITIVE_RESTART_FIXED_INDEX);
    
@@ -1183,10 +1223,11 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             
             glBufferData(GL_ARRAY_BUFFER, quadHeader->vertexCount * sizeof(VertexFormatPCU), quadHeader->data, GL_STREAM_DRAW);
             
+            
             for (u32 vertIndex = 0; vertIndex < quadHeader->vertexCount; vertIndex += 4)
             {
                Bitmap bitmap = bitmaps[vertIndex >> 2];
-               glBindTexture(GL_TEXTURE_2D, bitmap.textureHandle);
+               
                glDrawArrays(GL_TRIANGLE_STRIP, vertIndex, 4);
             }
             
@@ -1239,7 +1280,7 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
                glUniform3f(prog->ka, it->mat.ka.x, it->mat.ka.y, it->mat.ka.z);
                glUniform3f(prog->kd, it->mat.kd.x, it->mat.kd.y, it->mat.kd.z);
                glUniform3f(prog->ks, it->mat.ks.x, it->mat.ks.y, it->mat.ks.z);
-               glBindTexture(GL_TEXTURE_2D, meshHeader->textureIDs[i]);
+               glUniform1i(prog->textureIndex, meshHeader->textureIDs[i]);
                
                switch (meshHeader->meshType)
                {
@@ -1286,8 +1327,8 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
                glUniform3f(prog->ka, it->mat.ka.x, it->mat.ka.y, it->mat.ka.z);
                glUniform3f(prog->kd, it->mat.kd.x, it->mat.kd.y, it->mat.kd.z);
                glUniform3f(prog->ks, it->mat.ks.x, it->mat.ks.y, it->mat.ks.z);
+               glUniform1i(prog->textureIndex, meshHeader->textureIDs[i]);
                
-               glBindTexture(GL_TEXTURE_2D, meshHeader->textureIDs[i]);
                switch (meshHeader->meshType)
                {
                   case TriangleMeshType_List:

@@ -667,6 +667,8 @@ static OpenGLContext win32InitOpenGL(HWND window)
 			wglSwapIntervalEXT(1);
 		}
       
+      WGLPROC(glTexImage3D);
+      WGLPROC(glTexSubImage3D);
       WGLPROC(glGetStringi);
 		WGLPROC(glTexImage2DMultisample);
 		WGLPROC(glBufferData);
@@ -1190,6 +1192,7 @@ ClipCursor(&windowRect);
       Clear(frameArena);
    }
    
+   ExitProcess(0);
    return 0;
 }
 

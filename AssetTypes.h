@@ -155,17 +155,23 @@ static b32 PointInAABBi(AABBi aabb, v3i point)
 }
 
 
+struct TextureIndex
+{
+   u32 index;
+};
+static TextureIndex CreateTextureIndex(u32 index)
+{
+   return {index};
+}
+
 struct Bitmap
 {
 	u32 *pixels;
 	u32 width;
 	u32 height;
-	u32 textureHandle;
-	//BitmapFileHeader *header;
 };
 
-static u32 RegisterWrapingTexture(u32 width, u32 height, u32 *pixels);
-static void UpdateWrapingTexture(Bitmap bitmap);
+static void UpdateWrapingTexture(TextureIndex textureIndex, u32 width, u32 height, u32 *pixels);
 
 static u32 *GetPixel(Bitmap bitmap, u32 x, u32 y)
 {
@@ -506,6 +512,15 @@ struct VertexFormatPCU
    v2  uv;
 };
 DefineArray(VertexFormatPC);
+
+
+struct VertexFormatPCUI
+{
+	v3  p;
+	u32 c;
+   v2  uv;
+   u16 textureIndex;
+};
 
 struct VertexFormatPCUN
 {

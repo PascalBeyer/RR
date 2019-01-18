@@ -33,8 +33,9 @@ enum OpenGLShaderFlags : u32
    ShaderFlags_Phong          = 0x4,
    ShaderFlags_Animated       = 0x8,
    ShaderFlags_ZBias          = 0x10,
+   ShaderFlags_MultiTextured  = 0x20,
    
-   ShaderArray_Size           = 0x20, // right now this does not have to be a hash map I guess..
+   ShaderArray_Size           = 0x40, // right now this does not have to be a hash map I guess..
 };
 
 struct RenderSetup
@@ -70,7 +71,6 @@ struct EntryClear
 	RenderGroupEntryHeader header;
 	v4 color;
 };
-
 
 struct EntryTriangleMesh
 {
@@ -115,11 +115,13 @@ struct EntryTexturedQuads
 	Bitmap *quadBitmaps;
 };
 
+#if 0
 struct EntryUpdateTexture
 {
 	RenderGroupEntryHeader header;
 	Bitmap bitmap;
 };
+#endif
 
 struct RenderGroup
 {	
@@ -375,10 +377,11 @@ static void PushTriangleMesh(RenderGroup *rg, TriangleMesh *mesh, Quaternion ori
    
    EntryTriangleMesh *meshHeader = PushRenderEntry(EntryTriangleMesh);
    u32Array arr = PushArray(frameArena, u32, mesh->indexSets.amount);
+   
    // todo this still feels pretty stupid
    for (u32 i = 0; i < arr.amount; i++)
    {
-      arr[i] = GetTexture(rg->assetHandler, mesh->indexSets[i].mat.bitmapID)->textureHandle;
+      arr[i] = GetTexture(rg->assetHandler, mesh->indexSets[i].mat.bitmapID).index;
    }
    
    // todo most of these could be stored on the asset entry. But maybe this should just be on there for cache
@@ -412,7 +415,7 @@ static void PushAnimatedMesh(RenderGroup *rg, TriangleMesh *mesh, Quaternion ori
    u32Array arr = PushArray(frameArena, u32, mesh->indexSets.amount);
    for (u32 i = 0; i < arr.amount; i++)
    {
-      arr[i] = GetTexture(rg->assetHandler, mesh->indexSets[i].mat.bitmapID)->textureHandle;
+      arr[i] = GetTexture(rg->assetHandler, mesh->indexSets[i].mat.bitmapID).index;
    }
    
    meshHeader->vertexType = mesh->vertexType;

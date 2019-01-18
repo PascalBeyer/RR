@@ -54,7 +54,7 @@ struct AssetInfo
 DefineArray(AssetInfo);
 struct LoadedTexture
 {
-	Bitmap bitmap;
+	TextureIndex textureIndex;
 	AssetInfo *entry;
 	LoadedTexture *next;
 	LoadedTexture *prev;
@@ -285,10 +285,8 @@ static AssetHandler CreateAssetHandler(Arena *arena)
 	ret.textureList.back = ret.textureList.front + Asset_Texture_Amount - 1;
 	for(auto it = ret.textureList.front; it < ret.textureList.front + Asset_Texture_Amount; it++)
 	{
-		it->bitmap.height = Asset_Bitmap_Size;
-		it->bitmap.width  = Asset_Bitmap_Size;
-		it->bitmap.pixels = PushData(arena, u32, it->bitmap.height * it->bitmap.width + 3) + 3;
-		it->bitmap.textureHandle = RegisterWrapingTexture(it->bitmap.width, it->bitmap.height, it->bitmap.pixels);
+      u32 it_index = (u32)(ret.textureList.front - it);
+		it->textureIndex.index = it_index;
 		it->entry = NULL;
 		it->next = it + 1;
 		it->prev = it - 1;
@@ -344,7 +342,7 @@ static AnimationInfo *GetAnimationInfo(AssetHandler *handler, u32 id)
 	return info.animationInfo;
 }
 
-static Bitmap *GetTexture(AssetHandler *handler, u32 id)
+static TextureIndex GetTexture(AssetHandler *handler, u32 id)
 {
 	TimedBlock;
 	u32 type = (id >> Asset_Type_Offset);
@@ -368,7 +366,7 @@ static Bitmap *GetTexture(AssetHandler *handler, u32 id)
 		handler->textureList.front->prev = tex;
 		handler->textureList.front = tex;
       
-		return &tex->bitmap;
+		return tex->textureIndex;
 	}
    
 	LoadedTexture *toAlter = handler->textureList.back;
@@ -378,16 +376,15 @@ static Bitmap *GetTexture(AssetHandler *handler, u32 id)
 	toAlter->entry->loadedIndex = (u32)(toAlter - handler->textureList.base);
    
 	char *filePath = FormatCString("textures/%s", entry->name);
-	if (!LoadBitmapIntoBitmap(filePath, &listBase[entry->loadedIndex].bitmap))
-	{
-		return NULL;
-	}
+   Bitmap bitmap = LoadTexture(filePath);
+   if(!bitmap.pixels) {return {};}
    
-	if (!entry->textureInfo)
+   
+   if (!entry->textureInfo)
 	{
 		TextureInfo *info = PushStruct(handler->infoArena, TextureInfo);
-		info->width = toAlter->bitmap.width;
-		info->height = toAlter->bitmap.height;
+		info->width  = bitmap.width;
+		info->height = bitmap.height;
 		entry->textureInfo = info;
 	}
    
@@ -402,9 +399,11 @@ static Bitmap *GetTexture(AssetHandler *handler, u32 id)
 	toAlter->prev = NULL;
    
 	entry->currentlyLoaded = true;
-	UpdateWrapingTexture(handler->textureList.base[entry->loadedIndex].bitmap);
+   // really not neccesary... As this was allready true
+   toAlter->textureIndex = CreateTextureIndex(entry->loadedIndex); 
+	UpdateWrapingTexture(toAlter->textureIndex, bitmap.width, bitmap.height, bitmap.pixels);
    
-	return &handler->textureList.base[entry->loadedIndex].bitmap;
+	return toAlter->textureIndex;
 }
 
 // todo  for now animations and Meshes are dynamically allocated...

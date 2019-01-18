@@ -24,6 +24,8 @@
 // Phong
 // Textured
 // Animated
+// ZBias
+// MultiTextured
 
 #ifdef VertexCode
 // Vertex Code
@@ -41,6 +43,13 @@ uniform mat4x4 shadowTransform;
 // in
 in vec3 vertP;
 in vec4 vertC;
+
+#ifdef MultiTextured
+in u32 textureIndex
+in v2 vertUV;
+flat out fragIndex;
+smooth out v2 fragCoord;
+#endif
 
 #ifdef Textured
 in v2 vertUV;
@@ -137,6 +146,11 @@ void main(void)
    specular = pow(specularBase, specularExponent) * ks;
 #endif
    
+#ifdef MultiTextured
+   fragCoord = vertUV;
+   fragIndex = textureIndex;
+#endif
+   
 }
 
 #else
@@ -155,9 +169,16 @@ smooth in vec4 shadowCoord;
 uniform sampler2D depthTexture;
 #endif
 
-#ifdef Textured
+#ifdef MultiTextured
+flat in u32 fragIndex;
 smooth in vec2 fragCoord;
-uniform sampler2D texture;
+uniform sampler2DArray textureSampler;
+#endif
+
+#ifdef Textured
+uniform u32 textureIndex;
+smooth in vec2 fragCoord;
+uniform sampler2DArray textureSampler;
 #endif
 
 // out
@@ -181,7 +202,13 @@ void main(void)
    resultColor =  vec4(colorFactor * fragColor.rgb, fragColor.a);
    
 #ifdef Textured
-   resultColor *= texture2D(texture, fragCoord);
+   v3 textureCoord = V3(fragCoord, textureIndex);
+   resultColor *= texture(textureSampler, textureCoord);
+#endif
+   
+#ifdef MultiTextured
+   v3 textureCoord = V3(fragCoord, fragIndex);
+   resultColor *= texture(textureSampler, textureCoord);
 #endif
    
 #ifdef Phong
