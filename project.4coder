@@ -20,12 +20,12 @@ load_paths =
 command_list = {
 	{ 
 		.name = "build",
-		.out = "compilation.txt", .footer_panel = false, .save_dirty_files = true, .cursor_at_end = false,
+		.out = "compilation.txt", .footer_panel = true, .save_dirty_files = true, .cursor_at_end = false,
 		.cmd = { { "build.bat", .os = "win"}, },
 	},
 	{
 		.name = "run",
-		.out = "compilation.txt", .footer_panel = false, .save_dirty_files = true, .cursor_at_end = false,
+		.out = "compilation.txt", .footer_panel = true, .save_dirty_files = true, .cursor_at_end = false,
 		.cmd = {{ "run.bat", .os = "win" },},
 	},
 	{

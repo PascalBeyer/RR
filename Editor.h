@@ -964,35 +964,6 @@ static void ResetSelectionInitials(Editor *editor)
    }
 }
 
-static void EditorUpdateCamFocus(Editor *editor, Camera *cam, Input input)
-{
-   //
-   // The general map should be Quaternion -> Basis, mapping q to the -> ROW <- vectors
-   // of the associated Matrix
-   //
-   
-   Quaternion c = cam->orientation;
-   
-   v2 mouseDelta = input.mouseDelta;
-   
-   f32 rotSpeed = 0.001f * 3.141592f;
-   
-   f32 mouseCXRot =  mouseDelta.y * rotSpeed;
-   f32 mouseZRot  = -mouseDelta.x * rotSpeed;
-   
-   Quaternion rotX = AxisAngleToQuaternion(mouseCXRot, V3(1, 0, 0));
-   Quaternion rotZ = AxisAngleToQuaternion(mouseZRot,  V3(0, 0, 1));
-   Quaternion rot = rotX * c * rotZ;
-   
-   v3 delta = cam->pos - editor->focusPoint;
-   
-   // todo really understand how this is the right math
-   Quaternion conj = Inverse(c) * Inverse(rotX) * c * Inverse(rotZ);
-   cam->pos = editor->focusPoint +  QuaternionToMatrix3(conj) * delta;
-   
-   cam->orientation = rot;
-}
-
 static void FrameColorSelection(Editor *editor, v4 editorMeshSelectColor)
 {
    EditorEntities *editorEntities = &editor->editorEntities;
@@ -1018,7 +989,7 @@ static void UpdateEditor(Editor *editor, Input input)
       }break;
       case EditorState_OrbitingCamera:
       {
-         EditorUpdateCamFocus(editor, cam, input);
+         UpdateCamFocus(editor->focusPoint, cam, input);
          return;
       }break;
       

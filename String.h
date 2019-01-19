@@ -643,6 +643,19 @@ static String EatToNextSpaceReturnHead(String *string)
 	return ret;
 }
 
+
+static bool BeginsWith(String toCheck, String desiredBeginning)
+{
+   if(toCheck.amount < desiredBeginning.amount) return false;
+	for (u32 i = 0; i < desiredBeginning.amount; i++)
+	{
+		if (desiredBeginning[i] != toCheck[i]) return false;
+	}
+   
+	return true;
+}
+
+
 static bool BeginsWith(String toCheck, char *cStr) // todo audit speed
 {
 	for (u32 i = 0; i < toCheck.amount, *cStr; cStr++, i++)

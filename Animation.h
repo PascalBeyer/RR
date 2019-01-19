@@ -75,6 +75,16 @@ static m4x4Array LocalToWorld(Skeleton *skeleton, InterpolationDataArray data)
 {
    m4x4Array ret = PushArray(frameArena, m4x4, skeleton->bones.amount);
    
+#if 0
+   ret[0] = InterpolationDataToMatrix(skeleton->bones[0].interp) * InterpolationDataToMatrix(data[0]);
+   for (u32 i = 1; i < skeleton->bones.amount; i++)
+   {
+      Bone *bone = skeleton->bones + i;
+      Assert(bone->parentIndex < i);
+      // this way around: first transform the hand -> transform the hand according to the arm transform.
+      ret[i] = ret[bone->parentIndex] * InterpolationDataToMatrix(bone->interp) * InterpolationDataToMatrix(data[i]);
+   }
+#endif
    ret[0] = InterpolationDataToMatrix(data[0]);
    for (u32 i = 1; i < skeleton->bones.amount; i++)
    {
@@ -186,4 +196,17 @@ static void AddIK(AnimationState *state, u32 boneIndex, v3 focusP, Char axis, u3
          return;
       }
    }
+}
+
+static m4x4Array DumbBindShapeThing(AssetHandler *assetHandler, TriangleMesh *mesh)
+{
+   Skeleton *skeleton = &mesh->skeleton;
+   m4x4Array ret = PushArray(frameArena, m4x4, skeleton->bones.amount);
+   ret[0] = InterpolationDataToMatrix(skeleton->bones[0].interp);
+   for(u32 i = 1; i < skeleton->bones.amount; i++)
+   {
+      ret[i] = ret[skeleton->bones[i].parentIndex] * InterpolationDataToMatrix(skeleton->bones[i].interp);
+   }
+   
+   return ret;
 }

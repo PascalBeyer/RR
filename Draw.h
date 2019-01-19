@@ -1,4 +1,17 @@
 
+static void DrawSkeletonBones(RenderGroup *rg, BoneArray bones, m4x4Array boneStates, Quaternion orientation, v3 pos, f32 scale)
+{
+   m4x4 mat = InterpolationDataToMatrix(pos, orientation, scale);
+   for(u32 i = 0; i < bones.amount; i++)
+   {
+      m4x4 bindShapeMat = InvOrId(bones[i].inverseBindShapeMatrix);
+      v3 p1 = (mat * boneStates[i] * bindShapeMat) * V3(0, 0, 0);
+      v3 p2 = (mat * boneStates[i] * bindShapeMat) * V3(0, 1, 0);
+      
+      PushLine(rg, p1, p2);
+   }
+}
+
 static void DrawNumberOnTile(RenderGroup *rg, u32 number, v3i pos, v4 color = V4(1.0f, 0.2f, 0.3f, 0.6f))
 {
 	f32 border = 0.05f;
@@ -55,6 +68,9 @@ static void DrawNumberOnTile(RenderGroup *rg, u32 number, v3i pos, v4 color = V4
 
 static void RenderPathCreator(RenderGroup *rg, EntityManager *entityManager, ExecuteData *exe, PathCreator *pathCreator, AssetHandler *assetHandler, Input input)
 {
+   Camera camera = exe->debug ? exe->debugCamera : exe->camera;
+   
+   PushProjectiveSetup(rg, camera, exe->lightSource, ShaderFlags_MultiTextured|ShaderFlags_ZBias);
 	if (pathCreator->hotUnit != 0xFFFFFFFF)
 	{
       UnitData *data = entityManager->unitData + pathCreator->hotUnit;
@@ -66,19 +82,17 @@ static void RenderPathCreator(RenderGroup *rg, EntityManager *entityManager, Exe
       exe->at = 0;
       exe->t = 0.0f;
       
-      PushProjectiveSetup(rg, exe->camera, exe->lightSource, ShaderFlags_MultiTextured|ShaderFlags_ZBias);
-      
 		For(path)
 		{
 			DrawNumberOnTile(rg, pathCounter, e->physicalPos);
-			GameExecuteUpdate(entityManager, exe, assetHandler, 1.0f); // dt should be how long the action takes.
+			GameExecuteUpdate(entityManager, exe, assetHandler, 1.0f, input); // dt should be how long the action takes.
 			pathCounter++;
 		}
       
 		DrawNumberOnTile(rg, pathCounter, e->physicalPos);
       
 		v3i pos = e->physicalPos;
-		v3 mouseP = ScreenZeroToOneToZ(exe->camera, input.mouseZeroToOne, e->physicalPos.z);
+		v3 mouseP = ScreenZeroToOneToZ(camera, input.mouseZeroToOne, e->physicalPos.z);
 		v3 mouseToPath = mouseP - GetRenderPos(*e);
       
 		pathCounter++;
@@ -120,16 +134,43 @@ static void RenderPathCreator(RenderGroup *rg, EntityManager *entityManager, Exe
       
 	}
    
-   PushProjectiveSetup(rg, exe->camera, exe->lightSource, ShaderFlags_ShadowMapping|ShaderFlags_Textured|ShaderFlags_Phong);
+   PushProjectiveSetup(rg, camera, exe->lightSource, ShaderFlags_ZBias);
+   if(exe->debug)
+   {
+      For(state, entityManager->animationStates)
+      {
+         Entity *e = GetEntity(entityManager, state->serial);
+         TriangleMesh *mesh = GetMesh(assetHandler, e->meshId);
+         
+         DrawSkeletonBones(rg, mesh->skeleton.bones, state->boneStates, e->orientation, GetRenderPos(*e, exe->t), e->scale);
+         
+      }
+   }
+   
+   PushProjectiveSetup(rg, camera, exe->lightSource, ShaderFlags_ShadowMapping|ShaderFlags_Textured|ShaderFlags_Phong);
    for(u32 i = 0; i < Entity_Count; i++)
    {
       if(i == Entity_Dude)
       {
+#if 1
+         For(state, entityManager->animationStates)
+         {
+            Entity *e = GetEntity(entityManager, state->serial);
+            
+            PushAnimatedMesh(rg, e->meshId, e->orientation, V3((e->physicalPos)) + e->offset, e->scale, V4(0.75f, 0.0f, 0.0f, 0.0f), state->boneStates);
+            PushAnimatedMesh(rg, e->meshId, e->orientation, V3((e->initialPos)) + e->offset, e->scale, e->color * e->frameColor, state->boneStates);
+         }
+         
+#else
          For(entityManager->unitArray)
          {
+            
             PushTriangleMesh(rg, it->meshId, it->orientation, V3((it->physicalPos)) + it->offset, it->scale, V4(0.75f, 0.0f, 0.0f, 0.0f));
-            PushTriangleMesh(rg, it->meshId, it->orientation, V3((it->initialPos)) + it->offset, it->scale, it->color * it->frameColor);
+            PushTriangleMesh(rg, it->meshId, it->orientation, V3((it->initialPos)) + it->offset, it->scale,
+                             it->color * it->frameColor);
+            
          }
+#endif
       }
       else
       {
@@ -172,12 +213,25 @@ static void RenderSimulateUI(RenderGroup *rg, SimData *sim)
 
 static void RenderSimulate(RenderGroup *rg, EntityManager *entityManager, ExecuteData *exe)
 {
+   Camera camera = exe->debug ? exe->debugCamera : exe->camera;
+   
+   PushProjectiveSetup(rg, camera, exe->lightSource, ShaderFlags_ZBias);
+   if(exe->debug)
+   {
+      
+      For(entityManager->animationStates)
+      {
+         Entity *e = GetEntity(entityManager, it->serial);
+         TriangleMesh *mesh = GetMesh(rg->assetHandler, it->meshId);
+         DrawSkeletonBones(rg, mesh->skeleton.bones, it->boneStates, e->orientation, GetRenderPos(*e, exe->t), e->scale);
+      }
+   }
    
    for(u32 i = 0; i < Entity_Count; i++)
    {
       if(i == Entity_Dude)
       {
-         PushProjectiveSetup(rg, exe->camera, exe->lightSource, ShaderFlags_ShadowMapping|ShaderFlags_Textured|ShaderFlags_Animated|ShaderFlags_Phong);
+         PushProjectiveSetup(rg, camera, exe->lightSource, ShaderFlags_ShadowMapping|ShaderFlags_Textured|ShaderFlags_Animated|ShaderFlags_Phong);
          For(entityManager->animationStates)
          {
             Entity *e = GetEntity(entityManager, it->serial);
@@ -187,7 +241,7 @@ static void RenderSimulate(RenderGroup *rg, EntityManager *entityManager, Execut
       }
       else
       {
-         PushProjectiveSetup(rg, exe->camera, exe->lightSource, ShaderFlags_ShadowMapping|ShaderFlags_Textured);
+         PushProjectiveSetup(rg, camera, exe->lightSource, ShaderFlags_ShadowMapping|ShaderFlags_Textured|ShaderFlags_Phong);
          For(entityManager->entityArrays[i])
          {
             PushTriangleMesh(rg, it->meshId, it->orientation, GetRenderPos(*it, exe->t), it->scale, it->color * it->frameColor);
@@ -884,15 +938,3 @@ static void AnimationTestStuff(RenderGroup *rg, DAEReturn *stuff, f32 dt)
    }
 }
 #endif
-
-static void DrawSkeletonBones(RenderGroup *rg, m4x4Array boneStates)
-{
-   For(boneStates)
-   {
-      v3 p1 = *it * V3(0, 0, 0);
-      v3 p2 = *it * V3(0, 1, 0);
-      
-      //PushDebugPointCuboid(rg, p1);
-      PushLine(rg, p1, p2);
-   }
-}

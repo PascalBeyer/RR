@@ -81,6 +81,9 @@ static void PathCreatorHandleEvent(EntityManager *entityManager, ExecuteData *ex
 	PathCreator *pathCreator = &exe->pathCreator;
 	if (message.flag & KeyState_PressedThisFrame)
 	{
+      if(message.key == Key_tab) exe->debug = !exe->debug;
+      if(message.key == Key_middleMouse) exe->middleMouseDown = true;
+      
 		switch (pathCreator->state)
 		{
          case PathCreator_None:
@@ -104,7 +107,7 @@ static void PathCreatorHandleEvent(EntityManager *entityManager, ExecuteData *ex
                   
                   For(entityManager->unitData[unitIndex].instructions)
                   {
-                     GameExecuteUpdate(entityManager, exe, assetHandler, dt);
+                     GameExecuteUpdate(entityManager, exe, assetHandler, dt, input);
                   }
                }break;
                case Key_F6:
@@ -194,8 +197,13 @@ static void PathCreatorHandleEvent(EntityManager *entityManager, ExecuteData *ex
             Die;
          }break;
 		}
-      
 	}
+   
+   if(message.flag & KeyState_ReleasedThisFrame)
+   {
+      if(message.key == Key_middleMouse) exe->middleMouseDown = false;
+   }
+   
 }
 
 static void SimHandleEvents(EntityManager *entityManager, ExecuteData *exe, KeyStateMessage message)
@@ -203,6 +211,9 @@ static void SimHandleEvents(EntityManager *entityManager, ExecuteData *exe, KeyS
 	SimData *sim = &exe->simData;
 	if (message.flag & KeyState_PressedThisFrame)
 	{
+      if(message.key == Key_middleMouse) exe->middleMouseDown = true;
+      if(message.key == Key_tab) exe->debug = !exe->debug;
+      
 		switch (message.key)
 		{
          case Key_plus:
@@ -220,6 +231,11 @@ static void SimHandleEvents(EntityManager *entityManager, ExecuteData *exe, KeyS
 		}
 	}
    
+   
+   if(message.flag & KeyState_ReleasedThisFrame)
+   {
+      if(message.key == Key_middleMouse) exe->middleMouseDown = false;
+   }
 }
 
 static void VictoryHandleEvents(ExecuteData *exe, EntityManager *entityManager, KeyStateMessage message)

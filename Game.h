@@ -263,7 +263,7 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
          
          // update
          UpdateColorPickers(editor, input);
-         GameExecuteUpdate(entityManager, exe, assetHandler, dt);
+         GameExecuteUpdate(entityManager, exe, assetHandler, dt, input);
          
          // Render
          RenderExecute(rg, entityManager, exe, assetHandler, input);

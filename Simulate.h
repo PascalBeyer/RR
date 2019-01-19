@@ -151,8 +151,11 @@ struct ExecuteData
 {
 	u32 state;
    
+   b32 debug;
+   b32 middleMouseDown;
+   Camera debugCamera;
+   
 	Camera camera;
-	Camera debugCamera;
    LightSource lightSource;
    
 	u32 at; // are these used?
@@ -217,18 +220,34 @@ static b32 MaybeMoveEntity(Entity *e, v3i dir, EntityManager *entityManager)
 		return false;
 	}
    RemoveEntityFromTree(entityManager, e);
-   e->physicalPos += dir;
+   //e->physicalPos += dir;
    InsertEntity(entityManager, e);
    
 	e->flags |= EntityFlag_IsMoving;
    return true;
 }
 
-static void GameExecuteUpdate(EntityManager *entityManager, ExecuteData *exe, AssetHandler *assetHandler, f32 dt)
+static void GameExecuteUpdate(EntityManager *entityManager, ExecuteData *exe, AssetHandler *assetHandler, f32 dt, Input input)
 {
 	
    f32 timePassed = dt * exe->simData.timeScale;
    exe->t += timePassed;
+   
+   if(exe->debug && exe->middleMouseDown)
+   {
+      UnitData *data = entityManager->unitData.data;
+      if(data)
+      {
+         Entity *entity = GetEntity(entityManager, data->serial);
+         v3 proj = ScreenZeroToOneToZ(exe->debugCamera, V2(0.5f, 0.5f), entity->physicalPos.z);
+         
+         v3 newFocus = GetRenderPos(*entity);
+         v3 delta =  newFocus - proj;
+         exe->debugCamera.pos += delta;
+         
+         UpdateCamFocus(newFocus, &exe->debugCamera, input);
+      }
+   }
    
    For(entityManager->unitData)
    {
@@ -281,11 +300,35 @@ static void GameExecuteUpdate(EntityManager *entityManager, ExecuteData *exe, As
    {
       AnimationInput *first  = &state->animations[0];
       AnimationInput *second = &state->animations[1];
+      TriangleMesh *mesh = GetMesh(assetHandler, state->meshId);
       
-      if(first->animationId == 0xFFFFFFFF) continue;
+      if(first->animationId == 0xFFFFFFFF)
+      {
+         
+#if 1
+         m4x4Array bindShapeThing = DumbBindShapeThing(assetHandler, mesh);
+#else
+         u32 animationID = RegisterAsset(assetHandler, Asset_Animation, "dudeTry1Run.animation");
+         
+         InterpolationDataArray local = GetLocalTransforms(animation, first->t);
+         
+         state->localTransforms = local;
+         
+         // todo at  IK stuff here
+         
+         m4x4Array bones = LocalToWorld(&mesh->skeleton, state->localTransforms);
+#endif
+         for (u32 i = 0; i < mesh->skeleton.bones.amount; i++)
+         {
+            bindShapeThing[i] = bindShapeThing[i] * mesh->skeleton.bones[i].inverseBindShapeMatrix;
+         }
+         state->boneStates = bindShapeThing;
+         continue;
+      }
       
       KeyFramedAnimation *animation = GetAnimation(assetHandler, first->animationId);
-      TriangleMesh *mesh = GetMesh(assetHandler, state->meshId);
+      
+      
       InterpolationDataArray local = GetLocalTransforms(animation, first->t);
       
       state->localTransforms = local;
@@ -293,6 +336,7 @@ static void GameExecuteUpdate(EntityManager *entityManager, ExecuteData *exe, As
       // todo at  IK stuff here
       
       m4x4Array bones = LocalToWorld(&mesh->skeleton, state->localTransforms);
+      
       for (u32 i = 0; i < mesh->skeleton.bones.amount; i++)
       {
          bones[i] = bones[i] * mesh->skeleton.bones[i].inverseBindShapeMatrix;

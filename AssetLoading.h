@@ -1098,9 +1098,9 @@ static m4x4 Eatm4x4(String *s, b32 *success)
 
 static void BuildBoneArray(BoneArray bones, DAENode *node, StringArray boneNames, m4x4Array inverseBindShapeMatrices, u32 parentIndex, Arena *constantArena, m4x4 bindShapeMatrix)
 {
-	u32 index = 0xFFFFFFFF;
+   u32 index = 0xFFFFFFFF;
    
-	if (node->type == "JOINT")
+   Assert(node->type == "JOINT")
 	{
       
 		For(boneNames)
@@ -1113,10 +1113,11 @@ static void BuildBoneArray(BoneArray bones, DAENode *node, StringArray boneNames
 		}
       
 		Assert(index != 0xFFFFFFFF);
+      //Assert(node->sid == boneNames[index]);
       
 		// note : we do use "index" here, we assume it is _topological_ ordered by parenting, so we can generate the matrices faster later
       
-		Bone *bone = bones + index;
+      Bone *bone = bones + index;
 		bone->name = CopyString(node->name, constantArena);
 		bone->parentIndex = parentIndex;
 		bone->inverseBindShapeMatrix = inverseBindShapeMatrices[index] * bindShapeMatrix;
@@ -1138,15 +1139,21 @@ static void BuildBoneArray(BoneArray bones, DAENode *node, StringArray boneNames
 		bone->interp = MatrixToInterpolationData(mat);
 		Assert(success);
 	}
-	else
-	{
-		Assert(node->type == "NODE");
-	}
    
 	For(node->children)
 	{
 		BuildBoneArray(bones, *it, boneNames, inverseBindShapeMatrices, index, constantArena, bindShapeMatrix);
 	}
+}
+
+static void AssertTopolagicalOrdering(BoneArray bones)
+{
+   
+   Assert(bones[0].parentIndex == 0xFFFFFFFF);
+   for(u32 i = 1; i < bones.amount; i++)
+   {
+      Assert(bones[i].parentIndex < i);
+   }
 }
 
 static void SortByWeight(WeightDataArray arr) // todo for now bouble sort...
@@ -1978,10 +1985,21 @@ static DAEReturn ReadDAE(Arena *constantArena, char *fileName)
                }
             }
             
-            String matIt = source->arr;
+            String boneName= source->id;
+            if(!BeginsWithEat(&boneName, "Armature_")){Die; return{};};
+            u32 index = 0xFFFFFFFF;
             
-            matrixArrayPerBone[it_index] = PushArray(frameArena, m4x4, source->technique.count);
-            For(matrixArrayPerBone[it_index])
+            for(u32 boneIndex = 0; boneIndex < amountOfBones; boneIndex++)
+            {
+               if(BeginsWith(boneName, boneNames[boneIndex]))
+               {
+                  index = boneIndex;
+               }
+            }
+            
+            String matIt = source->arr;
+            matrixArrayPerBone[index] = PushArray(frameArena, m4x4, source->technique.count);
+            For(matrixArrayPerBone[index])
             {
                *it = Eatm4x4(&matIt, &success);
                EatSpaces(&matIt);
@@ -2019,23 +2037,50 @@ static DAEReturn ReadDAE(Arena *constantArena, char *fileName)
       {
          it->boneStates[i] = MatrixToInterpolationData(matrixArrayPerBone[i][it_index]);
       }
-      
       it->t = timeArrayPerBone[0][it_index]; // as they are all the same
    }
-   
-#if 0
-   skeleton.boneNames = jointNames; // right now these break // todo todo todo
-   skeleton.boneTransformes = boneTransformes;
-#endif
    
    BoneArray bones = PushArray(constantArena, Bone, amountOfBones);
    Assert(gatheredData.scenes.amount == 1);
    
    m4x4 bindShapeMatrix = Eatm4x4(&gatheredData.controllers[0].skin.bind_shape_matrix, &success);
    Assert(success);
-   
-   BuildBoneArray(bones, gatheredData.scenes[0].nodes[0], boneNames, inverseBindShapeMatrixArray, 0xFFFFFFFF, constantArena, bindShapeMatrix);
-   
+   {
+      DAENode *node = gatheredData.scenes[0].nodes[0];
+      Assert(node->type == "NODE");
+      
+      String itransformation = {};
+      For(node->transformations)
+      {
+         if (it->type == DAE_Matrix)
+         {
+            itransformation = it->val;
+            break;
+         }
+      }
+      
+      m4x4 initalMat = Eatm4x4(&itransformation, &success);
+      Assert(success);
+      
+      Assert(node->children.amount == 1);
+      
+      node = node->children[0];
+      
+      BuildBoneArray(bones, node, boneNames, inverseBindShapeMatrixArray, 0xFFFFFFFF, constantArena, bindShapeMatrix);
+      
+      AssertTopolagicalOrdering(bones);
+      
+      // todo not sure about this one.
+      bones[0].interp = MatrixToInterpolationData(initalMat  * InterpolationDataToMatrix(bones[0].interp));
+      
+#if 0
+      For(keyFrames)
+      {
+         it->boneStates[0] = MatrixToInterpolationData(initalMat  * InterpolationDataToMatrix(it->boneStates[0]));
+      }
+#endif
+      
+   }
    Skeleton skeleton;
    skeleton.vertices = positions;
    skeleton.vertexMap = skeletonVertexMap;
@@ -2096,97 +2141,97 @@ static DAEReturn ReadDAE(Arena *constantArena, char *fileName)
 
 static Bitmap CreateBitmap(u32* pixels, u32 width, u32 height)
 {
-	Bitmap ret;
-	ret.pixels = pixels;
-	ret.width = width;
-	ret.height = height;
-	return ret;
+   Bitmap ret;
+   ret.pixels = pixels;
+   ret.width = width;
+   ret.height = height;
+   return ret;
 }
 
 
 #pragma pack(push, 1)
 struct BitmapFileHeader
 {
-	u16 bfType;
-	u32 bfSize;
-	u16 bfReserved1;
-	u16 bfReserved2;
-	u32 bfOffBits;
+   u16 bfType;
+   u32 bfSize;
+   u16 bfReserved1;
+   u16 bfReserved2;
+   u32 bfOffBits;
    
-	//infoheader
-	u32 biSize;
-	i32 biWidth;
-	i32 biHeight;
-	u16 biPlanes;
-	u16 biBitCount;
-	u32 compression;
-	u32 sizeImage;
-	i32 biXPerlsPerMeter;
-	i32 biYPerlsPerMeter;
-	u32 biClrUsed;
-	u32 biCLrImpartant;
+   //infoheader
+   u32 biSize;
+   i32 biWidth;
+   i32 biHeight;
+   u16 biPlanes;
+   u16 biBitCount;
+   u32 compression;
+   u32 sizeImage;
+   i32 biXPerlsPerMeter;
+   i32 biYPerlsPerMeter;
+   u32 biClrUsed;
+   u32 biCLrImpartant;
    
-	u32 redMask;
-	u32 greenMask;
-	u32 blueMask;
+   u32 redMask;
+   u32 greenMask;
+   u32 blueMask;
 };
 #pragma pack(pop)
 
 
 static Bitmap CreateBitmap(char* fileName, Arena *arena, bool wrapping = false)
 {
-	Bitmap ret = {};
-	//TODO: maybe check if its actually a bmp
-	File tempFile;
+   Bitmap ret = {};
+   //TODO: maybe check if its actually a bmp
+   File tempFile;
    tempFile = LoadFile(fileName, arena);
    
    
-	void *memPointer = tempFile.memory;
-	if (!memPointer) return ret;
-	
-	BitmapFileHeader *header = (BitmapFileHeader *)memPointer;
+   void *memPointer = tempFile.memory;
+   if (!memPointer) return ret;
    
-	ret.width = header->biWidth;
-	ret.height = header->biHeight;
+   BitmapFileHeader *header = (BitmapFileHeader *)memPointer;
    
-	u8 *bitMemPointer = (u8 *)memPointer;
-	bitMemPointer += header->bfOffBits;
-	ret.pixels = (u32 *)bitMemPointer;
+   ret.width = header->biWidth;
+   ret.height = header->biHeight;
    
-	//switching masks
-	u32 redMask = header->redMask;
-	u32 blueMask = header->blueMask;
-	u32 greenMask = header->greenMask;
-	u32 alphaMask = ~(redMask | blueMask | greenMask);
+   u8 *bitMemPointer = (u8 *)memPointer;
+   bitMemPointer += header->bfOffBits;
+   ret.pixels = (u32 *)bitMemPointer;
    
-	u32 redShift = BitwiseScanForward(redMask);
-	u32 blueShift = BitwiseScanForward(blueMask);
-	u32 greenShift = BitwiseScanForward(greenMask);
-	u32 alphaShift = BitwiseScanForward(alphaMask);
+   //switching masks
+   u32 redMask = header->redMask;
+   u32 blueMask = header->blueMask;
+   u32 greenMask = header->greenMask;
+   u32 alphaMask = ~(redMask | blueMask | greenMask);
    
-	u32 *tempPixels = ret.pixels;
-	for (i32 x = 0; x < header->biWidth; x++)
-	{
-		for (i32 y = 0; y < header->biHeight; y++)
-		{
-			u32 c = *tempPixels;
+   u32 redShift = BitwiseScanForward(redMask);
+   u32 blueShift = BitwiseScanForward(blueMask);
+   u32 greenShift = BitwiseScanForward(greenMask);
+   u32 alphaShift = BitwiseScanForward(alphaMask);
+   
+   u32 *tempPixels = ret.pixels;
+   for (i32 x = 0; x < header->biWidth; x++)
+   {
+      for (i32 y = 0; y < header->biHeight; y++)
+      {
+         u32 c = *tempPixels;
          
-			u32 R = ((c >> redShift) & 0xFF);
-			u32 G = ((c >> greenShift) & 0xFF);
-			u32 B = ((c >> blueShift) & 0xFF);
-			u32 A = ((c >> alphaShift) & 0xFF);
-			float an = (A / 255.0f);
+         u32 R = ((c >> redShift) & 0xFF);
+         u32 G = ((c >> greenShift) & 0xFF);
+         u32 B = ((c >> blueShift) & 0xFF);
+         u32 A = ((c >> alphaShift) & 0xFF);
+         float an = (A / 255.0f);
          
-			R = (u32)((float)R * an);
-			G = (u32)((float)G * an);
-			B = (u32)((float)B * an);
-			R = (u32)((float)R * an);
+         R = (u32)((float)R * an);
+         G = (u32)((float)G * an);
+         B = (u32)((float)B * an);
+         R = (u32)((float)R * an);
          
-			*tempPixels++ = ((A << 24) | (R << 16) | (G << 8) | (B << 0));
-		}
-	}
+         *tempPixels++ = ((A << 24) | (R << 16) | (G << 8) | (B << 0));
+      }
+   }
    
-	return ret;
+   return ret;
 }
 
 #define PullOff(type) *(type *)at; at += sizeof(type);
@@ -2483,37 +2528,37 @@ static bool WriteTexture(char *fileName, Bitmap bitmap)
 
 static bool WriteLevel(char *fileName, Level level, AssetHandler *assetHandler)
 {
-	u8 *mem = PushData(frameArena, u8, 0);
+   u8 *mem = PushData(frameArena, u8, 0);
    
-	*PushStruct(frameArena, u32) = 5; // Version number, do not remove
+   *PushStruct(frameArena, u32) = 5; // Version number, do not remove
    
-	*PushStruct(frameArena, LightSource) = level.lightSource;
+   *PushStruct(frameArena, LightSource) = level.lightSource;
    
-	*PushStruct(frameArena, v3)         = level.camera.pos;
-	*PushStruct(frameArena, Quaternion) = level.camera.orientation;
-	*PushStruct(frameArena, f32)        = level.camera.aspectRatio;
-	*PushStruct(frameArena, f32)        = level.camera.focalLength;
+   *PushStruct(frameArena, v3)         = level.camera.pos;
+   *PushStruct(frameArena, Quaternion) = level.camera.orientation;
+   *PushStruct(frameArena, f32)        = level.camera.aspectRatio;
+   *PushStruct(frameArena, f32)        = level.camera.focalLength;
    
-	*PushStruct(frameArena, u32) = level.entities.amount;
+   *PushStruct(frameArena, u32) = level.entities.amount;
    
-	For(level.entities)
-	{
-		*PushStruct(frameArena, Quaternion) = it->orientation;
-		*PushStruct(frameArena, v3i) = it->physicalPos;
-		*PushStruct(frameArena, v3)  = it->offset;
-		*PushStruct(frameArena, v4)  = it->color;
-		*PushStruct(frameArena, f32) = it->scale;
-		*PushStruct(frameArena, u32) = it->type;
-		*PushStruct(frameArena, u64) = it->flags;
-		String s = GetAssetInfo(assetHandler, it->meshId).name;
-		*PushStruct(frameArena, u32) = s.length;
-		Char *dest = PushData(frameArena, Char, s.length);
-		memcpy(dest, s.data, s.length * sizeof(Char));
-	}
+   For(level.entities)
+   {
+      *PushStruct(frameArena, Quaternion) = it->orientation;
+      *PushStruct(frameArena, v3i) = it->physicalPos;
+      *PushStruct(frameArena, v3)  = it->offset;
+      *PushStruct(frameArena, v4)  = it->color;
+      *PushStruct(frameArena, f32) = it->scale;
+      *PushStruct(frameArena, u32) = it->type;
+      *PushStruct(frameArena, u64) = it->flags;
+      String s = GetAssetInfo(assetHandler, it->meshId).name;
+      *PushStruct(frameArena, u32) = s.length;
+      Char *dest = PushData(frameArena, Char, s.length);
+      memcpy(dest, s.data, s.length * sizeof(Char));
+   }
    
-	u32 size = (u32)((u8*)frameArena->current - mem);
-	File file = CreateFile(mem, size);
-	return WriteEntireFile(fileName, file);
+   u32 size = (u32)((u8*)frameArena->current - mem);
+   File file = CreateFile(mem, size);
+   return WriteEntireFile(fileName, file);
 }
 
 #define PullOff(type) *(type *)at; at += sizeof(type);
@@ -2521,17 +2566,17 @@ static bool WriteLevel(char *fileName, Level level, AssetHandler *assetHandler)
 static Level LoadLevel(String fileName, Arena *arena, AssetHandler *assetHandler)
 {
    File file = LoadFile(FormatCString("level/%s.level", fileName), frameArena);
-	if (!file.fileSize) return {};
+   if (!file.fileSize) return {};
    
-	u8 *at = (u8 *)file.memory;
-	u32 version = PullOff(u32);
+   u8 *at = (u8 *)file.memory;
+   u32 version = PullOff(u32);
    
    Level level;
    
    level.name = CopyString(fileName, arena);
    level.lightSource = PullOff(LightSource);
    
-	level.camera.pos = PullOff(v3);
+   level.camera.pos = PullOff(v3);
    
    if(version < 5)
    {
@@ -2545,33 +2590,33 @@ static Level LoadLevel(String fileName, Arena *arena, AssetHandler *assetHandler
       level.camera.orientation = PullOff(Quaternion);
    }
    
-	level.camera.aspectRatio = PullOff(f32);
-	level.camera.focalLength = PullOff(f32);
+   level.camera.aspectRatio = PullOff(f32);
+   level.camera.focalLength = PullOff(f32);
    
-	u32 meshAmount = PullOff(u32);
+   u32 meshAmount = PullOff(u32);
    
-	level.entities = PushArray(arena, EntityCopyData, meshAmount);
+   level.entities = PushArray(arena, EntityCopyData, meshAmount);
    
-	For(level.entities)
-	{
-		it->orientation = PullOff(Quaternion);
-		it->physicalPos = PullOff(v3i);
-		it->offset = PullOff(v3);
-		it->color = PullOff(v4);
-		it->scale = PullOff(f32);
+   For(level.entities)
+   {
+      it->orientation = PullOff(Quaternion);
+      it->physicalPos = PullOff(v3i);
+      it->offset = PullOff(v3);
+      it->color = PullOff(v4);
+      it->scale = PullOff(f32);
       it->type = (EntityType)PullOff(u32);
-		it->flags = PullOff(u64);
+      it->flags = PullOff(u64);
       
-		u32 nameLength = PullOff(u32);
-		String name = CreateString((Char *)at, nameLength);
+      u32 nameLength = PullOff(u32);
+      String name = CreateString((Char *)at, nameLength);
       at += nameLength * sizeof(Char);
       
       it->meshId = RegisterAsset(assetHandler, Asset_Mesh, name);
-	}
+   }
    
-	level.blocksNeeded = 10000;
+   level.blocksNeeded = 10000;
    
-	return level;
+   return level;
 }
 
 
@@ -2612,53 +2657,53 @@ static void DoNothing(void *x) { }
 
 static bool ConvertTTF(char *fileName)
 {
-	File inpFile = LoadFile(fileName, frameArena);
+   File inpFile = LoadFile(fileName, frameArena);
    
    if(!inpFile.amount) return false;
    
-	u32 width = 1024;
-	u32 height = 1024;
-	u8 *pixels = PushData(frameArena, u8, width * height);
-	
-	u32 amountOfChars = 255;
-	f32 charHeight = 64.0f;
-	stbtt_bakedchar *charData = PushData(frameArena, stbtt_bakedchar, amountOfChars);
-	stbtt_BakeFontBitmap((char *)inpFile.memory, 0, charHeight, pixels, width, height, 0, amountOfChars, charData);
+   u32 width = 1024;
+   u32 height = 1024;
+   u8 *pixels = PushData(frameArena, u8, width * height);
    
-	u32 *output = PushData(frameArena, u32, width * height);
-	u32 *out = output;
-	u8 *inp = pixels;
+   u32 amountOfChars = 255;
+   f32 charHeight = 64.0f;
+   stbtt_bakedchar *charData = PushData(frameArena, stbtt_bakedchar, amountOfChars);
+   stbtt_BakeFontBitmap((char *)inpFile.memory, 0, charHeight, pixels, width, height, 0, amountOfChars, charData);
    
-	for (u32 h = 0; h < height; h++)
-	{
-		for (u32 w = 0; w < width; w++)
-		{
-			u8 source = *inp++;
-			//u32 color = 0xFFFFFFFF;
-			u32 color = source << 24 | source << 16 | source << 8 | source << 0;
-			*out++ = color;
-		}
-	}
+   u32 *output = PushData(frameArena, u32, width * height);
+   u32 *out = output;
+   u8 *inp = pixels;
    
-	CharInfoArray charInfo = PushArray(frameArena, CharInfo, amountOfChars);
-	v2 scale = V2(1.0f / (f32)width, 1.0f / (f32)height);
-	for (u32 i = 0; i < amountOfChars; i++)
-	{
-		stbtt_bakedchar *cur = charData + i;
-		CharData data;
+   for (u32 h = 0; h < height; h++)
+   {
+      for (u32 w = 0; w < width; w++)
+      {
+         u8 source = *inp++;
+         //u32 color = 0xFFFFFFFF;
+         u32 color = source << 24 | source << 16 | source << 8 | source << 0;
+         *out++ = color;
+      }
+   }
+   
+   CharInfoArray charInfo = PushArray(frameArena, CharInfo, amountOfChars);
+   v2 scale = V2(1.0f / (f32)width, 1.0f / (f32)height);
+   for (u32 i = 0; i < amountOfChars; i++)
+   {
+      stbtt_bakedchar *cur = charData + i;
+      CharData data;
       
-		data.xAdvance = cur->xadvance;
-		data.minUV = scale * V2(cur->x0, cur->y0);
-		data.maxUV = scale * V2(cur->x1, cur->y1);
-		data.width = cur->x1 - cur->x0;
-		data.height = cur->y1 - cur->y0;
-		data.xOff = cur->xoff;
-		data.yOff = cur->yoff;
+      data.xAdvance = cur->xadvance;
+      data.minUV = scale * V2(cur->x0, cur->y0);
+      data.maxUV = scale * V2(cur->x1, cur->y1);
+      data.width = cur->x1 - cur->x0;
+      data.height = cur->y1 - cur->y0;
+      data.xOff = cur->xoff;
+      data.yOff = cur->yoff;
       
-		charInfo[i] = data;
-	}
-	Bitmap bitmap = CreateBitmap(output, width, height);
-	
+      charInfo[i] = data;
+   }
+   Bitmap bitmap = CreateBitmap(output, width, height);
+   
    String head = S(fileName);
    EatToCharFromBackReturnTail(&head, '.');
    EatToCharReturnHead(&head, '/');
