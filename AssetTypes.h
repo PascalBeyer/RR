@@ -325,6 +325,20 @@ struct InterpolationData // naming?
 };
 DefineArray(InterpolationData);
 
+static InterpolationData operator*(InterpolationData a, InterpolationData b)
+{
+   m3x3 mat = QuaternionToMatrix3(a.orientation);
+   InterpolationData ret;
+   
+   v3 gScale = a.scale * (mat* b.scale);
+   ret.scale = V3(Abs(gScale.x), Abs(gScale.y), Abs(gScale.z));
+   
+   ret.translation = a.translation + a.scale * (mat * b.translation);
+   ret.orientation = a.orientation * b.orientation;
+   
+   return ret;
+}
+
 // inverse almost as fast
 static m4x4 InterpolationDataToMatrix(v3 translation, Quaternion orientation, f32 scale)
 {

@@ -177,8 +177,8 @@ static void InitGame(int screenWidth, int screenHeight, WorkHandler *workHandler
 }
 
 static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands, Input input, SoundBuffer *soundBuffer)
-{	
-	TimedBlock;
+{
+   TimedBlock;
 	AssetHandler *assetHandler = &state->assetHandler;
 	Editor *editor = &state->editor;
 	SoundMixer *soundMixer = &state->soundMixer;

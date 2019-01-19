@@ -30,8 +30,6 @@ static PathCreator InitPathCreator()
 // todo copy and paste of editor.h, they will differ eventrually, because this shout utilize the entity tree.
 static Entity *GetHotEntity(Camera cam, EntityManager *entityManager, AssetHandler *handler,v2 mousePosZeroToOne)
 {
-   
-   
    v3 camP = cam.pos; // todo camera or debugCamera? Maybe we should again unify them
    v3 camD = ScreenZeroToOneToDirecion(cam, mousePosZeroToOne);
    
@@ -220,7 +218,7 @@ static b32 MaybeMoveEntity(Entity *e, v3i dir, EntityManager *entityManager)
 		return false;
 	}
    RemoveEntityFromTree(entityManager, e);
-   //e->physicalPos += dir;
+   e->physicalPos += dir;
    InsertEntity(entityManager, e);
    
 	e->flags |= EntityFlag_IsMoving;
@@ -283,7 +281,13 @@ static void GameExecuteUpdate(EntityManager *entityManager, ExecuteData *exe, As
       }
       
       u32 animationID = RegisterAsset(assetHandler, Asset_Animation, "dudeTry1Run.animation");
-      AddAnimation(entityManager->animationStates + (u32)(it - entityManager->unitData.data), animationID, 1.0f, 0.0f);
+      AnimationState *anim = entityManager->animationStates + (u32)(it - entityManager->unitData.data);
+      InterpolationData data;
+      data.orientation = e->orientation;
+      data.scale       = V3(e->scale, e->scale, e->scale);
+      data.translation = V3(e->physicalPos) + e->offset;
+      AddAnimation(anim, animationID, 1.0f, 0.0f, data);
+      AddIK(anim, 1, V3(), 'x', 1, 1);
       
    }
    
@@ -331,11 +335,15 @@ static void GameExecuteUpdate(EntityManager *entityManager, ExecuteData *exe, As
       
       InterpolationDataArray local = GetLocalTransforms(animation, first->t);
       
-      state->localTransforms = local;
-      
       // todo at  IK stuff here
+      ForC(state->iks)
+      {
+         if(it->boneIndex == 0xFFFFFFFF) continue;
+         
+         ApplyIK(mesh->skeleton.bones, local, it->boneIndex, it->focusP, it->depth, it->axis, it->iterations);
+      }
       
-      m4x4Array bones = LocalToWorld(&mesh->skeleton, state->localTransforms);
+      m4x4Array bones = LocalToWorld(&mesh->skeleton, local);
       
       for (u32 i = 0; i < mesh->skeleton.bones.amount; i++)
       {

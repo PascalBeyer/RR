@@ -97,33 +97,60 @@ static m4x4Array LocalToWorld(Skeleton *skeleton, InterpolationDataArray data)
    return ret;
 }
 
-static void ApplyIK(BoneArray bones, InterpolationDataArray local, m4x4Array spaceT, u32 index, v3 pos)
+static void ApplyIK(BoneArray bones, InterpolationDataArray local, u32 index, v3 pos, u32 desiredDepth, char axis, u32 iterations)
 {
-   Quaternion cur = QuaternionId();
+   v3 dir;
+   switch (axis)
+   {
+      case 'x':
+      {
+         dir = V3(1, 0, 0);
+      }break;
+      case 'y':
+      {
+         dir = V3(0, 1, 0);
+      }break;
+      case 'z':
+      {
+         dir = V3(0, 0, 1);
+      }break;
+      default:
+      {
+         Die;
+         dir = V3();
+      }
+   }
    
+   InterpolationDataArray relevantData = PushArray(frameArena, InterpolationData, 0);
    for(u32 it = index; it != 0xFFFFFFFF; it = bones[it].parentIndex)
    {
-      if(bones[it].parentIndex == 0xFFFFFFFF) break;
-      InterpolationData spaceData = MatrixToInterpolationData(spaceT[it]);
+      *PushStruct(frameArena, InterpolationData) = local[it];
+   }
+   EndArray(frameArena, InterpolationData, relevantData);
+   
+   for(i32 it = relevantData.amount - 2; it >= 0; it--)
+   {
+      relevantData[it] = relevantData[it] * relevantData[it + 1];
+   }
+   
+   Quaternion cur = QuaternionId();
+   u32 depth = 0;
+   u32 dataIndex = relevantData.amount - 1;
+   for(u32 it = index; it != 0xFFFFFFFF; it = bones[it].parentIndex)
+   {
+      InterpolationData spaceData = relevantData[dataIndex--];
       spaceData.orientation *= cur;
       m3x3 mat = QuaternionToMatrix3(spaceData.orientation);
-      v3 view = mat * V3(1, 0, 0);
+      v3 view = mat * dir;
       v3 boneP = spaceData.translation;
       
       local[it].orientation = LookAt(Normalize(view - boneP), Normalize(view - pos)) * local[it].orientation;
       
       cur = local[it].orientation * cur;
       *PushStruct(frameArena, u32) = it;
-   }
-   
-   // recalc all matrices
-   spaceT[0] = InterpolationDataToMatrix(local[0]);
-   for (u32 i = 1; i < bones.amount; i++)
-   {
-      Bone *bone = bones + i;
-      Assert(bone->parentIndex < i);
-      // this way around: first transform the hand -> transform the hand according to the arm transform.
-      spaceT[i] = spaceT[bone->parentIndex] * InterpolationDataToMatrix(local[i]);
+      
+      depth++;
+      if(depth >= desiredDepth) break;
    }
    
 }
@@ -133,6 +160,8 @@ struct AnimationInput // unused if animationId = 0xFFFFFFFF
    u32 animationId;
    f32 timeScale;
    f32 t;
+   
+   InterpolationData objectTransform;
 };
 
 struct IKInput // unused if boneIndex = 0xFFFFFFFF
@@ -151,19 +180,18 @@ struct AnimationState
    //f32 animationLerpT;
    AnimationInput animations[2];
    IKInput iks[5]; // we should make this like an enum IK_Head, IK_LArm, ... orsth
-   InterpolationDataArray localTransforms;
    m4x4Array boneStates;
 };
-
 DefineDynamicArray(AnimationState);
 
-
-static void AddAnimation(AnimationState *state, u32 animationId, f32 timeScale, f32 startT)
+static void AddAnimation(AnimationState *state, u32 animationId, f32 timeScale, f32 startT, InterpolationData mat)
 {
    AnimationInput toAdd;
    toAdd.animationId = animationId;
-   toAdd.timeScale = timeScale;
-   toAdd.t = startT;
+   toAdd.timeScale   = timeScale;
+   toAdd.t           = startT;
+   toAdd.objectTransform = mat;
+   
    if(state->animations[0].animationId == 0xFFFFFFFF)
    {
       state->animations[0] = toAdd;
@@ -181,9 +209,9 @@ static void AddAnimation(AnimationState *state, u32 animationId, f32 timeScale, 
 
 static void AddIK(AnimationState *state, u32 boneIndex, v3 focusP, Char axis, u32 iterations, u32 depth)
 {
-   for(u32 i = 0; i < 3; i++)
+   for(u32 i = 0; i < ArrayCount(state->iks); i++)
    {
-      if(state->iks[i].boneIndex != 0xFFFFFFFF)
+      if(state->iks[i].boneIndex == 0xFFFFFFFF)
       {
          IKInput toAdd;
          toAdd.boneIndex = boneIndex;

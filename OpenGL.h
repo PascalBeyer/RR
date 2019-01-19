@@ -659,7 +659,7 @@ static void BeginUseProgram(OpenGLContext *context, OpenGLProgram *prog, RenderS
    
 }
 
-static void SetUpUniforms(OpenGLProgram *prog, RenderSetup setup, OpenGLUniformInfo uniforms)
+static void SetupUniforms(OpenGLProgram *prog, RenderSetup setup, OpenGLUniformInfo uniforms)
 {
    m4x4 mat = setup.cameraTransform * uniforms.objectTransform;
    glUniformMatrix4fv(prog->cameraTransform, 1, GL_TRUE, mat.a[0]);
@@ -1114,7 +1114,7 @@ static void RenderIntoShadowMap(RenderCommands *rg, OpenGLContext *context)
             uniforms.vertexBuffer    = meshHeader->vertexVBO;
             uniforms.indexBuffer     = meshHeader->indexVBO;
             
-            SetUpUniforms(prog, currentSetup, uniforms);
+            SetupUniforms(prog, currentSetup, uniforms);
             
             BeginAttribArrays(prog, meshHeader->vertexType);
             
@@ -1185,10 +1185,8 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
    m4x4 shadowMat = {};
    OpenGLProgram *prog = NULL;
    
-   
    for (u32 pBufferIt = 0; pBufferIt < rg->pushBufferSize;)
    {
-      
       RenderGroupEntryHeader *header = (RenderGroupEntryHeader *)(rg->pushBufferBase + pBufferIt);
       
       switch (header->type)
@@ -1211,11 +1209,12 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             EntryTexturedQuads *quadHeader = (EntryTexturedQuads *)header;
             
             OpenGLUniformInfo uniforms;
-            uniforms.shadowMat = shadowMat;
+            uniforms.shadowMat    = shadowMat;
             uniforms.vertexBuffer = context->vertexBuffer;
             uniforms.indexBuffer  = context->indexBuffer;
+            uniforms.textureIndex = quadHeader->vertexBuffer[0].textureIndex; // so textured works
             
-            SetUpUniforms(prog, currentSetup, uniforms);
+            SetupUniforms(prog, currentSetup, uniforms);
             BeginAttribArraysPCUI(prog);
             
             glBufferData(GL_ARRAY_BUFFER, 4u * quadHeader->count * sizeof(quadHeader->vertexBuffer[0]), quadHeader->vertexBuffer, GL_STREAM_DRAW);
@@ -1235,7 +1234,7 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             uniforms.shadowMat = shadowMat;
             uniforms.vertexBuffer = context->vertexBuffer;
             
-            SetUpUniforms(prog, currentSetup, uniforms);
+            SetupUniforms(prog, currentSetup, uniforms);
             
             BeginAttribArraysPC(prog);
             
@@ -1258,7 +1257,7 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             uniforms.indexBuffer     = meshHeader->indexVBO;
             uniforms.boneStates      = meshHeader->boneStates;
             
-            SetUpUniforms(prog, currentSetup, uniforms);
+            SetupUniforms(prog, currentSetup, uniforms);
             
             BeginAttribArrays(prog, meshHeader->vertexType);
             
@@ -1307,7 +1306,7 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             OpenGLUniformInfo uniforms;
             uniforms.vertexBuffer = context->vertexBuffer;
             
-            SetUpUniforms(prog, currentSetup, uniforms);
+            SetupUniforms(prog, currentSetup, uniforms);
             
             BeginAttribArraysPC(prog);
             glBufferData(GL_ARRAY_BUFFER, lineHeader->vertexCount * sizeof(VertexFormatPC), lineHeader->data, GL_STREAM_COPY);

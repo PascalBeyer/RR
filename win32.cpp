@@ -29,7 +29,9 @@
 #define END_TIMED_BLOCK(ID)
 #endif
 
-#define Assert(Expression) if(!(Expression)) {printf("Assert in Function %s, File %s line %i.\n", __FUNCTION__,  __FILE__, __LINE__);  fflush(stdout); __debugbreak();}
+#define Assert(Expression) if(!(Expression)) {printf("Assert in Function %s, File %s line %i.\n", __FUNCTION__,  __FILE__, __LINE__); fflush(stdout);  __debugbreak();}
+
+
 #define InvalidDefaultCase \
 default: \
 {\
@@ -942,6 +944,15 @@ static void HandleWindowsMassages(KeyMessageBuffer *buffer) //todo make this buf
 int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int showCode)
 {
    printf("do we work?\n");
+   
+   
+   unsigned short __stdcall RtlCaptureStackBackTrace(
+	   unsigned long FramesToSkip,
+	   unsigned long FramesToCapture,
+	   void ** BackTrace,
+	   unsigned long *BackTraceHash
+      );
+   
    
 #if 0
    AllocConsole();
