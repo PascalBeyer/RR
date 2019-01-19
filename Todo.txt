@@ -87,6 +87,12 @@ rethink how the snap to tilemap system works // done?
 direction keys do not record undos right now. // done?
 get rid of most/all dynamic allocations in AssetLoading // done?
 when exactly do we call resetEntity tree.// noone!
+make font into asset, would also make the draw String call way better, also solves the problem where I do not currently know where it is supposed to be stored // done?
+figure out a way to detect changes to the render setup, so we can reduce API calls. // done?
+make a find shader thing that matches the flags and the returns a shader that fits the job. //done?
+maybe rendersetup should have the shader...., because I have to repeat myself alot right now in opengl // done?
+todo  make PushRenderSetup have optional lightsource. // done?
+Animation player (save in skeleton?, save in world?) // entityManager
 
 
 // RANDOM NOTES:
@@ -96,9 +102,7 @@ I had the pathCreator render the tiles in black, and it looked quite sweet.
 
 Asset:
 Get PNG loader
-make font into asset, would also make the draw String call way better, also solves the problem where I do not currently know where it is supposed to be stored
 animationInfo in assethandler
-
 
 Tweekers:
 make tweek search the file, if no loaded tweeker variable is found. maybe write out the tweekerfile instead of writing out all tweeker values.
@@ -110,16 +114,12 @@ fix the verbose tweeker hack that load the file everytime we write
 OpenGL:
 associating data to triangles, to open gl... like normals.
 figure out how to let buffers of differant multisample counts interact.
-figure out a way to detect changes to the render setup, so we can reduce API calls.
-maybe rendersetup should have the shader...., because I have to repeat myself alot right now in opengl
-make a find shader thing that matches the flags and the returns a shader that fits the job.
 
 MISC:
 render strings leftbound
 look at tempoary memory system.
 upscale bmps
 string.h memcpy
-todo  make PushRenderSetup have optional lightsource.
 
 DEBUG:
 make debug Ui for amount of memory used.
@@ -137,9 +137,7 @@ Execute:
 speed meter
 redo lighting, kd-tree for AABB's? make it just 4 u16 per triangle and work with the old system?
 
-
 Animation:
-Animation player (save in skeleton?, save in world?)
 do weight averageing in the loading.
 I feel like skeletons and meshes should be parralel. And so should bones and bone names
 
@@ -148,8 +146,6 @@ GetHotEntity should use the entity tree. Not sure what acturally uses that anywa
 maybe make arenas be on the things, so we do not have too visit 2 pointers.
 
 tocheck wheather on cam do project and check intersection with unit cube.
-
-animatedMesh should probably never have an objectTransform, as that is the same thing as the boneTransform of the root
 
 lets do exactly what the dude does. 
 ->accelerationTilt.
@@ -164,8 +160,8 @@ lets do exactly what the dude does.
 
 my current 'renderCode' is in entity.h "GetRenderPos"
 
-Right now the cleanest seems to ignore the usual entity data and just manipulate the root bone...
 GetRenderpos does nothing
+Right now the cleanest seems to ignore the usual entity data and just manipulate the root bone...
 we are not considering the "node" that the mesh has right not.... I think this only matters for the bind shape?
 
 Probably make orthogonal stuff its own pass?
