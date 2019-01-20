@@ -166,3 +166,5 @@ we are not considering the "node" that the mesh has right not.... I think this o
 
 Probably make orthogonal stuff its own pass?
 kinda feels like Editor wants to have its own concept of entity at this point....
+
+I think we want to get rid of the time thing and make orientation, visualPos updates based on dt, and switch pos, if we can, otherwise stall on the half way for now.

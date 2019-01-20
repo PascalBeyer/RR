@@ -82,7 +82,7 @@ static void RenderPathCreator(RenderGroup *rg, EntityManager *entityManager, Exe
       exe->at = 0;
       exe->t = 0.0f;
       
-		For(path)
+		for(u32 i = 0; i < path.amount; i++)
 		{
 			DrawNumberOnTile(rg, pathCounter, e->physicalPos);
 			GameExecuteUpdate(entityManager, exe, assetHandler, 1.0f, input); // dt should be how long the action takes.
@@ -131,7 +131,6 @@ static void RenderPathCreator(RenderGroup *rg, EntityManager *entityManager, Exe
 		{
 			DrawNumberOnTile(rg, pathCounter, pos, newTileColor);
 		}
-      
 	}
    
    PushProjectiveSetup(rg, camera, exe->lightSource, ShaderFlags_ZBias);
@@ -158,7 +157,7 @@ static void RenderPathCreator(RenderGroup *rg, EntityManager *entityManager, Exe
             Entity *e = GetEntity(entityManager, state->serial);
             
             PushAnimatedMesh(rg, e->meshId, e->orientation, e->visualPos, e->scale, V4(0.75f, 0.0f, 0.0f, 0.0f), state->boneStates);
-            PushAnimatedMesh(rg, e->meshId, e->orientation, e->visualPos, e->scale, e->color * e->frameColor, state->boneStates);
+            PushAnimatedMesh(rg, e->meshId, e->orientation, V3(e->initialPos), e->scale, e->color * e->frameColor, state->boneStates);
          }
          
 #else
@@ -218,7 +217,6 @@ static void RenderSimulate(RenderGroup *rg, EntityManager *entityManager, Execut
    PushProjectiveSetup(rg, camera, exe->lightSource, ShaderFlags_ZBias);
    if(exe->debug)
    {
-      
       For(entityManager->animationStates)
       {
          Entity *e = GetEntity(entityManager, it->serial);

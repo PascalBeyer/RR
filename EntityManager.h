@@ -2,7 +2,7 @@
 #define MaxUnitInstructions 100
 enum UnitInstruction
 {
-	Unit_Wait,
+   Unit_Wait,
 	Unit_MoveUp,
 	Unit_MoveDown,
 	Unit_MoveLeft,
@@ -14,12 +14,11 @@ DefineDynamicArray(UnitInstruction);
 
 struct UnitData
 {
-   UnitInstructionDynamicArray instructions;
    u32 serial;
+   UnitInstructionDynamicArray instructions;
+   UnitInstruction currentInstruction;
    u32 at;
    f32 t;
-   b32 needsReupdate;
-   b32 isWalking;
 };
 DefineDynamicArray(UnitData);
 
@@ -493,7 +492,7 @@ static void ResetEntityManager(EntityManager *entityManager)
 {
    For(entityManager->unitData)
    {
-      it->t = 0.0f;
+      it->t = 1.0f;
       it->at = 0;
    }
    
@@ -655,7 +654,7 @@ static void InitEntityManager(EntityManager *entityManager, Arena *currentStateA
    {
       for(u32 i = 0; i < 10; i++)
       {
-         ArrayAdd(&it->instructions, (UnitInstruction)(RandomU32(&series) % Unit_Instruction_Count));
+         ArrayAdd(&it->instructions, (UnitInstruction)((RandomU32(&series)>>10) % Unit_Instruction_Count));
       }
    }
 #endif

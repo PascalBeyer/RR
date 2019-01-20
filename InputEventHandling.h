@@ -698,6 +698,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                   {
                      Entity *mesh = GetEntity(editorEntities, *it);
                      mesh->physicalPos += inc;
+                     mesh->visualPos += V3(inc);
                   }
                   EditorPushUndo(editor);
                   ResetSelectionInitials(editor);
@@ -710,6 +711,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                   {
                      Entity *mesh = GetEntity(editorEntities, *it);
                      mesh->physicalPos += inc;
+                     mesh->visualPos += V3(inc);
                   }
                   EditorPushUndo(editor);
                   ResetSelectionInitials(editor);
@@ -724,6 +726,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      {
                         Entity *mesh = GetEntity(editorEntities, *it);
                         mesh->physicalPos += V3i(0, 0, -1);
+                        mesh->visualPos += V3(0, 0, -1);
                      }
                      break;
                   }
@@ -733,6 +736,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                   {
                      Entity *mesh = GetEntity(editorEntities, *it);
                      mesh->physicalPos += inc;
+                     mesh->visualPos += V3(inc);
                   }
                   EditorPushUndo(editor);
                   ResetSelectionInitials(editor);
@@ -746,6 +750,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      {
                         Entity *mesh = GetEntity(editorEntities, *it);
                         mesh->physicalPos += V3i(0, 0, 1);
+                        mesh->visualPos += V3(0, 0, 1);
                      }
                      break;
                   }
@@ -755,6 +760,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                   {
                      Entity *mesh = GetEntity(editorEntities, *it);
                      mesh->physicalPos += inc;
+                     mesh->visualPos += V3(inc);
                   }
                   EditorPushUndo(editor);
                   ResetSelectionInitials(editor);

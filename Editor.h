@@ -447,6 +447,7 @@ static void RestoreEntity(EditorEntities *editorEntities, u32 serial, u32 meshID
 	ret.scale = scale;
 	ret.orientation = orientation;
 	ret.physicalPos = pos;
+   ret.initialPos  = pos;
 	ret.visualPos    = V3(pos) + offset;
 	ret.color = color;
 	ret.frameColor = V4(1, 1, 1, 1);

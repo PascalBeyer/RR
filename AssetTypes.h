@@ -62,7 +62,7 @@ struct EntityData
    f32 scale;
    
    EntityType type;
-   u64 flags;
+   u64 flags; // this is kinda useless
    
 	u32 meshId;
 };
@@ -78,7 +78,8 @@ static EntityData EntityToData(Entity e)
 	ret.scale         = e.scale;
 	ret.type          = e.type;
 	ret.physicalPos   = e.physicalPos;
-	ret.offset        = e.visualPos - V3((u32)e.visualPos.x, (u32)e.visualPos.y, (u32)e.visualPos.z);
+   
+	ret.offset        = e.visualPos - V3(e.physicalPos);
 	return ret;
    
 }
@@ -87,6 +88,7 @@ static void ApplyEntityDataToEntity(Entity *e, EntityData *data)
 {
    e->orientation = data->orientation;
    e->physicalPos = data->physicalPos;
+   e->initialPos  = data->physicalPos;
    e->visualPos   = V3(data->physicalPos) + data->offset;
    e->color       = data->color;
    e->scale	   = data->scale;

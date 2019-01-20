@@ -26,7 +26,6 @@ static PathCreator InitPathCreator()
 	return ret;
 }
 
-
 // todo copy and paste of editor.h, they will differ eventrually, because this shout utilize the entity tree.
 static Entity *GetHotEntity(Camera cam, EntityManager *entityManager, AssetHandler *handler,v2 mousePosZeroToOne)
 {
@@ -251,62 +250,67 @@ static void GameExecuteUpdate(EntityManager *entityManager, ExecuteData *exe, As
    
    For(entityManager->unitData)
    {
-      it->t += timePassed;
       if(!it->instructions) continue;
       
-      if(!it->needsReupdate)
-         // this relies on the fact, that timePassed is never to big which eventually I want it to be
-      {
-         if(it->t <= 1.0f)
-         {
-            continue;
-         }
-         
-         it->t -= 1.0f;
-         it->at++;
-         if(it->at >= it->instructions.amount)
-         {
-            it->at = 0;
-         }
-         
-      }
-      
-#if 0
-      UnitInstruction step = it->instructions[it->at];
-#else
-      UnitInstruction step = (UnitInstruction)(RandomU32(&series) % Unit_Instruction_Count);
-#endif
-      
-      v3i dir = GetAdvanceForOneStep(step);
-      
+      it->t += timePassed;
       Entity *e = GetEntity(entityManager, it->serial);
-      bool moved = MaybeMoveEntity(e, dir, entityManager);
-      if(!moved)
-      {
-         it->needsReupdate = true;
-         continue;
-      }
       
-      u32 animationID = RegisterAsset(assetHandler, Asset_Animation, "Push.animation");
-      AnimationState *anim = entityManager->animationStates + (u32)(it - entityManager->unitData.data);
-      InterpolationData data;
-      data.orientation = e->orientation;
-      data.scale       = V3(e->scale, e->scale, e->scale);
-      data.translation = e->visualPos;
-      AddAnimation(anim, animationID, 1.0f, 0.0f, data);
-      
-      v3 delta = V3(100, 100, 100);
-      For(other, entityManager->unitArray)
+      if(it->t >= 1.0f)
       {
-         v3 thisDelta = V3(other->physicalPos - e->physicalPos);
-         if(QuadNorm(thisDelta) < QuadNorm(delta))
+         UnitInstruction step = it->instructions[it->at % it->instructions.amount];
+         v3i dir = GetAdvanceForOneStep(step);
+         
+         bool moved = MaybeMoveEntity(e, dir, entityManager);
+         if(moved)
          {
-            delta = thisDelta;
+            it->currentInstruction = step;
+            it->at++;
+            it->t -= 1.0f;
+            
+            { // supply animations
+               
+               // todo where to store these locally?
+               u32 animationID = RegisterAsset(assetHandler, Asset_Animation, "Push.animation");
+               AnimationState *anim = entityManager->animationStates + (u32)(it - entityManager->unitData.data);
+               InterpolationData data;
+               data.orientation = e->orientation;
+               data.scale       = V3(e->scale, e->scale, e->scale);
+               data.translation = e->visualPos;
+               AddAnimation(anim, animationID, 1.0f, 0.0f, data);
+               
+               v3 delta;
+               if(RandomU32(&series) % 2)
+               {
+                  delta = V3(100, 100, 100);
+                  For(other, entityManager->unitArray)
+                  {
+                     v3 thisDelta = (other->visualPos - e->visualPos);
+                     if(QuadNorm(thisDelta) < QuadNorm(delta))
+                     {
+                        delta = thisDelta;
+                     }
+                  }
+               }
+               else
+               {
+                  delta = (exe->camera.pos - e->visualPos);
+               }
+               
+               AddIK(anim, 1, delta, 'x', 1, 1);
+            }
+         }
+         else
+         {
+            it->t = 1.0f;
+            // supply blocked animation?
          }
       }
       
-      AddIK(anim, 1, delta, 'x', 1, 1);
-      it->needsReupdate = false;
+      UnitInstruction step = it->currentInstruction;
+      v3i dir        = GetAdvanceForOneStep(step);
+      e->visualPos   = V3(e->physicalPos) - (1.0f - it->t) * V3(dir);
+      e->orientation = AxisAngleToQuaternion((f32)atan2f((f32)dir.x, (f32)dir.y), V3(0, 0, 1));
+      
    }
    
    For(s, entityManager->animationStates)
@@ -344,10 +348,8 @@ static void GameExecuteUpdate(EntityManager *entityManager, ExecuteData *exe, As
       
       KeyFramedAnimation *animation = GetAnimation(assetHandler, first->animationId);
       
-      
       InterpolationDataArray local = GetLocalTransforms(animation, first->t);
       
-      // todo at  IK stuff here
       ForC(state->iks)
       {
          if(it->boneIndex == 0xFFFFFFFF) continue;
