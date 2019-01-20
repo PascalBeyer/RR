@@ -35,6 +35,6 @@ command_list = {
 };
 
 
-fkey_command[2] = "msDev";
+fkey_command[12] = "msDev";
 fkey_command[4] = "run";
-fkey_command[5] = "build";
+fkey_command[3] = "build";

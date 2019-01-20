@@ -315,7 +315,7 @@ static void AddMeshHelper(StringArray args)
    if (succsess)
    {
 		TriangleMesh *mesh = GetMesh(&gameState.assetHandler, id);
-		EntityCopyData data;
+		EntityData data;
 		data.color = V4(1, 1, 1, 1);
 		data.meshId = id;
 		data.orientation = { 1, 0, 0, 0 };

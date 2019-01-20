@@ -7,6 +7,8 @@ enum UnitInstruction
 	Unit_MoveDown,
 	Unit_MoveLeft,
 	Unit_MoveRight,
+   
+   Unit_Instruction_Count,
 };
 DefineDynamicArray(UnitInstruction);
 
@@ -177,7 +179,7 @@ struct EntityManager
    };
    AnimationStateDynamicArray animationStates; // parralel to unitArray
    
-   u32 entitySerializer;
+   u32 serializer;
    EntitySerialResultDynamicArray entitySerialMap; // this is just huge and that fine???
 };
 
@@ -426,62 +428,45 @@ static void MoveEntityInTree(EntityManager *entityManager, Entity *e, v3i by)
    InsertEntity(entityManager, e);
 }
 
-static Entity *CreateEntityInternal(EntityManager *entityManager, u32 meshID, f32 scale, Quaternion orientation, v3i pos, v3 offset, v4 color, EntityType type, u64 flags)
+static Entity *CreateEntityInternal(EntityManager *entityManager, EntityData data)
 {
    Entity ret;
-   ret.meshId = meshID;
-   ret.scale = scale;
-   ret.orientation = orientation;
-   ret.physicalPos = pos;
-   ret.initialPos = pos;
-   ret.offset = offset;
-   ret.color = color;
-   ret.frameColor = V4(1, 1, 1, 1);
-   ret.serial = entityManager->entitySerializer++;
-   ret.type = type;
-   ret.flags = flags;
+   ApplyEntityDataToEntity(&ret, &data);
    
-   Assert(type < Entity_Count);
+   ret.serial = entityManager->serializer++;
+   ret.initialPos = ret.physicalPos;
+   Assert(ret.type < Entity_Count);
    
-   u32 arrayIndex = ArrayAdd(&entityManager->entityArrays[type], ret);
+   u32 arrayIndex = ArrayAdd(&entityManager->entityArrays[ret.type], ret);
    
    Assert(ret.serial == entityManager->entitySerialMap.amount);
    EntitySerialResult toAdd;
    toAdd.index = (u16)arrayIndex;
-   toAdd.type = (u16)type;
+   toAdd.type = (u16)ret.type;
    ArrayAdd(&entityManager->entitySerialMap, toAdd);
-   if (flags) // entity != none? // move this out?
+   if (ret.flags) // entity != none? // move this out?
    {
-      InsertEntity(entityManager, entityManager->entityArrays[type] + arrayIndex);
+      InsertEntity(entityManager, entityManager->entityArrays[ret.type] + arrayIndex);
    }
    
-   return entityManager->entityArrays[type] + arrayIndex;
+   return entityManager->entityArrays[ret.type] + arrayIndex;
 };
 
-static void RestoreEntity(EntityManager *entityManager, u32 serial, u32 meshID, f32 scale, Quaternion orientation, v3i pos, v3 offset, v4 color, EntityType type, u64 flags)
+static void RestoreEntity(EntityManager *entityManager, EntityData data)
 {
    Entity ret;
-   ret.meshId = meshID;
-   ret.scale = scale;
-   ret.orientation = orientation;
-   ret.physicalPos = pos;
-   ret.offset = offset;
-   ret.color = color;
-   ret.frameColor = V4(1, 1, 1, 1);
-   ret.serial = serial;
-   ret.type = type;
-   ret.flags = flags;
+   ApplyEntityDataToEntity(&ret, &data);
    
-   u32 arrayIndex = ArrayAdd(&entityManager->entityArrays[type], ret);
+   u32 arrayIndex = ArrayAdd(&entityManager->entityArrays[ret.type], ret);
    EntitySerialResult toAdd;
    toAdd.index = (u16)arrayIndex;
-   toAdd.type = (u16)type;
-   Assert(entityManager->entitySerialMap[serial].index == 0xFFFF);
+   toAdd.type = (u16)ret.type;
+   Assert(entityManager->entitySerialMap[ret.serial].index == 0xFFFF);
    
-   entityManager->entitySerialMap[serial] = toAdd;
-   if (flags) // entity != none?
+   entityManager->entitySerialMap[ret.serial] = toAdd;
+   if (ret.flags) // entity != none?
    {
-      InsertEntity(entityManager, entityManager->entityArrays[type] + arrayIndex);
+      InsertEntity(entityManager, entityManager->entityArrays[ret.type] + arrayIndex);
    }
 }
 
@@ -548,8 +533,19 @@ static u64 GetStandardFlags(EntityType type)
 
 static Entity CreateDude(EntityManager *entityManager, v3i pos, f32 scale = 1.0f, Quaternion orientation = {1, 0, 0, 0}, v3 offset = V3(), v4 color = V4(1, 1, 1, 1), u32 meshId = 0xFFFFFFFF)
 {
-   u64 flags = GetStandardFlags(Entity_Dude);
-   Entity *e = CreateEntityInternal(entityManager, meshId, scale, orientation, pos, offset, color, Entity_Dude, flags);
+   EntityData entityData;
+   entityData.orientation = orientation;
+   entityData.physicalPos = pos;
+   entityData.offset      = offset;
+   entityData.color       = color;
+   entityData.scale       = scale;
+   
+   entityData.flags       = GetStandardFlags(Entity_Dude);
+   entityData.type        = Entity_Dude;
+   
+   entityData.meshId      = meshId;
+   
+   Entity *e = CreateEntityInternal(entityManager, entityData);
    
    UnitData data = {};
    data.serial = e->serial;
@@ -572,10 +568,38 @@ static Entity CreateDude(EntityManager *entityManager, v3i pos, f32 scale = 1.0f
    return *e;
 }
 
-static Entity CreateWall(EntityManager *entityManager, u32 meshId, v3i pos, f32 scale = 1.0f, Quaternion orientation = { 1, 0, 0, 0 }, v3 offset = V3(), v4 color = V4(1, 1, 1, 1))
+static Entity CreateWall(EntityManager *entityManager, v3i pos, f32 scale = 1.0f, Quaternion orientation = {1, 0, 0, 0}, v3 offset = V3(), v4 color = V4(1, 1, 1, 1), u32 meshId = 0xFFFFFFFF)
 {
-   u64 flags = GetStandardFlags(Entity_Wall);
-   return *CreateEntityInternal(entityManager, meshId, scale, orientation, pos, offset, color, Entity_Wall, flags);
+   EntityData entityData;
+   entityData.orientation = orientation;
+   entityData.physicalPos = pos;
+   entityData.offset      = offset;
+   entityData.color       = color;
+   entityData.scale       = scale;
+   
+   entityData.type        = Entity_Wall;
+   entityData.flags       = GetStandardFlags(Entity_Wall);
+   
+   entityData.meshId      = meshId;
+   
+   return *CreateEntityInternal(entityManager, entityData);
+}
+
+static Entity CreateEntityNone(EntityManager *entityManager, v3i pos, f32 scale = 1.0f, Quaternion orientation = {1, 0, 0, 0}, v3 offset = V3(), v4 color = V4(1, 1, 1, 1), u32 meshId = 0xFFFFFFFF)
+{
+   EntityData entityData;
+   entityData.orientation = orientation;
+   entityData.physicalPos = pos;
+   entityData.offset      = offset;
+   entityData.color       = color;
+   entityData.scale       = scale;
+   
+   entityData.type        = Entity_None;
+   entityData.flags       = GetStandardFlags(Entity_None);
+   
+   entityData.meshId      = meshId;
+   
+   return *CreateEntityInternal(entityManager, entityData);
 }
 
 // this seems pretty bad in retrospect
@@ -585,7 +609,7 @@ static Entity CreateEntity(EntityManager *entityManager, EntityType type, u32 me
    {
       case Entity_None:
       {
-         return *CreateEntityInternal(entityManager, meshId, scale, orientation, pos, offset, color, type, flags);
+         return CreateEntityNone(entityManager, pos, scale, orientation, offset, color,  meshId);
       }break;
       case Entity_Dude:
       {
@@ -593,7 +617,7 @@ static Entity CreateEntity(EntityManager *entityManager, EntityType type, u32 me
       }break;
       case Entity_Wall:
       {
-         return CreateWall(entityManager, meshId, pos, scale, orientation, offset, color);
+         return CreateWall(entityManager, pos, scale, orientation, offset, color, meshId);
       }break;
       
       InvalidDefaultCase;
@@ -606,7 +630,7 @@ static void InitEntityManager(EntityManager *entityManager, Arena *currentStateA
 {
    
    entityManager->levelName = CopyString(level->name, currentStateArena);
-   entityManager->entitySerializer = 0;
+   entityManager->serializer = 0;
    entityManager->entityTree = InitOctTree(currentStateArena, 100); // todo hardcoded.
    
    entityManager->alloc = CreateBuddyAllocator(currentStateArena, MegaBytes(64), 1024);
@@ -615,7 +639,7 @@ static void InitEntityManager(EntityManager *entityManager, Arena *currentStateA
    entityManager->unitArray = EntityCreateDynamicArray(&entityManager->alloc, 10);
    entityManager->wallArray = EntityCreateDynamicArray(&entityManager->alloc, level->entities.amount);
    
-   entityManager->animationStates = AnimationStateCreateDynamicArray(&entityManager->alloc);;
+   entityManager->animationStates = AnimationStateCreateDynamicArray(&entityManager->alloc);
    
    entityManager->entitySerialMap = EntitySerialResultCreateDynamicArray(&entityManager->alloc, level->entities.amount);
    entityManager->unitData = UnitDataCreateDynamicArray(&entityManager->alloc);
@@ -625,17 +649,26 @@ static void InitEntityManager(EntityManager *entityManager, Arena *currentStateA
       CreateEntity(entityManager, it->type, it->meshId, it->physicalPos, it->scale, it->orientation, it->offset, it->color, it->flags);
    }
    
+#if 1
+   RandomSeries series = GetRandomSeries();
+   For(entityManager->unitData)
+   {
+      for(u32 i = 0; i < 10; i++)
+      {
+         ArrayAdd(&it->instructions, (UnitInstruction)(RandomU32(&series) % Unit_Instruction_Count));
+      }
+   }
+#endif
 }
-
 
 static v3i GetAdvanceForOneStep(UnitInstruction step)
 {
-   v3i advance = {};
+   v3i advance;
    switch (step)
    {
       case Unit_Wait:
       {
-         
+         advance = {};
       }break;
       case Unit_MoveDown:
       {
@@ -656,6 +689,7 @@ static v3i GetAdvanceForOneStep(UnitInstruction step)
       
       default:
       {
+         advance = {};
          Die;
       }break;
       

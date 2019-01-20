@@ -1,5 +1,3 @@
-#undef CreateFile
-#undef PlaySound
 
 #ifndef  COMPILER_MSVC
 #define COMPILER_MSVC 0
@@ -63,14 +61,12 @@ saucy_defer<F> defer_func(F f) {
 #define KiloBytes(a) (1024 * (a))
 #define OffsetOf(type, Member) (umm)&(((type *)0)->Member)
 #define Die Assert(false)
+
 #include <cstdio>
 #include "Game.h"
-
 #include <Windows.h>
 #include <gl/gl.h>
-
 #include <dsound.h>
-
 
 #undef CreateFile
 #undef PlaySound
@@ -88,7 +84,6 @@ typedef DIRECT_SOUND_CREATE(direct_sound_create);
 static bool globalGamePaused;
 static LPDIRECTSOUNDBUFFER globalSoundBuffer;
 static MouseInput globalMouseInput;
-static BITMAPINFO globalInfo;
 
 static WorkHandler workHandler;
 static i64 globalPerformanceCountFrequency;
@@ -211,7 +206,6 @@ static File LoadFile(char *fileName, Arena *arena)
 					memory = 0;
 				}
 			}
-         
 		}
 		CloseHandle(fileHandle);
 	}
@@ -429,9 +423,6 @@ LPARAM lParam)
          
          PAINTSTRUCT paint;
          HDC deviceContext = BeginPaint(window, &paint);
-         
-         //displayImageBuffer(&globalInfo, deviceContext, dim.width, dim.height, &globalImageBuffer);
-         
          EndPaint(window, &paint);
          
       }break;
@@ -532,7 +523,6 @@ typedef HGLRC WINAPI wgl_create_context_attribs_ARB(HDC hdC, HGLRC sharedContext
 #define WGL_STENCIL_BITS_ARB					0x2024
 #define WGL_SAMPLE_BUFFERS_ARB				  0x2041
 #define WGL_SAMPLES_ARB						 0x2042
-
 
 
 typedef BOOL WINAPI wglGetPixelFormatAttribivARB_(HDC hdc, int iPixelFormat, int iLayerPlane, UINT nAttributes, const int *piAttributes, int *piValues);
@@ -722,17 +712,6 @@ static OpenGLContext win32InitOpenGL(HWND window)
    return ret;
 }
 
-
-#define HANDLEINPUTKEY(VK_CODE, name) \
-if (vkCode == VK_CODE) \
-{ \
-	globalKeybordInput.name.isDown = !globalKeybordInput.name.isDown; \
-	if (globalKeybordInput.name.isDown) \
-	{ \
-		globalKeybordInput.name.pressedThisFrame = true; \
-	} \
-} 
-
 static String OSGetClipBoard()
 {
 	if(OpenClipboard(NULL))
@@ -764,77 +743,69 @@ static void OSSetClipBoard(String string)
 		HANDLE ret = SetClipboardData(CF_TEXT, buffer);
 		CloseClipboard();
 	}
-	
 }
 
-static void DispatchKeyMessage(KeyMessageBuffer *buffer, KeyStateMessage keyMessage)
+static void DispatchKeyMessage(KeyStateMessage keyMessage)
 {
-	if (buffer->amountOfMessages + 1 < buffer->maxAmountOfMessages)
-	{
-		buffer->messages[buffer->amountOfMessages++] = keyMessage;
-	}
-	else
-	{
-		ConsoleOutputError("to many keyboard messages");
-	}
+	*PushStruct(frameArena, KeyStateMessage) = keyMessage;
 }
 
-static void HandleWindowsMassages(KeyMessageBuffer *buffer) //todo make this buffer allocate on the frame arena? could just be the first thing that happens ont that
+static KeyStateMessageArray HandleWindowsMessages() //todo make this buffer allocate on the frame arena? could just be the first thing that happens ont that
 {
-	buffer->amountOfMessages = 0;
-	MSG message;
+   // todo should these be values in the buffer?
+   static b32 shiftDown = false;
+   static b32 controlDown = false;
    
-	// todo should these be values in the buffer?
-	static b32 shiftDown = false;
-	static b32 controlDown = false;
+   BeginArray(frameArena, KeyStateMessage, ret);
    
-	while (PeekMessageA(&message, 0, 0, 0, PM_REMOVE))
-	{
-		u32 shiftCtrlFlag = ((shiftDown > 0) * KeyState_ShiftDown) | ((controlDown > 0) * KeyState_ControlDown);
+   MSG message;
+   while (PeekMessageA(&message, 0, 0, 0, PM_REMOVE))
+   {
+      u32 shiftCtrlFlag = ((shiftDown > 0) * KeyState_ShiftDown) | ((controlDown > 0) * KeyState_ControlDown);
       
-		switch (message.message)
-		{
+      switch (message.message)
+      {
          case WM_LBUTTONDOWN:
          {
             KeyStateMessage keyMessage;
             keyMessage.flag = KeyState_Down | KeyState_PressedThisFrame | shiftCtrlFlag;
             keyMessage.key = Key_leftMouse;
-            DispatchKeyMessage(buffer, keyMessage);
+            DispatchKeyMessage(keyMessage);
          }break;
          case WM_LBUTTONUP: 
          {
             KeyStateMessage keyMessage;
             keyMessage.flag = KeyState_Up | KeyState_ReleasedThisFrame | shiftCtrlFlag;
             keyMessage.key = Key_leftMouse;
-            DispatchKeyMessage(buffer, keyMessage);
+            DispatchKeyMessage(keyMessage);
          }break;
          case WM_RBUTTONDOWN:
          {
             KeyStateMessage keyMessage;
             keyMessage.flag = KeyState_Down | KeyState_PressedThisFrame | shiftCtrlFlag;
             keyMessage.key = Key_rightMouse;
-            DispatchKeyMessage(buffer, keyMessage);
+            DispatchKeyMessage(keyMessage);
          }break;
          case WM_RBUTTONUP:
          {
             KeyStateMessage keyMessage;
             keyMessage.flag = KeyState_Up | KeyState_ReleasedThisFrame | shiftCtrlFlag;
             keyMessage.key = Key_rightMouse;
-            DispatchKeyMessage(buffer, keyMessage);
+            DispatchKeyMessage(keyMessage);
          }break;
          case WM_MBUTTONDOWN:
          {
             KeyStateMessage keyMessage;
             keyMessage.flag = KeyState_Down | KeyState_PressedThisFrame | shiftCtrlFlag;
             keyMessage.key = Key_middleMouse;
-            DispatchKeyMessage(buffer, keyMessage);
+            DispatchKeyMessage(keyMessage);
          }break;
          case WM_MBUTTONUP:
          {
             KeyStateMessage keyMessage;
             keyMessage.flag = KeyState_Up | KeyState_ReleasedThisFrame | shiftCtrlFlag;
             keyMessage.key = Key_middleMouse;
-            DispatchKeyMessage(buffer, keyMessage);
+            DispatchKeyMessage(keyMessage);
          }break;
          case WM_MOUSEWHEEL:
          {
@@ -845,8 +816,7 @@ static void HandleWindowsMassages(KeyMessageBuffer *buffer) //todo make this buf
             keyMessage.flag = KeyState_PressedThisFrame | KeyState_Down | shiftCtrlFlag;
             keyMessage.key = (zDelta > 0) ? Key_mouseWheelForward : Key_mouseWheelBack;
             
-            DispatchKeyMessage(buffer, keyMessage);
-            
+            DispatchKeyMessage(keyMessage);
          }break;
          case WM_MOUSEMOVE:
          {
@@ -910,7 +880,7 @@ static void HandleWindowsMassages(KeyMessageBuffer *buffer) //todo make this buf
                }
             }
             
-            DispatchKeyMessage(buffer, keyMessage);
+            DispatchKeyMessage(keyMessage);
             
             if (isDown && vkCode == VK_F4)
             {
@@ -933,8 +903,11 @@ static void HandleWindowsMassages(KeyMessageBuffer *buffer) //todo make this buf
             TranslateMessage(&message);
             DispatchMessage(&message);
          }
-		}
-	}
+      }
+   }
+   
+   EndArray(frameArena, KeyStateMessage, ret);
+   return ret;
 }
 
 #if 0
@@ -946,6 +919,8 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
    printf("do we work?\n");
    
    
+#if 0
+   
    unsigned short __stdcall RtlCaptureStackBackTrace(
 	   unsigned long FramesToSkip,
 	   unsigned long FramesToCapture,
@@ -954,13 +929,12 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
       );
    
    
-#if 0
    AllocConsole();
    
    CONSOLE_SCREEN_BUFFER_INFO csbiInfo; 
    
    
-	HANDLE hStdout = GetStdHandle(STD_OUTPUT_HANDLE);
+   HANDLE hStdout = GetStdHandle(STD_OUTPUT_HANDLE);
    Assert(hStdout != INVALID_HANDLE_VALUE);
    
    Assert(GetConsoleScreenBufferInfo(hStdout, &csbiInfo));
@@ -976,82 +950,74 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
    LPSTR lpszPrompt1 = "Type a line and press Enter, or q to quit: ";
    DWORD cWritten;
    
-	Assert(WriteFile(hStdout, lpszPrompt1, lstrlenA(lpszPrompt1), &cWritten, NULL));
+   Assert(WriteFile(hStdout, lpszPrompt1, lstrlenA(lpszPrompt1), &cWritten, NULL));
 #endif
    
    
-	u32 constantMemorySize = GigaBytes(1);
-	u32 frameMemorySize = MegaBytes(100);
-	u32 workingMemorySize = MegaBytes(5);
+   u32 constantMemorySize = GigaBytes(1);
+   u32 frameMemorySize = MegaBytes(100);
+   u32 workingMemorySize = MegaBytes(5);
    
-	void *constantMemory = VirtualAlloc(0, constantMemorySize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-	Arena *constantArena = InitArena(constantMemory, constantMemorySize);
-	void *frameMem = VirtualAlloc(0, frameMemorySize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-	frameArena = InitArena(frameMem, frameMemorySize);
-	Assert(frameMem);
-	Assert(constantMemory);
+   void *constantMemory = VirtualAlloc(0, constantMemorySize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+   Arena *constantArena = InitArena(constantMemory, constantMemorySize);
+   void *frameMem = VirtualAlloc(0, frameMemorySize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+   frameArena = InitArena(frameMem, frameMemorySize);
+   Assert(frameMem);
+   Assert(constantMemory);
    
-	globalAlloc = PushStruct(constantArena, BuddyAllocator);
-	*globalAlloc = CreateBuddyAllocator(constantArena, MegaBytes(128), KiloBytes(64));
+   globalAlloc = PushStruct(constantArena, BuddyAllocator);
+   *globalAlloc = CreateBuddyAllocator(constantArena, MegaBytes(128), KiloBytes(64));
    
-	//TestAllocator(&buddyAlloc);
+   //TestAllocator(&buddyAlloc);
    
-	void *debugMemory = VirtualAlloc(0, MegaBytes(300), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-	globalDebugState.arena = InitArena(debugMemory, MegaBytes(300));
-	Assert(debugMemory);
+   void *debugMemory = VirtualAlloc(0, MegaBytes(300), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+   globalDebugState.arena = InitArena(debugMemory, MegaBytes(300));
+   Assert(debugMemory);
    
-	InitDebug();
-	ResetDebugState();
+   InitDebug();
+   ResetDebugState();
    
-	// setting up windows timing stuff
-	UINT desiredSchedulerMS = 1;
-	bool sleepIsGranular = (timeBeginPeriod(desiredSchedulerMS) == TIMERR_NOERROR);
-	LARGE_INTEGER perfCountFrequencyResult;
-	QueryPerformanceFrequency(&perfCountFrequencyResult);
-	globalPerformanceCountFrequency = perfCountFrequencyResult.QuadPart;
+   // setting up windows timing stuff
+   UINT desiredSchedulerMS = 1;
+   bool sleepIsGranular = (timeBeginPeriod(desiredSchedulerMS) == TIMERR_NOERROR);
+   LARGE_INTEGER perfCountFrequencyResult;
+   QueryPerformanceFrequency(&perfCountFrequencyResult);
+   globalPerformanceCountFrequency = perfCountFrequencyResult.QuadPart;
    
    
 #if 0
-	const u32 threadCount = 3 - 1;
-	ThreadInfo threadInfo[1]; //threadCount
+   const u32 threadCount = 3 - 1;
+   ThreadInfo threadInfo[1]; //threadCount
    
-	semaphoreHandle = CreateSemaphoreEx(0, 0, threadCount, 0, 0, SEMAPHORE_ALL_ACCESS);
+   semaphoreHandle = CreateSemaphoreEx(0, 0, threadCount, 0, 0, SEMAPHORE_ALL_ACCESS);
    
-	for (int threadIndex = 0; threadIndex < threadCount; ++threadIndex)
-	{
-		threadInfo[threadIndex].threadIndex = threadIndex;
-		threadInfo->semaphoreHandle = semaphoreHandle;
-		DWORD threadID;
-		HANDLE threadHandle = CreateThread(0, 0, ThreadProc, &(threadInfo[threadIndex]), 0, &threadID);
-	}
+   for (int threadIndex = 0; threadIndex < threadCount; ++threadIndex)
+   {
+      threadInfo[threadIndex].threadIndex = threadIndex;
+      threadInfo->semaphoreHandle = semaphoreHandle;
+      DWORD threadID;
+      HANDLE threadHandle = CreateThread(0, 0, ThreadProc, &(threadInfo[threadIndex]), 0, &threadID);
+   }
 #else
-	const u32 threadCount = 0;
+   const u32 threadCount = 0;
 #endif
    
    workHandler.workIndex = 0;
    workHandler.storeIndex = 0;
    workHandler.completionCount = 0;
    workHandler.completionGoal = 0;
-	
-	workHandler.queue = PushData(constantArena, Work, WorkQueueSize);
    
-	// todo make this work off of frame arena.
-	const u32 inputBufferSize = 100;
-	KeyStateMessage inputBuffer[inputBufferSize];
-	KeyMessageBuffer keyMessageBuffer;
-	keyMessageBuffer.amountOfMessages = 0;
-	keyMessageBuffer.maxAmountOfMessages = inputBufferSize;
-	keyMessageBuffer.messages = inputBuffer;
+   workHandler.queue = PushData(constantArena, Work, WorkQueueSize);
    
-	WNDCLASSA windowClass = {};
-	windowClass.style = CS_HREDRAW | CS_VREDRAW;
-	windowClass.lpfnWndProc = win32MainWindowCallback;
-	windowClass.hInstance = instance;
-	windowClass.lpszClassName = "WindowClass";
+   WNDCLASSA windowClass = {};
+   windowClass.style = CS_HREDRAW | CS_VREDRAW;
+   windowClass.lpfnWndProc = win32MainWindowCallback;
+   windowClass.hInstance = instance;
+   windowClass.lpszClassName = "WindowClass";
    
-	i32 windowWidth = 1280, windowHeight = 720;
-	if (!RegisterClass(&windowClass))
-	{
+   i32 windowWidth = 1280, windowHeight = 720;
+   if (!RegisterClass(&windowClass))
+   {
       return 0;
    }
    globalWindow = CreateWindowEx(0, windowClass.lpszClassName, "Game Try 1", WS_POPUP|WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, windowWidth, windowHeight, 0, 0, instance, 0);
@@ -1080,10 +1046,10 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
    
    // todo redo this, but make it so that the mouse position gets adjusted at the beginning of the frame, so if the window is not active, this does not do anything
    /*
-      RECT windowRect;
-if (GetWindowRect(window, &windowRect))
-ClipCursor(&windowRect);
-*/
+   RECT windowRect;
+   if (GetWindowRect(window, &windowRect))
+   ClipCursor(&windowRect);
+   */
    SoundBuffer soundOutput = {};
    initializeSoundBuffer(globalWindow, &soundOutput);
    i16 *samples = (i16 *)VirtualAlloc(0, soundOutput.secondaryBufferSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
@@ -1112,12 +1078,13 @@ ClipCursor(&windowRect);
    
    LARGE_INTEGER timeCounter;
    QueryPerformanceCounter(&timeCounter);
+   Input input = {};
    
    while (running)
    {	
       if (globalGamePaused)
       {
-         HandleWindowsMassages(&keyMessageBuffer);
+         HandleWindowsMessages();
          SwapBuffers(deviceContext);
          continue;
       }
@@ -1133,7 +1100,10 @@ ClipCursor(&windowRect);
       
       CollectDebugRecords(deltaTime); // collect for last frame
       
-      HandleWindowsMassages(&keyMessageBuffer);
+      KeyStateMessageArray keyMessages = HandleWindowsMessages();
+      UpdateInput(&input, globalMouseInput, windowWidth, windowHeight, deltaTime, keyMessages);
+      
+      
       
       soundOutput.soundIsValid = false;
       DWORD playCursor = 0;
@@ -1159,8 +1129,6 @@ ClipCursor(&windowRect);
          soundOutput.soundIsValid = true;
       }
       soundOutput.sampleAmount = bytesToWrite / soundOutput.bytesPerSample;
-      Input input;
-      UpdateInput(&input, globalMouseInput, windowWidth, windowHeight, deltaTime, keyMessageBuffer);
       
       GameUpdateAndRender(&gameState, &renderCommands, input, &soundOutput);
       

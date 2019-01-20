@@ -41,13 +41,12 @@ static Entity *GetHotEntity(Camera cam, EntityManager *entityManager, AssetHandl
    {
       For(entityManager->entityArrays[i])
       {
-         
          MeshInfo *info = GetMeshInfo(handler, it->meshId);
          
          if (!info) continue; // probably not on screen, if never rendered
          
          m4x4 mat = QuaternionToMatrix4(Inverse(it->orientation)); // todo save these?
-         v3 rayP = mat * (camP - GetRenderPos(*it));
+         v3 rayP = mat * (camP - it->visualPos);
          v3 rayD = mat * camD; 
          // better rayCast system, right now this loads every mesh, to find out the aabb....
          
@@ -228,6 +227,7 @@ static b32 MaybeMoveEntity(Entity *e, v3i dir, EntityManager *entityManager)
 static void GameExecuteUpdate(EntityManager *entityManager, ExecuteData *exe, AssetHandler *assetHandler, f32 dt, Input input)
 {
 	
+   TimedBlock;
    f32 timePassed = dt * exe->simData.timeScale;
    exe->t += timePassed;
    
@@ -239,13 +239,15 @@ static void GameExecuteUpdate(EntityManager *entityManager, ExecuteData *exe, As
          Entity *entity = GetEntity(entityManager, data->serial);
          v3 proj = ScreenZeroToOneToZ(exe->debugCamera, V2(0.5f, 0.5f), entity->physicalPos.z);
          
-         v3 newFocus = GetRenderPos(*entity);
+         v3 newFocus = entity->visualPos;
          v3 delta =  newFocus - proj;
          exe->debugCamera.pos += delta;
          
          UpdateCamFocus(newFocus, &exe->debugCamera, input);
       }
    }
+   
+   RandomSeries series = GetRandomSeries();
    
    For(entityManager->unitData)
    {
@@ -269,7 +271,12 @@ static void GameExecuteUpdate(EntityManager *entityManager, ExecuteData *exe, As
          
       }
       
+#if 0
       UnitInstruction step = it->instructions[it->at];
+#else
+      UnitInstruction step = (UnitInstruction)(RandomU32(&series) % Unit_Instruction_Count);
+#endif
+      
       v3i dir = GetAdvanceForOneStep(step);
       
       Entity *e = GetEntity(entityManager, it->serial);
@@ -280,15 +287,26 @@ static void GameExecuteUpdate(EntityManager *entityManager, ExecuteData *exe, As
          continue;
       }
       
-      u32 animationID = RegisterAsset(assetHandler, Asset_Animation, "dudeTry1Run.animation");
+      u32 animationID = RegisterAsset(assetHandler, Asset_Animation, "Push.animation");
       AnimationState *anim = entityManager->animationStates + (u32)(it - entityManager->unitData.data);
       InterpolationData data;
       data.orientation = e->orientation;
       data.scale       = V3(e->scale, e->scale, e->scale);
-      data.translation = V3(e->physicalPos) + e->offset;
+      data.translation = e->visualPos;
       AddAnimation(anim, animationID, 1.0f, 0.0f, data);
-      AddIK(anim, 1, V3(), 'x', 1, 1);
       
+      v3 delta = V3(100, 100, 100);
+      For(other, entityManager->unitArray)
+      {
+         v3 thisDelta = V3(other->physicalPos - e->physicalPos);
+         if(QuadNorm(thisDelta) < QuadNorm(delta))
+         {
+            delta = thisDelta;
+         }
+      }
+      
+      AddIK(anim, 1, delta, 'x', 1, 1);
+      it->needsReupdate = false;
    }
    
    For(s, entityManager->animationStates)
@@ -308,25 +326,19 @@ static void GameExecuteUpdate(EntityManager *entityManager, ExecuteData *exe, As
       
       if(first->animationId == 0xFFFFFFFF)
       {
+         u32 animationId = RegisterAsset(assetHandler, Asset_Animation, "dudeTry1Run.animation");
          
-#if 1
-         m4x4Array bindShapeThing = DumbBindShapeThing(assetHandler, mesh);
-#else
-         u32 animationID = RegisterAsset(assetHandler, Asset_Animation, "dudeTry1Run.animation");
-         
+         KeyFramedAnimation *animation = GetAnimation(assetHandler, animationId);
          InterpolationDataArray local = GetLocalTransforms(animation, first->t);
          
-         state->localTransforms = local;
          
          // todo at  IK stuff here
-         
-         m4x4Array bones = LocalToWorld(&mesh->skeleton, state->localTransforms);
-#endif
+         m4x4Array bones = LocalToWorld(&mesh->skeleton, local);
          for (u32 i = 0; i < mesh->skeleton.bones.amount; i++)
          {
-            bindShapeThing[i] = bindShapeThing[i] * mesh->skeleton.bones[i].inverseBindShapeMatrix;
+            bones[i] = bones[i] * mesh->skeleton.bones[i].inverseBindShapeMatrix;
          }
-         state->boneStates = bindShapeThing;
+         state->boneStates = bones;
          continue;
       }
       

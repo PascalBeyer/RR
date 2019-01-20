@@ -172,8 +172,11 @@ static void InitGame(int screenWidth, int screenHeight, WorkHandler *workHandler
 		frameArena->current = restore;
 	}
 #endif
-	
+   
+   //  yea this is not great
 	SwitchGameMode(ret, Game_Editor);
+	SwitchGameMode(ret, Game_Execute);
+   
 }
 
 static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands, Input input, SoundBuffer *soundBuffer)
@@ -183,17 +186,23 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
 	Editor *editor = &state->editor;
 	SoundMixer *soundMixer = &state->soundMixer;
 	Arena *currentStateArena = state->currentStateArena;
-	f32 dt = input.dt;
+	f32 dt = Min(input.dt, 1.0f);
 	ExecuteData *exe = &state->executeData;
    EntityManager *entityManager= &state->entityManager;
    
+   ForC(array, entityManager->entityArrays)
+   {
+      For(*array)
+      {
+         it->frameColor = V4(1, 1, 1, 1);
+      }
+   }
    
 	// HandleInput
 	{
-		KeyMessageBuffer buffer = input.buffer;
-		for (u32 i = 0; i < buffer.amountOfMessages; i++)
+		For(input.keyMessages)
 		{
-			KeyStateMessage message = buffer.messages[i];
+			KeyStateMessage message = *it;
          
 			if(DebugHandleEvents(message, input)) continue;
          

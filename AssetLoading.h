@@ -2595,7 +2595,7 @@ static Level LoadLevel(String fileName, Arena *arena, AssetHandler *assetHandler
    
    u32 meshAmount = PullOff(u32);
    
-   level.entities = PushArray(arena, EntityCopyData, meshAmount);
+   level.entities = PushArray(arena, EntityData, meshAmount);
    
    For(level.entities)
    {

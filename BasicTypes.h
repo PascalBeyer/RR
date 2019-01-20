@@ -52,11 +52,12 @@ static bool operator!(type##Array arr)											\
 
 #define ForArr(arr) for(auto it = (arr).data; it < (arr).data + (arr).amount; it++)
 #define ForVarArr(it, arr) for(auto it = (arr).data; it < (arr).data + (arr).amount; it++)
-
-
 #define For(...) Expand(GET_MACRO3(__VA_ARGS__, Ignored, ForVarArr, ForArr)(__VA_ARGS__))
 
-#define ForC(arr) for(auto it = arr; it < arr + ArrayCount(arr); it++)
+#define ForCArr(arr) for(auto it = arr; it < arr + ArrayCount(arr); it++)
+#define ForCVarArr(it, arr) for(auto it = arr; it < arr + ArrayCount(arr); it++)
+#define ForC(...) Expand(GET_MACRO3(__VA_ARGS__, Ignored, ForCVarArr, ForCArr)(__VA_ARGS__))
+
 
 #include <stdint.h>
 

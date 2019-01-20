@@ -124,14 +124,7 @@ struct KeyStateMessage
 	KeyEnum key;
 	u32 flag;
 };
-
-struct KeyMessageBuffer
-{
-	KeyStateMessage *messages;
-	u32 amountOfMessages;
-	u32 maxAmountOfMessages;
-   
-};
+DefineArray(KeyStateMessage);
 
 struct MouseInput
 {
@@ -139,22 +132,10 @@ struct MouseInput
 	long y;
 };
 
-struct DEBUGKeyTracker 
-{
-	b32 wDown = false;
-	b32 sDown = false;
-	b32 dDown = false;
-	b32 aDown = false;
-	b32 spaceDown = false;
-	b32 middleDown = false;
-	b32 middleBack = false;
-	b32 middleForward = false;
-};
-
 struct Input
 {
 	MouseInput mouse;
-	KeyMessageBuffer buffer;
+   KeyStateMessageArray keyMessages;
 	v2 mousePos;
 	v2 mouseDelta;
 	v2 oldMousePos;
@@ -164,7 +145,7 @@ struct Input
 	f32 dt;
 };
 
-static void UpdateInput(Input *input, MouseInput mouseInput, int windowWidth, int windowHeight, f32 secondsPerFrame, KeyMessageBuffer messages)
+static void UpdateInput(Input *input,  MouseInput mouseInput, int windowWidth, int windowHeight, f32 secondsPerFrame, KeyStateMessageArray messages)
 {
 	v2 mousePos = V2((float)mouseInput.x, (float)mouseInput.y);
 	input->oldMousePos = input->mousePos;
@@ -176,7 +157,7 @@ static void UpdateInput(Input *input, MouseInput mouseInput, int windowWidth, in
 	input->mouseZeroToOneDelta = mouseZeroToOne - input->mouseZeroToOne;
 	input->mouseZeroToOne = mouseZeroToOne;
 	input->dt = secondsPerFrame;
-	input->buffer = messages;
+	input->keyMessages = messages;
 }
 
 static Char KeyToChar(u32 keyCode, bool shiftDown)

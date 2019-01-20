@@ -225,16 +225,3 @@ static void AddIK(AnimationState *state, u32 boneIndex, v3 focusP, Char axis, u3
       }
    }
 }
-
-static m4x4Array DumbBindShapeThing(AssetHandler *assetHandler, TriangleMesh *mesh)
-{
-   Skeleton *skeleton = &mesh->skeleton;
-   m4x4Array ret = PushArray(frameArena, m4x4, skeleton->bones.amount);
-   ret[0] = InterpolationDataToMatrix(skeleton->bones[0].interp);
-   for(u32 i = 1; i < skeleton->bones.amount; i++)
-   {
-      ret[i] = ret[skeleton->bones[i].parentIndex] * InterpolationDataToMatrix(skeleton->bones[i].interp);
-   }
-   
-   return ret;
-}

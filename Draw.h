@@ -93,7 +93,7 @@ static void RenderPathCreator(RenderGroup *rg, EntityManager *entityManager, Exe
       
 		v3i pos = e->physicalPos;
 		v3 mouseP = ScreenZeroToOneToZ(camera, input.mouseZeroToOne, e->physicalPos.z);
-		v3 mouseToPath = mouseP - GetRenderPos(*e);
+		v3 mouseToPath = mouseP - e->visualPos;
       
 		pathCounter++;
       
@@ -142,7 +142,7 @@ static void RenderPathCreator(RenderGroup *rg, EntityManager *entityManager, Exe
          Entity *e = GetEntity(entityManager, state->serial);
          TriangleMesh *mesh = GetMesh(assetHandler, e->meshId);
          
-         DrawSkeletonBones(rg, mesh->skeleton.bones, state->boneStates, e->orientation, GetRenderPos(*e, exe->t), e->scale);
+         DrawSkeletonBones(rg, mesh->skeleton.bones, state->boneStates, e->orientation, e->visualPos, e->scale);
          
       }
    }
@@ -157,8 +157,8 @@ static void RenderPathCreator(RenderGroup *rg, EntityManager *entityManager, Exe
          {
             Entity *e = GetEntity(entityManager, state->serial);
             
-            PushAnimatedMesh(rg, e->meshId, e->orientation, V3((e->physicalPos)) + e->offset, e->scale, V4(0.75f, 0.0f, 0.0f, 0.0f), state->boneStates);
-            PushAnimatedMesh(rg, e->meshId, e->orientation, V3((e->initialPos)) + e->offset, e->scale, e->color * e->frameColor, state->boneStates);
+            PushAnimatedMesh(rg, e->meshId, e->orientation, e->visualPos, e->scale, V4(0.75f, 0.0f, 0.0f, 0.0f), state->boneStates);
+            PushAnimatedMesh(rg, e->meshId, e->orientation, e->visualPos, e->scale, e->color * e->frameColor, state->boneStates);
          }
          
 #else
@@ -176,7 +176,7 @@ static void RenderPathCreator(RenderGroup *rg, EntityManager *entityManager, Exe
       {
          For(entityManager->entityArrays[i])
          {
-            PushTriangleMesh(rg, it->meshId, it->orientation, GetRenderPos(*it), it->scale, it->color * it->frameColor);
+            PushTriangleMesh(rg, it->meshId, it->orientation, it->visualPos, it->scale, it->color * it->frameColor);
          }
       }
    }
@@ -223,7 +223,7 @@ static void RenderSimulate(RenderGroup *rg, EntityManager *entityManager, Execut
       {
          Entity *e = GetEntity(entityManager, it->serial);
          TriangleMesh *mesh = GetMesh(rg->assetHandler, it->meshId);
-         DrawSkeletonBones(rg, mesh->skeleton.bones, it->boneStates, e->orientation, GetRenderPos(*e, exe->t), e->scale);
+         DrawSkeletonBones(rg, mesh->skeleton.bones, it->boneStates, e->orientation, e->visualPos, e->scale);
       }
    }
    
@@ -236,7 +236,7 @@ static void RenderSimulate(RenderGroup *rg, EntityManager *entityManager, Execut
          {
             Entity *e = GetEntity(entityManager, it->serial);
             
-            PushAnimatedMesh(rg, e->meshId, e->orientation, GetRenderPos(*e, exe->t), e->scale, e->color, it->boneStates);
+            PushAnimatedMesh(rg, e->meshId, e->orientation, e->visualPos, e->scale, e->color, it->boneStates);
          }
       }
       else
@@ -244,7 +244,7 @@ static void RenderSimulate(RenderGroup *rg, EntityManager *entityManager, Execut
          PushProjectiveSetup(rg, camera, exe->lightSource, ShaderFlags_ShadowMapping|ShaderFlags_Textured|ShaderFlags_Phong);
          For(entityManager->entityArrays[i])
          {
-            PushTriangleMesh(rg, it->meshId, it->orientation, GetRenderPos(*it, exe->t), it->scale, it->color * it->frameColor);
+            PushTriangleMesh(rg, it->meshId, it->orientation, it->visualPos, it->scale, it->color * it->frameColor);
          }
       }
    }
@@ -674,7 +674,7 @@ static void RenderEditor(RenderGroup *rg, AssetHandler *assetHandler, Editor edi
    PushProjectiveSetup(rg, editor.camera, editor.levelInfo.lightSource, ShaderFlags_Textured|ShaderFlags_Phong|ShaderFlags_ShadowMapping);
    For(editorEntities->entities)
    {
-      PushTriangleMesh(rg, it->meshId, it->orientation, GetRenderPos(*it), it->scale, it->color * it->frameColor);
+      PushTriangleMesh(rg, it->meshId, it->orientation, it->visualPos, it->scale, it->color * it->frameColor);
    }
    
    switch (editor.state)
@@ -686,7 +686,7 @@ static void RenderEditor(RenderGroup *rg, AssetHandler *assetHandler, Editor edi
          for(u32 i = 0; i < editor.hotEntitySerials.amount; i++)
          {
             Entity *e = GetEntity(editorEntities, editor.hotEntitySerials[i]);
-            EntityCopyData *data = editor.hotEntityInitialStates + i;
+            EntityData *data = editor.hotEntityInitialStates + i;
             
             PushTriangleMesh(rg, e->meshId, e->orientation, V3(e->physicalPos) + data->offset, e->scale, e->color * V4(0.5f, 1.0f, 1.0f, 1.0f));
          }
@@ -730,7 +730,7 @@ static void RenderEditor(RenderGroup *rg, AssetHandler *assetHandler, Editor edi
       transformedAABB.minDim *= e->scale;
       transformedAABB.maxDim *= e->scale;
       
-      m4x4 mat = Translate(QuaternionToMatrix4(e->orientation), GetRenderPos(*e));
+      m4x4 mat = Translate(QuaternionToMatrix4(e->orientation), e->visualPos);
       
       v3 d1 = V3(transformedAABB.maxDim.x - transformedAABB.minDim.x, 0, 0);
       v3 d2 = V3(0, transformedAABB.maxDim.y - transformedAABB.minDim.y, 0);
@@ -798,7 +798,7 @@ static void RenderEntityAABBOutline(RenderGroup *rg, AssetHandler *assetHandler,
    transformedAABB.minDim *= e->scale;
    transformedAABB.maxDim *= e->scale;
    
-   m4x4 mat = Translate(QuaternionToMatrix4(e->orientation), GetRenderPos(*e, t));
+   m4x4 mat = Translate(QuaternionToMatrix4(e->orientation), e->visualPos);
    
    v3 d1 = V3(transformedAABB.maxDim.x - transformedAABB.minDim.x, 0, 0);
    v3 d2 = V3(0, transformedAABB.maxDim.y - transformedAABB.minDim.y, 0);

@@ -35,10 +35,10 @@ struct Entity
    u32 meshId;
 	f32 scale;
 	Quaternion orientation;
-   v3 offset;
-	v4 color;
+   v4 color;
    v4 frameColor;
-   
+   v3 visualPos;
+	
    // simulation stuff, also needed for render
    v3i physicalPos;
 	v3i initialPos;
@@ -53,27 +53,12 @@ DefineArray(Entity);
 DefineArray(EntityPtr);
 DefineDFArray(EntityPtr);
 
-static v3 GetRenderPos(Entity e)
-{
-	return V3(e.physicalPos) + e.offset;
-}
-
-
-static v3 GetRenderPos(Entity e, f32 interpolationT)
-{
-	f32 t = interpolationT;
-	v3 moveOffset = V3();
-   
-	return V3(e.physicalPos) + e.offset + moveOffset;
-}
-
-
-struct EntityCopyData
+struct EntityData
 {
    Quaternion orientation;
    v3i physicalPos;
-   v3 offset;
-   v4 color;
+   v3  offset;
+   v4  color;
    f32 scale;
    
    EntityType type;
@@ -81,24 +66,39 @@ struct EntityCopyData
    
 	u32 meshId;
 };
-static EntityCopyData EntityToData(Entity e)
+
+static EntityData EntityToData(Entity e)
 {
-	EntityCopyData ret;
+	EntityData ret;
    
-	ret.color = e.color;
-	ret.flags = e.flags;
-	ret.orientation = e.orientation;
-	ret.meshId = e.meshId;
-	ret.scale = e.scale;
-	ret.type = e.type;
-	ret.physicalPos = e.physicalPos;
-	ret.offset = e.offset;
+	ret.color         = e.color;
+	ret.flags         = e.flags;
+	ret.orientation   = e.orientation;
+	ret.meshId        = e.meshId;
+	ret.scale         = e.scale;
+	ret.type          = e.type;
+	ret.physicalPos   = e.physicalPos;
+	ret.offset        = e.visualPos - V3((u32)e.visualPos.x, (u32)e.visualPos.y, (u32)e.visualPos.z);
 	return ret;
    
 }
 
-DefineArray(EntityCopyData);
-DefineDynamicArray(EntityCopyData);
+static void ApplyEntityDataToEntity(Entity *e, EntityData *data)
+{
+   e->orientation = data->orientation;
+   e->physicalPos = data->physicalPos;
+   e->visualPos   = V3(data->physicalPos) + data->offset;
+   e->color       = data->color;
+   e->scale	   = data->scale;
+   
+   e->type		= data->type;
+   e->flags	   = data->flags;
+   
+   e->meshId      = data->meshId;
+}
+
+DefineArray(EntityData);
+DefineDynamicArray(EntityData);
 
 struct LightSource
 {
@@ -114,17 +114,11 @@ struct Level
    
 	Camera camera;
    LightSource lightSource;
-	EntityCopyDataArray entities;
+	EntityDataArray entities;
 	u32 blocksNeeded;
    
 	//u32 amountOfDudes; right now not used.
 };
-
-
-static v3 GetRenderPos(EntityCopyData e)
-{
-	return V3(e.physicalPos) + e.offset;
-}
 
 
 struct AABBi

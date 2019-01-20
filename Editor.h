@@ -394,8 +394,8 @@ struct EditorAction
    u32 serial;
    
 	// we could store only one, by altering it if we redo/undo
-   EntityCopyData preModifyMesh;
-   EntityCopyData postModifyMesh;
+   EntityData preModifyMesh;
+   EntityData postModifyMesh;
 	
 	
 };
@@ -420,12 +420,12 @@ static Entity *GetEntity(EditorEntities *editorEntities, u32 serialNumber)
 static Entity *CreateEntity(EditorEntities *editorEntities, EntityType type, u32 meshID, v3i pos, f32 scale, Quaternion orientation, v3 offset, v4 color, u64 flags)
 {
 	Entity ret;
-	ret.meshId = meshID;
-	ret.scale = scale;
-	ret.orientation = orientation;
-	ret.physicalPos = pos;
-	ret.initialPos = pos;
-	ret.offset = offset;
+	ret.meshId       = meshID;
+	ret.scale        = scale;
+	ret.orientation  = orientation;
+	ret.physicalPos  = pos;
+	ret.initialPos   = pos;
+	ret.visualPos    = V3(pos) + offset;
 	ret.color = color;
 	ret.frameColor = V4(1, 1, 1, 1);
 	ret.serial = editorEntities->entitySerializer++;
@@ -447,7 +447,7 @@ static void RestoreEntity(EditorEntities *editorEntities, u32 serial, u32 meshID
 	ret.scale = scale;
 	ret.orientation = orientation;
 	ret.physicalPos = pos;
-	ret.offset = offset;
+	ret.visualPos    = V3(pos) + offset;
 	ret.color = color;
 	ret.frameColor = V4(1, 1, 1, 1);
 	ret.serial = serial;
@@ -476,7 +476,7 @@ static void RemoveEntity(EditorEntities *editorEntities, u32 serial)
 	UnorderedRemove(&editorEntities->entities, index);
 }
 
-typedef EntityCopyDataDynamicArray EditorClipBoard;
+typedef EntityDataDynamicArray EditorClipBoard;
 
 struct EditorLevelInfo
 {
@@ -498,7 +498,7 @@ struct Editor
    EditorEntities editorEntities;
    
    u32DynamicArray hotEntitySerials;
-	EntityCopyDataDynamicArray hotEntityInitialStates;
+	EntityDataDynamicArray hotEntityInitialStates;
    
 	EditorClipBoard clipBoard;
    
@@ -561,7 +561,7 @@ static v3 GetAveragePosForSelection(Editor *editor)
 	For(editor->hotEntitySerials)
 	{
       Entity *e = GetEntity(&editor->editorEntities, *it);
-		averagePos += GetRenderPos(*e);
+		averagePos += e->visualPos;
 	}
 	averagePos /= (f32)editor->hotEntitySerials.amount;
 	return averagePos;
@@ -606,13 +606,13 @@ static Editor InitEditor(Arena *constantArena)
    ret.state = EditorState_Default;
    
    ret.colorPickers   = ColorPickerCreateDynamicArray(globalAlloc);
-   ret.clipBoard      = EntityCopyDataCreateDynamicArray(globalAlloc);
+   ret.clipBoard      = EntityDataCreateDynamicArray(globalAlloc);
    
    ret.undoRedoBuffer = EditorActionCreateDynamicArray(globalAlloc);
    ret.undoRedoAt     = 0xFFFFFFFF;
    
    ret.hotEntitySerials = u32CreateDynamicArray(globalAlloc);
-   ret.hotEntityInitialStates = EntityCopyDataCreateDynamicArray(globalAlloc);
+   ret.hotEntityInitialStates = EntityDataCreateDynamicArray(globalAlloc);
    
    Tweekable(v2, initialEditorPanelPos, V2(0.75f, 0.2f));
    
@@ -672,7 +672,7 @@ static Entity *GetHotEntity(Camera cam, EditorEntities *editorEntities, AssetHan
       if (!info) continue; // probably not on screen, if never rendered
       
       m4x4 mat = QuaternionToMatrix4(Inverse(it->orientation)); // todo save these?
-      v3 rayP = mat * (camP - GetRenderPos(*it));
+      v3 rayP = mat * (camP - it->visualPos);
       v3 rayD = mat * camD; 
       // better rayCast system, right now this loads every mesh, to find out the aabb....
       
@@ -748,27 +748,13 @@ static Entity *GetHotEntity(Camera cam, EditorEntities *editorEntities, AssetHan
    return ret;
 }
 
-// todo when we make an afford to go data oriented, stuff like this will havet to go through an api.
-static void ApplyEntityDataToEntity(Entity *e, EntityCopyData *data)
-{
-   e->orientation = data->orientation;
-   e->physicalPos = data->physicalPos;
-   e->offset	  = data->offset;
-   e->color       = data->color;
-   e->scale	   = data->scale;
-   
-   e->type		= data->type;
-   e->flags	   = data->flags;
-   
-   e->meshId      = data->meshId;
-}
 
 static void ResetHotMeshes(Editor *editor)
 {
    for(u32 i = 0; i < editor->hotEntitySerials.amount; i++)
    {
       Entity *e = GetEntity(&editor->editorEntities, editor->hotEntitySerials[i]);
-      EntityCopyData *data = editor->hotEntityInitialStates + i;
+      EntityData *data = editor->hotEntityInitialStates + i;
       ApplyEntityDataToEntity(e, data);
    }
 }
@@ -794,14 +780,14 @@ static void EditorPerformUndo(Editor *editor)
    {
       case EditorAction_AlterMesh:
       {
-         EntityCopyData *data = &toReverse.preModifyMesh;
+         EntityData *data = &toReverse.preModifyMesh;
          Entity *e = GetEntity(editorEntities, toReverse.serial);
          
          ApplyEntityDataToEntity(e, data);
       }break;
       case EditorAction_DeleteMesh: 
       {
-         EntityCopyData data = toReverse.preModifyMesh;
+         EntityData data = toReverse.preModifyMesh;
          u32 serial = toReverse.serial;
          RestoreEntity(editorEntities, serial, data.meshId, data.scale, data.orientation, data.physicalPos, data.offset, data.color, data.type, data.flags);
       }break;
@@ -838,7 +824,7 @@ static void EditorPerformRedo(Editor *editor)
    {
       case EditorAction_AlterMesh:
       {
-         EntityCopyData *data = &toReverse.postModifyMesh;
+         EntityData *data = &toReverse.postModifyMesh;
          Entity *e = GetEntity(editorEntities, toReverse.serial);
          ApplyEntityDataToEntity(e, data);
       }break;
@@ -848,7 +834,7 @@ static void EditorPerformRedo(Editor *editor)
       }break;
       case EditorAction_PlaceMesh:
       {
-         EntityCopyData data = toReverse.postModifyMesh;
+         EntityData data = toReverse.postModifyMesh;
          RestoreEntity(editorEntities, toReverse.serial, data.meshId, data.scale, data.orientation, data.physicalPos, data.offset, data.color, data.type, data.flags);
       }break;
       case EditorAction_BeginBundle:
@@ -873,7 +859,7 @@ static void PushAlterMeshModifies(Editor *editor)
    for(u32 i = 0; i < editor->hotEntitySerials.amount; i++)
    {
       Entity *e = GetEntity(editorEntities, editor->hotEntitySerials[i]);
-      EntityCopyData *data = editor->hotEntityInitialStates + i;
+      EntityData *data = editor->hotEntityInitialStates + i;
       
       EditorAction toAdd;
       toAdd.type = EditorAction_AlterMesh;
@@ -1027,11 +1013,11 @@ static void UpdateEditor(Editor *editor, Input input)
             {
                Entity *e = GetEntity(editorEntities, *it);
                
-               v4 relPos = V4(GetRenderPos(*e) - averagePos, 1.0f);
+               v4 relPos = V4(e->visualPos - averagePos, 1.0f);
                e->orientation = q * e->orientation;
                v3 pos = averagePos + (mat * relPos).xyz;
                e->physicalPos = RoundToTileMap(pos);
-               e->offset = pos - V3(e->physicalPos);
+               e->visualPos = pos;
             }
          }
          else
@@ -1040,10 +1026,10 @@ static void UpdateEditor(Editor *editor, Input input)
             {
                Entity *e = GetEntity(editorEntities, *it);
                
-               v4 relPos = V4(GetRenderPos(*e) - averagePos, 1.0f);
+               v4 relPos = V4(e->visualPos - averagePos, 1.0f);
                e->orientation = q * e->orientation;
                v3 pos = averagePos + (mat * relPos).xyz;
-               e->offset = pos - V3(e->physicalPos);
+               e->visualPos = pos;
             }
          }
       }break;
@@ -1070,25 +1056,25 @@ static void UpdateEditor(Editor *editor, Input input)
          {
             For(editor->hotEntitySerials)
             {
-               Entity *mesh = GetEntity(editorEntities, *it);
-               v3 delta = GetRenderPos(*mesh) - averagePos;
+               Entity *e = GetEntity(editorEntities, *it);
+               v3 delta = e->visualPos - averagePos;
                v3 newPos = exp * delta + averagePos;
                
-               mesh->physicalPos = RoundToTileMap(newPos);
-               mesh->offset = newPos - V3(mesh->physicalPos);
-               mesh->scale *= exp;
+               e->physicalPos = RoundToTileMap(newPos);
+               e->visualPos = newPos;
+               e->scale *= exp;
             }
          }
          else
          {
             For(editor->hotEntitySerials)
             {
-               Entity *mesh = GetEntity(editorEntities, *it);
-               v3 delta = GetRenderPos(*mesh) - averagePos;
+               Entity *e = GetEntity(editorEntities, *it);
+               v3 delta = e->visualPos - averagePos;
                v3 newPos = exp * delta + averagePos;
                
-               mesh->offset = newPos - V3(mesh->physicalPos);
-               mesh->scale *= exp;
+               e->visualPos = newPos;
+               e->scale *= exp;
             }
          }
       }break;
@@ -1117,10 +1103,10 @@ static void UpdateEditor(Editor *editor, Input input)
             {
                Entity *e = GetEntity(editorEntities, *it);
                
-               v3 pos = GetRenderPos(*e) + realDelta;
+               v3 pos = e->visualPos + realDelta;
                
                e->physicalPos = RoundToTileMap(pos);
-               e->offset = pos - V3(e->physicalPos);
+               e->visualPos = pos;
             }
          }
          else
@@ -1129,8 +1115,8 @@ static void UpdateEditor(Editor *editor, Input input)
             {
                Entity *e = GetEntity(editorEntities, *it);
                
-               v3 pos = GetRenderPos(*e) + realDelta;
-               e->offset = pos - V3(e->physicalPos);
+               v3 pos = e->visualPos + realDelta;
+               e->visualPos = pos;
             }
          }
          
@@ -1166,7 +1152,7 @@ static Level EditorStateToLevel(Editor *editor)
    level.camera        = info->camera;
    level.lightSource   = info->lightSource;
    level.blocksNeeded  = info->blocksNeeded;
-   level.entities      = PushArray(frameArena, EntityCopyData, editorEntities->entities.amount);
+   level.entities      = PushArray(frameArena, EntityData, editorEntities->entities.amount);
    
    for(u32 i = 0; i < editorEntities->entities.amount; i++)
    {

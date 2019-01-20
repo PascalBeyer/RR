@@ -8,7 +8,7 @@ static u32 GetHotUnit(EntityManager *entityManager, AssetHandler *assetHandler, 
 	{
 		Entity *e = it;
 		m4x4 mat = QuaternionToMatrix4(Inverse(e->orientation));
-		v3 rayP = mat * (camP - GetRenderPos(*e));
+		v3 rayP = mat * (camP - e->visualPos);
 		v3 rayD = mat * camD;
       
 		MeshInfo *info = GetMeshInfo(assetHandler, e->meshId);
@@ -144,7 +144,7 @@ static void PathCreatorHandleEvent(EntityManager *entityManager, ExecuteData *ex
                   }
                   
                   v3 p = ScreenZeroToOneToZ(cam, input.mouseZeroToOne, entity->physicalPos.z);
-                  v3 d = p - GetRenderPos(*entity);
+                  v3 d = p - entity->visualPos;
                   
                   i32 xSign = (d.x > 0) ? 1 : -1;
                   i32 ySign = (d.y > 0) ? 1 : -1;
@@ -649,7 +649,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      
                      if (allreadyIn) break;
                      
-                     EntityCopyData toAdd = EntityToData(*hotEntity);
+                     EntityData toAdd = EntityToData(*hotEntity);
                      
                      ArrayAdd(&editor->hotEntityInitialStates, toAdd);
                      ArrayAdd(&editor->hotEntitySerials, hotEntity->serial);
@@ -665,7 +665,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                   
                   if (hotEntity)
                   {
-                     EntityCopyData toAdd = EntityToData(*hotEntity);
+                     EntityData toAdd = EntityToData(*hotEntity);
                      
                      ArrayAdd(&editor->hotEntityInitialStates, toAdd);
                      ArrayAdd(&editor->hotEntitySerials, hotEntity->serial);
@@ -673,7 +673,9 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_b32, "Edit Physical", &editor->editingPhysical));
                      ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_EntityType, "EntityType", &hotEntity->type));
                      ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_v3i, "PhysicalPos", &hotEntity->physicalPos));
-                     ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_v3, "Offset", &hotEntity->offset));
+                     
+                     // todo can we make this offset by using the to Add?
+                     ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_v3, "VisualPos", &hotEntity->visualPos));
                      ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_f32, "Scale", &hotEntity->scale));
                      // todo make euler angle v3i
                      ArrayAdd(&editor->panel.values, CreateTweekerPointer(Tweeker_EulerAngle, "Orientation", &hotEntity->orientation));
@@ -810,7 +812,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      averageTile.z = 0;
                      // we are in default state, so initalstates are just the actual states
                      Reserve(&editor->clipBoard, editor->hotEntityInitialStates.amount);
-                     memcpy(editor->clipBoard.data, editor->hotEntityInitialStates.data, editor->hotEntityInitialStates.amount * sizeof(EntityCopyData));
+                     memcpy(editor->clipBoard.data, editor->hotEntityInitialStates.data, editor->hotEntityInitialStates.amount * sizeof(EntityData));
                      editor->clipBoard.amount = editor->hotEntityInitialStates.amount;
                      
                      For(editor->clipBoard) // slow?
@@ -945,7 +947,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      for(u32 i = 0; i < editor->hotEntitySerials.amount; i++)
                      {
                         Entity *e = GetEntity(editorEntities, editor->hotEntitySerials[i]);
-                        e->offset = editor->hotEntityInitialStates[i].offset;
+                        e->visualPos = V3(e->physicalPos) + editor->hotEntityInitialStates[i].offset;
                      }
                   }
                   

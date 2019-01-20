@@ -165,3 +165,4 @@ Right now the cleanest seems to ignore the usual entity data and just manipulate
 we are not considering the "node" that the mesh has right not.... I think this only matters for the bind shape?
 
 Probably make orthogonal stuff its own pass?
+kinda feels like Editor wants to have its own concept of entity at this point....
