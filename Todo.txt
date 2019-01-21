@@ -172,3 +172,4 @@ console messages should have an other color, for a few frames, after they get in
 
 altering entity types, is not undoable right now....
 colorpicker looks aweful.
+what is GL_FrameBuffer_srgb ???? and why are we not using it?

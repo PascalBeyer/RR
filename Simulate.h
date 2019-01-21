@@ -276,7 +276,6 @@ static void GameExecuteUpdate(EntityManager *entityManager, ExecuteData *exe, As
          case Unit_MoveLeft:
          case Unit_MoveRight:
          {
-            
             Entity *e = GetEntity(entityManager, it->serial);
             
             if(ShouldPhysicallyMove(e))

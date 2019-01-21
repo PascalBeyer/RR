@@ -659,6 +659,7 @@ static OpenGLContext win32InitOpenGL(HWND window)
 			wglSwapIntervalEXT(1);
 		}
       
+      WGLPROC(glBlendEquation);
       WGLPROC(glTexImage3D);
       WGLPROC(glTexSubImage3D);
       WGLPROC(glGetStringi);

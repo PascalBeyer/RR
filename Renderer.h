@@ -37,7 +37,8 @@ enum OpenGLShaderFlags : u32
    ShaderArray_Size           = 0x40, // right now this does not have to be a hash map I guess..
 };
 
-struct RenderSetup
+// not sure if we should try to make this as small as possible and calculate more later
+struct RenderSetup 
 {
 	u32 flags;
    m4x4 projection;
@@ -176,7 +177,6 @@ static void PushOrthogonalSetup(RenderGroup *rg, b32 zeroToOne, u32 flags)
       
       setup->projection = Translate(ortho, V3(-1.0f, 1.0f, 0.0f));
       setup->cameraTransform = Identity();
-      
    }
    
    // todo reuse the rest of the memory!
@@ -840,6 +840,7 @@ static f32 PushString(RenderGroup *rg, v2 pos, unsigned char* string, u32 string
    
    return (x - pos.x);
 }
+
 static f32 PushString(RenderGroup *rg, v2 pos, const char* string, f32 size, v4 color = V4(1, 1, 1, 1))
 {
    return PushString(rg, pos, (unsigned char *)string, NullTerminatedStringLength(string), size, color);

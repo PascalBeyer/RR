@@ -1,39 +1,16 @@
 #ifndef RR_OPENGL
 #define RR_OPENGL
 
+// GL Version 1.5
 #define GL_ARRAY_BUFFER                   0x8892
 #define GL_ELEMENT_ARRAY_BUFFER           0x8893
 
+
+// GL Version 1.2
 #define GL_CLAMP_TO_EDGE                  0x812F
+
+// GL Version 1.3
 #define GL_CLAMP_TO_BORDER                0x812D
-
-
-#define GL_SRGB                           0x8C40
-#define GL_SRGB8                          0x8C41
-#define GL_SRGB_ALPHA                     0x8C42
-#define GL_SRGB8_ALPHA8                   0x8C43
-#define GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE        0x8D56
-#define GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT         0x8CD6
-#define GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT 0x8CD7
-#define GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER        0x8CDB
-#define GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER        0x8CDC
-#define GL_FRAMEBUFFER_UNSUPPORTED        0x8CDD
-#define GL_INVALID_FRAMEBUFFER_OPERATION  0x0506
-#define GL_FRAMEBUFFER_UNDEFINED          0x8219
-#define GL_FRAMEBUFFER_COMPLETE           0x8CD5
-#define GL_READ_FRAMEBUFFER               0x8CA8
-#define GL_DRAW_FRAMEBUFFER               0x8CA9
-#define GL_FRAMEBUFFER                    0x8D40
-#define GL_FRAMEBUFFER_SRGB               0x8DB9
-
-#define GL_SHADING_LANGUAGE_VERSION       0x8B8C
-#define WGL_CONTEXT_MAJOR_VERSION_ARB           0x2091
-#define WGL_CONTEXT_MINOR_VERSION_ARB           0x2092
-#define WGL_CONTEXT_LAYER_PLANE_ARB             0x2093
-#define WGL_CONTEXT_FLAGS_ARB                   0x2094
-#define WGL_CONTEXT_PROFILE_MASK_ARB            0x9126
-#define GL_NUM_EXTENSIONS                 0x821D
-
 #define GL_MULTISAMPLE                    0x809D
 #define GL_SAMPLE_ALPHA_TO_COVERAGE       0x809E
 #define GL_SAMPLE_ALPHA_TO_ONE            0x809F
@@ -42,31 +19,6 @@
 #define GL_SAMPLES                        0x80A9
 #define GL_SAMPLE_COVERAGE_VALUE          0x80AA
 #define GL_SAMPLE_COVERAGE_INVERT         0x80AB
-#define GL_TEXTURE_2D_MULTISAMPLE         0x9100
-#define GL_MAX_SAMPLES                    0x8D57
-
-#define GL_INVALID_ENUM                   0x0500
-#define GL_INVALID_VALUE                  0x0501
-#define GL_INVALID_OPERATION              0x0502
-#define GL_OUT_OF_MEMORY                  0x0505
-
-#define WGL_CONTEXT_DEBUG_BIT_ARB               0x0001
-#define WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB  0x0002
-
-#define WGL_CONTEXT_CORE_PROFILE_BIT_ARB          0x00000001
-#define WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB 0x00000002
-
-#define GL_DEPTH_COMPONENT16              0x81A5
-#define GL_DEPTH_COMPONENT24              0x81A6
-#define GL_DEPTH_COMPONENT32              0x81A7
-#define GL_DEPTH_COMPONENT32F             0x8CAC
-#define GL_DEPTH_ATTACHMENT               0x8D00
-#define GL_COLOR_ATTACHMENT0              0x8CE0
-
-#define GL_DEBUG_OUTPUT_SYNCHRONOUS       0x8242
-#define GL_DEBUG_SEVERITY_HIGH            0x9146
-
-#define GL_TEXTURE_2D_ARRAY               0x8C1A
 #define GL_TEXTURE0                       0x84C0
 #define GL_TEXTURE1                       0x84C1
 #define GL_TEXTURE2                       0x84C2
@@ -78,12 +30,20 @@
 #define GL_TEXTURE8                       0x84C8
 #define GL_TEXTURE9                       0x84C9
 
+// GL Version 1.4
+#define GL_DEPTH_COMPONENT16              0x81A5
+#define GL_DEPTH_COMPONENT24              0x81A6
+#define GL_DEPTH_COMPONENT32              0x81A7
+#define GL_FUNC_ADD                       0x8006
+
+// GL Version 1.5
 #define GL_STREAM_DRAW                    0x88E0
 #define GL_STREAM_READ                    0x88E1
 #define GL_STREAM_COPY                    0x88E2
 
-#define GL_PRIMITIVE_RESTART_FIXED_INDEX  0x8D69
 
+// GL Version 2.0
+#define GL_SHADING_LANGUAGE_VERSION       0x8B8C
 #define GL_VERTEX_SHADER                  0x8B31
 #define GL_FRAGMENT_SHADER				0x8B30
 #define GL_VALIDATE_STATUS                0x8B83
@@ -91,15 +51,79 @@
 #define GL_LINK_STATUS                    0x8B82
 
 
+// GL Version 2.1
+#define GL_SRGB                           0x8C40
+#define GL_SRGB8                          0x8C41
+#define GL_SRGB_ALPHA                     0x8C42
+#define GL_SRGB8_ALPHA8                   0x8C43
+
+// GL Version 3.0
+#define GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT         0x8CD6
+#define GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT 0x8CD7
+#define GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER        0x8CDB
+#define GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER        0x8CDC
+#define GL_FRAMEBUFFER_UNSUPPORTED                   0x8CDD
+#define GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE        0x8D56
+#define GL_INVALID_FRAMEBUFFER_OPERATION  0x0506
+#define GL_FRAMEBUFFER_UNDEFINED          0x8219
+#define GL_FRAMEBUFFER_COMPLETE           0x8CD5
+#define GL_READ_FRAMEBUFFER               0x8CA8
+#define GL_DRAW_FRAMEBUFFER               0x8CA9
+#define GL_FRAMEBUFFER                    0x8D40
+#define GL_FRAMEBUFFER_SRGB               0x8DB9
+#define GL_MAJOR_VERSION                  0x821B // use these?
+#define GL_MINOR_VERSION                  0x821C // use these?
+#define GL_NUM_EXTENSIONS                 0x821D
+#define GL_MAX_SAMPLES                    0x8D57
+#define GL_DEPTH_ATTACHMENT               0x8D00
+#define GL_COLOR_ATTACHMENT0              0x8CE0
+#define GL_DEPTH_COMPONENT32F             0x8CAC
+#define GL_TEXTURE_2D_ARRAY               0x8C1A
+
+// GL Version 3.1
+#define GL_PRIMITIVE_RESTART_FIXED_INDEX  0x8D69
+
+
+// GL Version 3.2
+#define GL_TEXTURE_2D_MULTISAMPLE         0x9100
+
+// GL Version 4.3
+#define GL_DEBUG_OUTPUT_SYNCHRONOUS       0x8242
+#define GL_DEBUG_SEVERITY_HIGH            0x9146
+#define GL_DEBUG_SEVERITY_MEDIUM          0x9147
+#define GL_DEBUG_SEVERITY_LOW             0x9148
+
+// windows
+#define WGL_CONTEXT_MAJOR_VERSION_ARB           0x2091
+#define WGL_CONTEXT_MINOR_VERSION_ARB           0x2092
+#define WGL_CONTEXT_LAYER_PLANE_ARB             0x2093
+#define WGL_CONTEXT_FLAGS_ARB                   0x2094
+#define WGL_CONTEXT_PROFILE_MASK_ARB            0x9126
+#define WGL_CONTEXT_DEBUG_BIT_ARB               0x0001
+#define WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB  0x0002
+#define WGL_CONTEXT_CORE_PROFILE_BIT_ARB          0x00000001
+#define WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB 0x00000002
+
+
 
 typedef char GLchar;
 typedef ptrdiff_t GLsizeiptr;
 typedef void (APIENTRY *GLDEBUGPROC)(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, void *userParam);
 
-typedef const GLubyte* WINAPI glGetStringi_(GLenum name, GLuint index);
+// GL Version 1.1
 typedef void WINAPI glTexSubImage3D_(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const GLvoid * data);
+typedef void WINAPI glTexImage3D_(GLenum target, GLint level, GLint internalFormat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLenum format, GLenum type, const GLvoid * data);
 
-typedef void WINAPI glTexImage2DMultisample_(GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLboolean fixedsamplelocations);
+// GL Version 1.3
+typedef void WINAPI glActiveTexture_(GLenum texture);
+typedef void WINAPI glBlendEquation_(GLenum mode);
+
+// GL Version 1.5
+typedef void WINAPI glGenBuffers_(GLsizei n, GLuint *buffers);
+typedef void WINAPI glBindBuffer_(GLenum target, GLuint buffer);
+typedef void WINAPI glBufferData_(GLenum target, GLsizeiptr size, const GLvoid *data, GLenum usage);
+
+// GL Version 2.0
 typedef GLuint WINAPI glCreateShader_(GLenum type);
 typedef void WINAPI glShaderSource_(GLuint shader, GLsizei count, const GLchar *const*string, const GLint *length);
 typedef void WINAPI glCompileShader_(GLuint shader);
@@ -113,27 +137,12 @@ typedef void WINAPI glGetShaderInfoLog_(GLuint shader, GLsizei bufSize, GLsizei 
 typedef GLint WINAPI glGetUniformLocation_(GLuint program, const GLchar *name);
 typedef void WINAPI glUseProgram_(GLuint program);
 typedef void WINAPI glVertexAttribPointer_(GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const GLvoid *pointer);
-typedef void WINAPI glVertexAttribIPointer_(GLuint index, GLint size, GLenum type,GLsizei stride,const GLvoid *pointer);
-
 typedef void WINAPI glEnableVertexAttribArray_(GLuint index);
 typedef void WINAPI glDisableVertexAttribArray_(GLuint index);
 typedef GLint WINAPI glGetAttribLocation_(GLuint program, const GLchar *name);
-typedef void WINAPI glGenFramebuffers_(GLsizei n, GLuint *ids); 
-typedef void WINAPI glBindFramebuffer_(GLenum target, GLuint framebuffer);
 typedef void WINAPI glVertexAttrib3f_(GLuint index, GLfloat v0, GLfloat v1, GLfloat v2);
-typedef GLenum WINAPI glCheckFramebufferStatus_(GLenum target);
-typedef void WINAPI glFramebufferTexture_(GLenum target, GLenum attachment, GLuint texture, GLint level);
-typedef void WINAPI glFramebufferTexture2D_(GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level);
-typedef void WINAPI glBlitFramebuffer_(GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter);
-typedef void WINAPI glActiveTexture_(GLenum texture);
-typedef void WINAPI glDebugMessageCallback_(GLDEBUGPROC callback, void * userParam);
 typedef void WINAPI glUniform1i_(GLint location, GLint v0);
 typedef void WINAPI glBindAttribLocation_(GLuint program, GLuint index, const GLchar *name);
-typedef void WINAPI glGenVertexArrays_(GLsizei n, GLuint *arrays);
-typedef void WINAPI glBindVertexArray_(GLuint arrayName);
-typedef void WINAPI glGenBuffers_(GLsizei n, GLuint *buffers);
-typedef void WINAPI glBindBuffer_(GLenum target, GLuint buffer);
-typedef void WINAPI glBufferData_(GLenum target, GLsizeiptr size, const GLvoid *data, GLenum usage);
 typedef void WINAPI glUniform4fv_(GLint location, GLsizei count, const GLfloat *value);
 typedef void WINAPI glUniform1iv_(GLint location, GLsizei count, const GLint *value);
 typedef void WINAPI glUniformMatrix4fv_(GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
@@ -141,8 +150,32 @@ typedef void WINAPI glUniform1f_(GLint location, GLfloat v0);
 typedef void WINAPI glUniform2f_(GLint location, GLfloat v0, GLfloat v1);
 typedef void WINAPI glUniform3f_(GLint location, GLfloat v0, GLfloat v1, GLfloat v2);
 typedef void WINAPI glUniform4f_(GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3);
-typedef void WINAPI glTexImage3D_(GLenum target, GLint level, GLint internalFormat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLenum format, GLenum type, const GLvoid * data);
 
+
+
+
+// GL Version 3.0
+typedef const GLubyte* WINAPI glGetStringi_(GLenum name, GLuint index);
+typedef void WINAPI glVertexAttribIPointer_(GLuint index, GLint size, GLenum type,GLsizei stride,const GLvoid *pointer);
+typedef void WINAPI glGenFramebuffers_(GLsizei n, GLuint *ids); 
+typedef void WINAPI glBindFramebuffer_(GLenum target, GLuint framebuffer);
+typedef GLenum WINAPI glCheckFramebufferStatus_(GLenum target);
+typedef void WINAPI glFramebufferTexture2D_(GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level);
+typedef void WINAPI glBlitFramebuffer_(GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter);
+typedef void WINAPI glGenVertexArrays_(GLsizei n, GLuint *arrays);
+typedef void WINAPI glBindVertexArray_(GLuint arrayName);
+
+// GL Version 3.2
+typedef void WINAPI glTexImage2DMultisample_(GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLboolean fixedsamplelocations);
+typedef void WINAPI glFramebufferTexture_(GLenum target, GLenum attachment, GLuint texture, GLint level);
+
+
+// GL Version 4.3
+typedef void WINAPI glDebugMessageCallback_(GLDEBUGPROC callback, void * userParam);
+
+
+
+static glBlendEquation_ *glBlendEquation;
 static glTexImage3D_ *glTexImage3D;
 static glTexSubImage3D_ *glTexSubImage3D;
 static glGetStringi_ *glGetStringi;
@@ -636,7 +669,7 @@ struct OpenGLUniformInfo
    u32 textureIndex;
 };
 
-static void BeginUseProgram(OpenGLContext *context, OpenGLProgram *prog, RenderSetup setup, m4x4 shadowMat)
+static void BeginUseProgram(OpenGLContext *context, OpenGLProgram *prog, RenderSetup setup)
 {
 	glUseProgram(prog->program);
    
@@ -870,12 +903,15 @@ static OpenGLContext OpenGLInit(bool modernContext)
    
    u32 amountOfMultiSamples = Min(info.amountOfMultiSamples, 4u);
    
+   
+   
+   
    FrameBuffer renderBuffer;
    // todo make this passed in
    renderBuffer.width  = 1280;
    renderBuffer.height = 720;
    
-#if 1 // to work around renderdoc not working...
+#if 0 // to work around renderdoc not working...
    {
       GLuint texture_map;
       glGenTextures(1, &texture_map);
@@ -916,7 +952,7 @@ static OpenGLContext OpenGLInit(bool modernContext)
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
       
-      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, renderbuffer.width, renderbuffer.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, renderBuffer.width, renderBuffer.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
       
       renderBuffer.texture = texture_map;
       glBindTexture(GL_TEXTURE_2D, 0);
@@ -948,9 +984,6 @@ static OpenGLContext OpenGLInit(bool modernContext)
       GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
       Assert(status == GL_FRAMEBUFFER_COMPLETE);
    }
-   
-   glBindTexture(GL_TEXTURE_2D, 0);
-   glBindFramebuffer(GL_FRAMEBUFFER, 0);
    
    FrameBuffer shadowBuffer;
    
@@ -990,6 +1023,9 @@ static OpenGLContext OpenGLInit(bool modernContext)
    }
    
    
+   glBindTexture(GL_TEXTURE_2D, 0);
+   glBindFramebuffer(GL_FRAMEBUFFER, 0);
+   
    
    {   // Build the textureArray
       glGenTextures(1, &globalTextureArray);
@@ -1012,6 +1048,7 @@ static OpenGLContext OpenGLInit(bool modernContext)
    glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE);
    glEnable(GL_SAMPLE_ALPHA_TO_ONE);
    glEnable(GL_MULTISAMPLE);
+   glEnable(GL_FRAMEBUFFER_SRGB); // not sure....
    glEnable(GL_CULL_FACE);
    
    glEnable(GL_BLEND);
@@ -1078,10 +1115,7 @@ static void RenderIntoShadowMap(RenderCommands *rg, OpenGLContext *context)
    
    glUseProgram(prog->program);
    
-   
-   
    glBindFramebuffer(GL_FRAMEBUFFER, context->shadowBuffer.id);
-   
    glViewport(0, 0, context->shadowBuffer.width, context->shadowBuffer.height);  // is this per framebuffer?
    
    glClearDepth(1.0f);
@@ -1100,7 +1134,7 @@ static void RenderIntoShadowMap(RenderCommands *rg, OpenGLContext *context)
             EntryChangeRenderSetup *setupHeader = (EntryChangeRenderSetup *)header;
             currentSetup = setupHeader->setup;
             currentSetup.cameraTransform = currentSetup.shadowMat;
-            BeginUseProgram(context, prog, currentSetup, currentSetup.shadowMat);
+            BeginUseProgram(context, prog, currentSetup);
             
             pBufferIt += sizeof(*setupHeader);
          }break;
@@ -1162,15 +1196,6 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
    
    RenderIntoShadowMap(rg, context);
    
-   glBindFramebuffer(GL_FRAMEBUFFER, context->renderBuffer.id);
-   glViewport(0, 0, context->renderBuffer.width, context->renderBuffer.height);
-   glClearDepth(1.0f);
-   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-   
-   //glCullFace(GL_BACK);
-   //glDisable(GL_CULL_FACE);
-   
-   
    m4x4 biasMatrix =
    {
       {
@@ -1180,6 +1205,9 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
          { 0.0f, 0.0f, 0.0f, 1.0f }
       }
    };
+   
+   glBindFramebuffer(GL_FRAMEBUFFER, context->renderBuffer.id);
+   glViewport(0, 0, context->renderBuffer.width, context->renderBuffer.height);  // is this per framebuffer?
    
    RenderSetup currentSetup = {};
    m4x4 shadowMat = {};
@@ -1195,11 +1223,14 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
          case RenderGroup_EntryChangeRenderSetup:
          {
             EntryChangeRenderSetup *setupHeader = (EntryChangeRenderSetup *)header;
+            
+            RenderSetup *newSetup = &setupHeader->setup;
+            
             currentSetup = setupHeader->setup;
             shadowMat = biasMatrix * currentSetup.projection * currentSetup.shadowMat;
             prog = GetOpenGLProgram(context, currentSetup.flags);
             
-            BeginUseProgram(context, prog, currentSetup, shadowMat);
+            BeginUseProgram(context, prog, currentSetup);
             
             // todo do this in the setup, so we do not have to do it for every pass.
             pBufferIt += sizeof(*setupHeader);
@@ -1294,8 +1325,13 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
          case RenderGroup_EntryClear:
          {
             EntryClear *clearHeader = (EntryClear *)header;
+            
+            // not sure
+            
+            glBindFramebuffer(GL_FRAMEBUFFER, context->renderBuffer.id);
+            glClearDepth(1.0f);
             glClearColor(clearHeader->color.r, clearHeader->color.g, clearHeader->color.b, clearHeader->color.a);
-            glClear(GL_COLOR_BUFFER_BIT);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             
             pBufferIt += sizeof(*clearHeader);
          }break;
@@ -1327,11 +1363,14 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
       }
    }
    
+   //glBlendEquation(GL_FUNC_ADD);
+   
+   glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+   
    glBindFramebuffer(GL_READ_FRAMEBUFFER, context->renderBuffer.id);
    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
    
    glBlitFramebuffer(0, 0, context->renderBuffer.width, context->renderBuffer.height, 0, 0, rg->width, rg->height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
-   
    
    //flush
    rg->pushBufferSize = 0;
