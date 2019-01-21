@@ -1,6 +1,6 @@
 
 
-//Righthanded coordinates, +Z going into the screen, +Y is "down" ? , +X is to the right
+//Righthanded coordinates, -Z going into the screen, +Y is "down" ? , +X is to the right
 //todo just store the projection matrix instead of aspectratio and focal length?
 struct Camera
 {

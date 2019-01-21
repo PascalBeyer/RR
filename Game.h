@@ -263,7 +263,6 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
 	{
       case Game_Execute:
       {
-         
          Tweekable(b32, debugCam);
          Camera *cam = debugCam ? &exe->debugCamera : &exe->camera;
          
@@ -297,8 +296,6 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
             RenderEntityQuadTree(rg, &entityManager->entityTree.root);
          }
          
-         
-         
       }break;
       case Game_Editor:
       {
@@ -310,61 +307,6 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
       }break;
    }
    
-   
-#if 0
-   { // animation test
-      
-      static f32 t = 0.0f;
-      
-      t += dt;
-      
-      //u32 animationID = RegisterAsset(assetHandler, Asset_Animation, "easy.animation");
-      u32 animationID = RegisterAsset(assetHandler, Asset_Animation, "Push.animation");
-      KeyFramedAnimation *animation = GetAnimation(assetHandler, animationID);
-      u32 guyId          = RegisterAsset(assetHandler, Asset_Mesh, "Push.mesh");
-      TriangleMesh *mesh = GetMesh(assetHandler, guyId);
-      
-      InterpolationDataArray local = GetLocalTransforms(animation, t);
-      
-      m4x4Array bones = LocalToWorld(&mesh->skeleton, local); 
-      
-      { // Head IK test
-         
-         f32 timeScale = 0.1f;
-         v3 headPos = V3(0, 0, 5);
-         v3 orbit = 3.0f * V3(Cos(timeScale * t * PI), Sin(timeScale * t * PI), 0.0f);
-         v3 point = headPos + orbit;
-         PushDebugPointCuboid(rg, point);
-#if 0
-         InterpolationData data = MatrixToInterpolationData(bones[3]);
-         
-         v3 oldForward  = bones[3] * V3(0, 0, -1) - headPos; 
-         
-         PushLine(rg, headPos, bones[3] * V3(1, 0, 0), 0xFFFF0000); // forward : blue
-         PushLine(rg, headPos, bones[3] * V3(0, 1, 0), 0xFF00FF00); // up      : green
-         PushLine(rg, headPos, bones[3] * V3(0, 0, 1), 0xFF0000FF); // right   : red
-         
-         Quaternion newQ = LookAt(Normalize(oldForward), Normalize(orbit));
-         
-         data.orientation = newQ * data.orientation;
-         
-         bones[3] = InterpolationDataToMatrix(data);
-         
-         PushLine(rg, headPos, bones[3] * V3(0, -1, 0), 0xFF00FFFF);
-         PushLine(rg, headPos, headPos +  CrossProduct(oldForward, point - headPos), 0xFFFFFF00);
-#endif
-         //ApplyIK(mesh->skeleton.bones, local, bones, 3, point);
-         
-      }
-      
-      for (u32 i = 0; i < mesh->skeleton.bones.amount; i++)
-      {
-         bones[i] = bones[i] * mesh->skeleton.bones[i].inverseBindShapeMatrix;
-      }
-      
-      PushAnimatedMesh(rg, mesh, QuaternionId(), v3(), 1.0f, V4(1, 1, 1, 1), bones);
-   }
-#endif
    
    Tweekable(b32, drawCamera);
    
@@ -390,8 +332,6 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
       PushLine(rg, camera->pos, camera->pos + B1(camera->orientation), 0xFFFF0000); // blue
       PushLine(rg, camera->pos, camera->pos + B2(camera->orientation), 0xFF00FF00); // green
       PushLine(rg, camera->pos, camera->pos + B3(camera->orientation), 0xFF0000FF); // red
-      
-      
       
       //PushDebugPointCuboid(rg, camera->pos + B3(camera->orientation) *5.0f);
       

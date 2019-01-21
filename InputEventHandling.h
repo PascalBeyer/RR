@@ -150,32 +150,24 @@ static void PathCreatorHandleEvent(EntityManager *entityManager, ExecuteData *ex
                   i32 ySign = (d.y > 0) ? 1 : -1;
                   
                   // todo maybe combine these with render? so we are sure that these are always doing the same thing
-                  if (BoxNorm(d) < 0.5f)
+                  
+                  v3i dir;
+                  if (BoxNorm(d) <= 0.5f)
                   {
-                     ArrayAdd(program, Unit_Wait);
+                     dir = V3i();
                   }
                   else if ((f32)ySign * d.y > (f32)xSign * d.x)
                   {
-                     if (ySign > 0)
-                     {
-                        ArrayAdd(program, Unit_MoveUp);
-                     }
-                     else
-                     {
-                        ArrayAdd(program, Unit_MoveDown);
-                     }
+                     dir = (ySign > 0) ? V3i(0, 1, 0) : V3i(0, -1, 0);
                   }
                   else
                   {
-                     if (xSign > 0)
-                     {
-                        ArrayAdd(program, Unit_MoveRight);
-                     }
-                     else
-                     {
-                        ArrayAdd(program, Unit_MoveLeft);
-                     }
+                     dir = (xSign > 0) ? V3i(1, 0, 0) : V3i(-1, 0, 0);
                   }
+                  
+                  ArrayAdd(program, GetOneStepForDir(dir));
+                  
+                  
                   
                }break;
                case Key_rightMouse:
@@ -340,11 +332,11 @@ static v3i AdjustForCamera(Camera cam, KeyEnum key)
             }break;
             case Key_left:
             {
-               return V3i(0, -1, 0);
+               return V3i(0, 1, 0);
             }break;
             case Key_right:
             {
-               return V3i(0, 1, 0);
+               return V3i(0, -1, 0);
             }break;
          }
          
@@ -365,11 +357,11 @@ static v3i AdjustForCamera(Camera cam, KeyEnum key)
             
             case Key_left:
             {
-               return V3i(0, 1, 0);
+               return V3i(0, -1, 0);
             }break;
             case Key_right:
             {
-               return V3i(0, -1, 0);
+               return V3i(0, 1, 0);
             }break;
          }
       }
@@ -391,11 +383,11 @@ static v3i AdjustForCamera(Camera cam, KeyEnum key)
             
             case Key_left:
             {
-               return V3i(1, 0, 0);
+               return V3i(-1, 0, 0);
             }break;
             case Key_right:
             {
-               return V3i(-1, 0, 0);
+               return V3i(1, 0, 0);
             }break;
          }
       }
@@ -413,11 +405,11 @@ static v3i AdjustForCamera(Camera cam, KeyEnum key)
             }break;
             case Key_left:
             {
-               return V3i(-1, 0, 0);
+               return V3i(1, 0, 0);
             }break;
             case Key_right:
             {
-               return V3i(1, 0, 0);
+               return V3i(-1, 0, 0);
             }break;
          }
       }
@@ -725,8 +717,8 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      For(editor->hotEntitySerials)
                      {
                         Entity *mesh = GetEntity(editorEntities, *it);
-                        mesh->physicalPos += V3i(0, 0, -1);
-                        mesh->visualPos += V3(0, 0, -1);
+                        mesh->physicalPos += V3i(0, 0, 1);
+                        mesh->visualPos   += V3(0, 0, 1);
                      }
                      break;
                   }
@@ -749,8 +741,8 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      For(editor->hotEntitySerials)
                      {
                         Entity *mesh = GetEntity(editorEntities, *it);
-                        mesh->physicalPos += V3i(0, 0, 1);
-                        mesh->visualPos += V3(0, 0, 1);
+                        mesh->physicalPos += V3i(0, 0, -1);
+                        mesh->visualPos   += V3(0, 0, -1);
                      }
                      break;
                   }

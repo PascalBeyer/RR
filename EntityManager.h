@@ -506,6 +506,7 @@ static void ResetEntityManager(EntityManager *entityManager)
       it->physicalPos = it->initialPos;
       it->flags &= ~EntityFlag_FrameResetFlag;
       InsertEntity(entityManager, it);
+      it->visualPos = V3(it->initialPos);
    }
 }
 
@@ -694,4 +695,36 @@ static v3i GetAdvanceForOneStep(UnitInstruction step)
       
    }
    return advance;
+}
+
+static UnitInstruction GetOneStepForDir(v3i dir)
+{
+   
+   if(dir == V3i(0, 0, 0))
+   {
+      return Unit_Wait;
+   }else if(dir == V3i(1, 0, 0))
+   {
+      return Unit_MoveRight;
+   }else if(dir == V3i(-1, 0, 0))
+   {
+      return Unit_MoveLeft;
+   }else if(dir == V3i(0, 1, 0))
+   {
+      return Unit_MoveUp;
+   }else if(dir == V3i(0, -1, 0))
+   {
+      return Unit_MoveDown;
+   }
+   else
+   {
+      Die;
+   }
+   
+   return Unit_Wait;
+}
+
+static v3i SnapToTileMap(v3 pos)
+{
+   return V3i((i32)pos.x, (i32)pos.y, (i32)pos.z);
 }

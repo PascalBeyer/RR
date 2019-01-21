@@ -2293,19 +2293,6 @@ static TriangleMesh LoadMesh(AssetHandler *assetHandler, char *fileName, void **
    
    ret.aabb = PullOff(AABB);
    
-#if 0
-   
-   { // vertex to weight map
-      *PushStruct(frameArena, u32) = skeleton->vertexToWeightsMap.amount;
-      For(skeleton->vertexToWeightsMap)
-      {
-         *PushStruct(frameArena, u32) = it->amount;
-         WeightDataArray dest = PushArray(frameArena, WeightData, it->amount);
-         memcpy(dest.data, it->data, it->amount * sizeof(WeightData));
-      }
-   }
-   
-#endif
    PullOffArray(v3, ret.skeleton.vertices);
    PullOffArray(u16, ret.skeleton.vertexMap);
    
@@ -2317,6 +2304,7 @@ static TriangleMesh LoadMesh(AssetHandler *assetHandler, char *fileName, void **
    
    PullOffArray(Bone, ret.skeleton.bones);
    // todo update mesh!
+   
    RegisterTriangleMesh(&ret);
    
    return ret;

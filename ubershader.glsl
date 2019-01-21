@@ -111,7 +111,8 @@ void main(void)
    gl_Position = projection * vertexInCameraSpace;
    
 #ifdef ZBias
-   gl_Position.z = -2.0f; // what should this value be?
+   gl_Position = gl_Position / gl_Position.w;
+   gl_Position.z = -1.0f; // what should this value be?
 #endif
    
    

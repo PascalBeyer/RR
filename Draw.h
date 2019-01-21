@@ -18,15 +18,15 @@ static void DrawNumberOnTile(RenderGroup *rg, u32 number, v3i pos, v4 color = V4
 	f32 dim = 1.0f;
 	f32 dimWoBorder = dim - 2.0f * border;
    
-	f32 curZ = (f32)number * 0.0004f;
+	f32 curZ = - (f32)number * 0.0004f;
    
-	PushRectangle(rg, V3(pos) - 0.5f * V3(dim, dim, curZ + 0.0001f), V3(dim, 0, 0), V3(0, dim, 0), V4(1, 1, 1, 1));
-	PushRectangle(rg, V3(pos) - 0.5f * V3(dimWoBorder, dimWoBorder, curZ + 0.0002f), V3(dimWoBorder, 0, 0), V3(0, dimWoBorder, 0), color);
+	PushRectangle(rg, V3(pos) - 0.5f * V3(dim, dim, curZ - 0.0001f), V3(dim, 0, 0), V3(0, dim, 0), V4(1, 1, 1, 1));
+	PushRectangle(rg, V3(pos) - 0.5f * V3(dimWoBorder, dimWoBorder, curZ - 0.0002f), V3(dimWoBorder, 0, 0), V3(0, dimWoBorder, 0), color);
    
 	f32 halfDim = dimWoBorder / 2.0f;
 	if (number < 10)
 	{
-		v3 p1 = V3(pos) - 0.5f * V3(halfDim, halfDim, curZ + 0.0003f);
+		v3 p1 = V3(pos) - 0.5f * V3(halfDim, halfDim, curZ - 0.0003f);
 		v3 p2 = p1 + V3(halfDim, 0, 0);
 		v3 p3 = p1 + V3(0, halfDim, 0);
 		v3 p4 = p1 + V3(halfDim, halfDim, 0);
@@ -43,7 +43,7 @@ static void DrawNumberOnTile(RenderGroup *rg, u32 number, v3i pos, v4 color = V4
       
       
 		{
-			v3 p1 = V3(pos) - 0.5f * V3(dimWoBorder, halfDim, curZ + 0.0003f);
+			v3 p1 = V3(pos) - 0.5f * V3(dimWoBorder, halfDim, curZ - 0.0003f);
 			v3 p2 = p1 + V3(halfDim, 0, 0);
 			v3 p3 = p1 + V3(0, halfDim, 0);
 			v3 p4 = p1 + V3(halfDim, halfDim, 0);
@@ -54,7 +54,7 @@ static void DrawNumberOnTile(RenderGroup *rg, u32 number, v3i pos, v4 color = V4
 		}
       
 		{
-			v3 p1 = V3(pos) - 0.5f * V3(0, halfDim, curZ + 0.0003f);
+			v3 p1 = V3(pos) - 0.5f * V3(0, halfDim, curZ - 0.0003f);
 			v3 p2 = p1 + V3(halfDim, 0, 0);
 			v3 p3 = p1 + V3(0, halfDim, 0);
 			v3 p4 = p1 + V3(halfDim, halfDim, 0);
@@ -70,7 +70,7 @@ static void RenderPathCreator(RenderGroup *rg, EntityManager *entityManager, Exe
 {
    Camera camera = exe->debug ? exe->debugCamera : exe->camera;
    
-   PushProjectiveSetup(rg, camera, exe->lightSource, ShaderFlags_MultiTextured|ShaderFlags_ZBias);
+   PushProjectiveSetup(rg, camera, exe->lightSource, ShaderFlags_MultiTextured|ShaderFlags_ShadowMapping);
 	if (pathCreator->hotUnit != 0xFFFFFFFF)
 	{
       UnitData *data = entityManager->unitData + pathCreator->hotUnit;

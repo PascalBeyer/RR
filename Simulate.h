@@ -202,7 +202,12 @@ static void ChangeExecuteState(EntityManager *entityManager, ExecuteData *exe, E
 	}
 }
 
-static b32 MaybeMoveEntity(Entity *e, v3i dir, EntityManager *entityManager)
+static b32 ShouldPhysicallyMove(Entity *e)
+{
+   return (SnapToTileMap(e->visualPos) != e->physicalPos);
+}
+
+static b32 MaybePhysicallyMove(Entity *e, v3i dir, EntityManager *entityManager)
 {
 	if (dir == V3i()) return false;
    
@@ -251,66 +256,77 @@ static void GameExecuteUpdate(EntityManager *entityManager, ExecuteData *exe, As
    For(entityManager->unitData)
    {
       if(!it->instructions) continue;
+      UnitInstruction step = it->instructions[it->at % it->instructions.amount];
       
-      it->t += timePassed;
-      Entity *e = GetEntity(entityManager, it->serial);
-      
-      if(it->t >= 1.0f)
+      switch(step)
       {
-         UnitInstruction step = it->instructions[it->at % it->instructions.amount];
-         v3i dir = GetAdvanceForOneStep(step);
-         
-         bool moved = MaybeMoveEntity(e, dir, entityManager);
-         if(moved)
+         case Unit_Wait:
          {
-            it->currentInstruction = step;
-            it->at++;
-            it->t -= 1.0f;
             
-            { // supply animations
-               
-               // todo where to store these locally?
-               u32 animationID = RegisterAsset(assetHandler, Asset_Animation, "Push.animation");
-               AnimationState *anim = entityManager->animationStates + (u32)(it - entityManager->unitData.data);
-               InterpolationData data;
-               data.orientation = e->orientation;
-               data.scale       = V3(e->scale, e->scale, e->scale);
-               data.translation = e->visualPos;
-               AddAnimation(anim, animationID, 1.0f, 0.0f, data);
-               
-               v3 delta;
-               if(RandomU32(&series) % 2)
+         }break;
+         case Unit_MoveUp:
+         case Unit_MoveDown:
+         case Unit_MoveLeft:
+         case Unit_MoveRight:
+         {
+            v3i dir = GetAdvanceForOneStep(step);
+            Entity *e = GetEntity(entityManager, it->serial);
+            
+            if(ShouldPhysicallyMove(e))
+            {
+               bool moved = MaybePhysicallyMove(e, dir, entityManager);
+               if(moved)
                {
-                  delta = V3(100, 100, 100);
-                  For(other, entityManager->unitArray)
-                  {
-                     v3 thisDelta = (other->visualPos - e->visualPos);
-                     if(QuadNorm(thisDelta) < QuadNorm(delta))
+                  it->currentInstruction = step;
+                  it->at++;
+                  
+                  { // supply animations
+                     
+                     // todo where to store these locally?
+                     u32 animationID = RegisterAsset(assetHandler, Asset_Animation, "Run.animation");
+                     AnimationState *anim = entityManager->animationStates + (u32)(it - entityManager->unitData.data);
+                     InterpolationData data;
+                     data.orientation = e->orientation;
+                     data.scale       = V3(e->scale, e->scale, e->scale);
+                     data.translation = e->visualPos;
+                     AddAnimation(anim, animationID, 1.0f, 0.0f, data);
+                     
+#if 0
+                     v3 delta;
+                     if(RandomU32(&series) % 2)
                      {
-                        delta = thisDelta;
+                        delta = V3(100, 100, 100);
+                        For(other, entityManager->unitArray)
+                        {
+                           v3 thisDelta = (other->visualPos - e->visualPos);
+                           if(QuadNorm(thisDelta) < QuadNorm(delta))
+                           {
+                              delta = thisDelta;
+                           }
+                        }
                      }
+                     else
+                     {
+                        delta = (exe->camera.pos - e->visualPos);
+                     }
+                     
+                     AddIK(anim, 1, delta, 'x', 1, 1);
+#endif
                   }
                }
-               else
-               {
-                  delta = (exe->camera.pos - e->visualPos);
-               }
                
-               AddIK(anim, 1, delta, 'x', 1, 1);
             }
-         }
-         else
-         {
-            it->t = 1.0f;
-            // supply blocked animation?
-         }
+            else
+            {
+               e->visualPos   = e->visualPos + timePassed * V3(dir);
+               Quaternion intendedOrientation = AxisAngleToQuaternion((f32)atan2f((f32)dir.x, (f32)dir.y), V3(0, 0, 1));
+               
+               e->orientation = NLerp(e->orientation, timePassed, intendedOrientation);
+            }
+            
+         }break;
+         InvalidDefaultCase;
       }
-      
-      UnitInstruction step = it->currentInstruction;
-      v3i dir        = GetAdvanceForOneStep(step);
-      e->visualPos   = V3(e->physicalPos) - (1.0f - it->t) * V3(dir);
-      e->orientation = AxisAngleToQuaternion((f32)atan2f((f32)dir.x, (f32)dir.y), V3(0, 0, 1));
-      
    }
    
    For(s, entityManager->animationStates)
