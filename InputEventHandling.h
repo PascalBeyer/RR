@@ -102,13 +102,6 @@ static void PathCreatorHandleEvent(EntityManager *entityManager, ExecuteData *ex
                   pathCreator->hotUnit = unitIndex;
                   pathCreator->state = PathCreator_CreatingPath;
                   
-                  ResetEntityManager(entityManager);
-                  f32 dt = 1.0f;
-                  
-                  For(entityManager->unitData[unitIndex].instructions)
-                  {
-                     GameExecuteUpdate(entityManager, exe, assetHandler, dt, input);
-                  }
                }break;
                case Key_F6:
                {
@@ -143,31 +136,19 @@ static void PathCreatorHandleEvent(EntityManager *entityManager, ExecuteData *ex
                      break;
                   }
                   
+                  // todo, speed or whatever..
+                  v3i entityPos = entity->initialPos;
+                  For(*program)
+                  {
+                     entityPos += GetAdvanceForOneStep(*it);
+                  }
+                  
                   v3 p = ScreenZeroToOneToZ(cam, input.mouseZeroToOne, entity->physicalPos.z);
-                  v3 d = p - entity->visualPos;
+                  v3 d = p - V3(entityPos);
                   
-                  i32 xSign = (d.x > 0) ? 1 : -1;
-                  i32 ySign = (d.y > 0) ? 1 : -1;
-                  
-                  // todo maybe combine these with render? so we are sure that these are always doing the same thing
-                  
-                  v3i dir;
-                  if (BoxNorm(d) <= 0.5f)
-                  {
-                     dir = V3i();
-                  }
-                  else if ((f32)ySign * d.y > (f32)xSign * d.x)
-                  {
-                     dir = (ySign > 0) ? V3i(0, 1, 0) : V3i(0, -1, 0);
-                  }
-                  else
-                  {
-                     dir = (xSign > 0) ? V3i(1, 0, 0) : V3i(-1, 0, 0);
-                  }
-                  
+                  // todo, maybe shortcut this.
+                  v3i dir = ToTilemapDir(d);
                   ArrayAdd(program, GetOneStepForDir(dir));
-                  
-                  
                   
                }break;
                case Key_rightMouse:

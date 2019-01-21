@@ -204,16 +204,15 @@ static void ChangeExecuteState(EntityManager *entityManager, ExecuteData *exe, E
 
 static b32 ShouldPhysicallyMove(Entity *e)
 {
-   return (SnapToTileMap(e->visualPos) != e->physicalPos);
+   return (RoundToTileMap(e->visualPos) != e->physicalPos);
 }
 
-static b32 MaybePhysicallyMove(Entity *e, v3i dir, EntityManager *entityManager)
+static b32 MaybePhysicallyMove(Entity *e, EntityManager *entityManager)
 {
-	if (dir == V3i()) return false;
+	v3i intendedPos = RoundToTileMap(e->visualPos);
    
-	v3i intendedPos = e->physicalPos + dir;
+   if(intendedPos == e->physicalPos) {return false;}
    
-	// todo for now we just push if it is pushable, maybe we should only push if all are pushable...
 	EntityPtrArray blockingEntities = GetEntities(entityManager, intendedPos);
    
 	if(blockingEntities.amount)
@@ -221,19 +220,21 @@ static b32 MaybePhysicallyMove(Entity *e, v3i dir, EntityManager *entityManager)
 		return false;
 	}
    RemoveEntityFromTree(entityManager, e);
-   e->physicalPos += dir;
+   e->physicalPos = intendedPos;
    InsertEntity(entityManager, e);
    
 	e->flags |= EntityFlag_IsMoving;
    return true;
 }
 
-static void GameExecuteUpdate(EntityManager *entityManager, ExecuteData *exe, AssetHandler *assetHandler, f32 dt, Input input)
+static void GameExecuteUpdate(EntityManager *entityManager, ExecuteData *exe, AssetHandler *assetHandler, Input input)
 {
 	
    TimedBlock;
-   f32 timePassed = dt * exe->simData.timeScale;
+   f32 timePassed = input.dt * exe->simData.timeScale;
    exe->t += timePassed;
+   
+   timePassed = 0.33f * exe->simData.timeScale;
    
    if(exe->debug && exe->middleMouseDown)
    {
@@ -256,29 +257,42 @@ static void GameExecuteUpdate(EntityManager *entityManager, ExecuteData *exe, As
    For(entityManager->unitData)
    {
       if(!it->instructions) continue;
-      UnitInstruction step = it->instructions[it->at % it->instructions.amount];
+      UnitInstruction currentInstruction = it->instructions[it->at % it->instructions.amount];
       
-      switch(step)
+      switch(currentInstruction)
       {
          case Unit_Wait:
          {
-            
+            it->t += timePassed;
+            if(it->t > 1.0f)
+            {
+               it->at++;
+               it->t = 0.0f;
+               //UnitInstruction nextInstruction = it->instructions[it->at % it->instructions.amount];
+            }
          }break;
          case Unit_MoveUp:
          case Unit_MoveDown:
          case Unit_MoveLeft:
          case Unit_MoveRight:
          {
-            v3i dir = GetAdvanceForOneStep(step);
+            
             Entity *e = GetEntity(entityManager, it->serial);
             
             if(ShouldPhysicallyMove(e))
             {
-               bool moved = MaybePhysicallyMove(e, dir, entityManager);
+               v3i dir = GetAdvanceForOneStep(currentInstruction);
+               Assert(e->physicalPos + dir == RoundToTileMap(e->visualPos));
+               
+               bool moved = MaybePhysicallyMove(e, entityManager);
                if(moved)
                {
-                  it->currentInstruction = step;
+                  Assert(!ShouldPhysicallyMove(e)); 
+                  
                   it->at++;
+                  UnitInstruction nextInstruction = it->instructions[it->at % it->instructions.amount];
+                  
+                  e->visualPos = V3(e->physicalPos);
                   
                   { // supply animations
                      
@@ -317,14 +331,40 @@ static void GameExecuteUpdate(EntityManager *entityManager, ExecuteData *exe, As
                
             }
             else
-            {
-               e->visualPos   = e->visualPos + timePassed * V3(dir);
-               Quaternion intendedOrientation = AxisAngleToQuaternion((f32)atan2f((f32)dir.x, (f32)dir.y), V3(0, 0, 1));
+            {   //should not physically moves
+               v3i dir = GetAdvanceForOneStep(currentInstruction);
+               e->visualPos = e->visualPos + timePassed * V3(dir);
+               Quaternion intendedOrientation = AxisAngleToQuaternion((f32)atan2f((f32)dir.y, (f32)dir.x), V3(0, 0, 1));
                
                e->orientation = NLerp(e->orientation, timePassed, intendedOrientation);
             }
             
          }break;
+         case Unit_FlipBit:
+         {
+            it->t += timePassed;
+            if(it->t > 1.0f)
+            {
+               Entity *e = GetEntity(entityManager, it->serial);
+               it->at++;
+               it->t = 0.0f;
+               EntityPtrArray maybeBits = GetEntities(entityManager, e->physicalPos);
+               For(bit, maybeBits)
+               {
+                  if((*bit)->type != Entity_Bit) continue;
+                  
+                  Tweekable(v4, bitColorOne, V4(1.0f, 0.5f, 0.8f, 0.2f));
+                  Tweekable(v4, bitColorTwo, V4(1.0f, 0.5f, 0.3f, 0.8f));
+                  
+                  BitData *bitData = GetBitData(entityManager, *bit);
+                  bitData->value = !bitData->value;
+                  
+                  (*bit)->color = bitData->value ? bitColorOne : bitColorTwo;
+               }
+            }
+         }break;
+         
+         
          InvalidDefaultCase;
       }
    }
@@ -333,7 +373,7 @@ static void GameExecuteUpdate(EntityManager *entityManager, ExecuteData *exe, As
    {
       ForC(s->animations)
       {
-         it->t += it->timeScale * dt;
+         it->t += it->timeScale * timePassed;
       }
       //s->animationLerpT -= dt;
    }

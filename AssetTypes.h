@@ -5,7 +5,8 @@ enum EntityType // warning gets used in  files
    
 	Entity_Dude,
    Entity_Wall,
-	
+	Entity_Bit,
+   
    Entity_Count,
 };
 
@@ -13,6 +14,7 @@ enum EntityFlags
 {
 	EntityFlag_SupportsUnit = 0x1,
 	EntityFlag_BlocksUnit = 0x2,
+   EntityFlag_Interactable = 0x4,
    
    EntityFlag_IsDynamic = 0x200,
    

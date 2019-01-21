@@ -266,15 +266,25 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
          Tweekable(b32, debugCam);
          Camera *cam = debugCam ? &exe->debugCamera : &exe->camera;
          
-         f32 aspectRatio = cam->aspectRatio; // todo, this does not really belong in the camera.
-         f32 focalLength = cam->focalLength;
-         
-         // update
          UpdateColorPickers(editor, input);
-         GameExecuteUpdate(entityManager, exe, assetHandler, dt, input);
          
-         // Render
-         RenderExecute(rg, entityManager, exe, assetHandler, input);
+         switch (exe->state)
+         {
+            case Execute_PathCreator:
+            {
+               RenderPathCreator(rg, entityManager, exe, &exe->pathCreator, assetHandler, input);
+            }break;
+            case Execute_Simulation:
+            {
+               GameExecuteUpdate(entityManager, exe, assetHandler, input);
+               RenderSimulate(rg, entityManager, exe);
+            }break;
+            case Execute_Victory:
+            {
+               RenderSimulate(rg, entityManager, exe);
+            }break;
+            InvalidDefaultCase;
+         }
          
          Tweekable(b32, DrawMeshOutlines);
          if (DrawMeshOutlines)

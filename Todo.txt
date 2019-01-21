@@ -168,3 +168,7 @@ Probably make orthogonal stuff its own pass?
 kinda feels like Editor wants to have its own concept of entity at this point....
 
 I think we want to get rid of the time thing and make orientation, visualPos updates based on dt, and switch pos, if we can, otherwise stall on the half way for now.
+console messages should have an other color, for a few frames, after they get inserted.
+
+altering entity types, is not undoable right now....
+colorpicker looks aweful.

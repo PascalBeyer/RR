@@ -644,11 +644,6 @@ static void UpdateColorPickers(Editor *editor, Input input)
    }
 }
 
-static v3i RoundToTileMap(v3 pos)
-{
-   return V3i((i32)floorf(pos.x + 0.5f), (i32)floorf(pos.y + 0.5f), (i32)floorf(pos.z + 0.5f));
-}
-
 static Entity *GetHotEntity(Camera cam, EditorEntities *editorEntities, AssetHandler *handler, v2 mousePosZeroToOne)
 {
    

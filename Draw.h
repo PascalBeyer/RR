@@ -78,59 +78,27 @@ static void RenderPathCreator(RenderGroup *rg, EntityManager *entityManager, Exe
 		auto path = data->instructions;
       Entity *e = GetEntity(entityManager, data->serial);
 		u32 pathCounter = 0;
-		ResetEntityManager(entityManager);
-      exe->at = 0;
-      exe->t = 0.0f;
       
-		for(u32 i = 0; i < path.amount; i++)
+      v3i at = e->initialPos;
+		For(path)
 		{
-			DrawNumberOnTile(rg, pathCounter, e->physicalPos);
-			GameExecuteUpdate(entityManager, exe, assetHandler, 1.0f, input); // dt should be how long the action takes.
+			DrawNumberOnTile(rg, pathCounter, at);
+         at += GetAdvanceForOneStep(*it);
 			pathCounter++;
 		}
       
-		DrawNumberOnTile(rg, pathCounter, e->physicalPos);
+      DrawNumberOnTile(rg, pathCounter, at);
+      pathCounter++;
       
-		v3i pos = e->physicalPos;
 		v3 mouseP = ScreenZeroToOneToZ(camera, input.mouseZeroToOne, e->physicalPos.z);
-		v3 mouseToPath = mouseP - e->visualPos;
-      
-		pathCounter++;
+		v3 mouseToPath = mouseP - V3(at);
       
 		v4 newTileColor = V4(1.0f, 0.4f, 0.1f, 0.3f);
       
-		if (BoxNorm(mouseToPath) > 0.5f)
-		{
-			i32 xSign = (mouseToPath.x > 0) ? 1 : -1;
-			i32 ySign = (mouseToPath.y > 0) ? 1 : -1;
-         
-			if ((f32)ySign * mouseToPath.y > (f32)xSign * mouseToPath.x)
-			{
-				if (ySign > 0)
-				{
-					DrawNumberOnTile(rg, pathCounter, pos + V3i(0, 1, 0), newTileColor);
-				}
-				else
-				{
-					DrawNumberOnTile(rg, pathCounter, pos + V3i(0, -1, 0), newTileColor);
-				}
-			}
-			else
-			{
-				if (xSign > 0)
-				{
-					DrawNumberOnTile(rg, pathCounter, pos + V3i(1, 0, 0), newTileColor);
-				}
-				else
-				{
-					DrawNumberOnTile(rg, pathCounter, pos + V3i(-1, 0, 0), newTileColor);
-				}
-			}
-		}
-		else
-		{
-			DrawNumberOnTile(rg, pathCounter, pos, newTileColor);
-		}
+      v3i tilemapDir = ToTilemapDir(mouseToPath);
+      
+      DrawNumberOnTile(rg, pathCounter, at + tilemapDir, newTileColor);
+		
 	}
    
    PushProjectiveSetup(rg, camera, exe->lightSource, ShaderFlags_ZBias);
@@ -246,29 +214,6 @@ static void RenderSimulate(RenderGroup *rg, EntityManager *entityManager, Execut
          }
       }
    }
-}
-
-static void RenderExecute(RenderGroup *rg, EntityManager *entityManager, ExecuteData *exe, AssetHandler *assetHandler, Input input)
-{
-   
-   switch (exe->state)
-   {
-      case Execute_PathCreator:
-      {
-         RenderPathCreator(rg, entityManager, exe, &exe->pathCreator, assetHandler, input);
-      }break;
-      case Execute_Simulation:
-      {
-         RenderSimulate(rg, entityManager, exe);
-      }break;
-      case Execute_Victory:
-      {
-         RenderSimulate(rg, entityManager, exe);
-      }break;
-      InvalidDefaultCase;
-      
-   }
-   
 }
 
 static void RenderVictoryUI(RenderGroup *rg)
@@ -471,6 +416,10 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor)
                case Entity_Wall:
                {
                   PushString(rg, writePos, "Wall", editorPanelFontSize);
+               }break;
+               case Entity_Bit:
+               {
+                  PushString(rg, writePos, "Bit", editorPanelFontSize);
                }break;
                
             }

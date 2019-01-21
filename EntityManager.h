@@ -7,21 +7,59 @@ enum UnitInstruction
 	Unit_MoveDown,
 	Unit_MoveLeft,
 	Unit_MoveRight,
+   Unit_FlipBit,
    
    Unit_Instruction_Count,
 };
 DefineDynamicArray(UnitInstruction);
 
+static String UnitInstructionToString(UnitInstruction step)
+{
+   switch (step)
+   {
+      case Unit_Wait:
+      {
+         return S("Wait");
+      }break;
+      case Unit_MoveUp:
+      {
+         return S("Up");
+      }break;
+      case Unit_MoveDown:
+      {
+         return S("Down");
+      }break;
+      case Unit_MoveLeft:
+      {
+         return S("Left");
+      }break;
+      case Unit_MoveRight:
+      {
+         return S("Right");
+      }break;
+      default:
+      {
+         return S("Unknown");
+      }break;
+   }
+}
+
 struct UnitData
 {
    u32 serial;
    UnitInstructionDynamicArray instructions;
-   UnitInstruction currentInstruction;
    u32 at;
    f32 t;
 };
 DefineDynamicArray(UnitData);
 
+struct BitData
+{
+   u32 serial;
+   b32 value;
+   //b32 inUse;
+};
+DefineDynamicArray(BitData);
 
 struct EntitySerialResult
 {
@@ -163,7 +201,9 @@ struct EntityManager
    
    TileOctTree entityTree;
    UnitDataDynamicArray unitData;
+   AnimationStateDynamicArray animationStates; // parralel to unitArray
    
+   BitDataDynamicArray bitData;
    
    BuddyAllocator alloc;
    union
@@ -174,9 +214,9 @@ struct EntityManager
          EntityDynamicArray noneArray;
          EntityDynamicArray unitArray;
          EntityDynamicArray wallArray;
+         EntityDynamicArray bitArray;
       };
    };
-   AnimationStateDynamicArray animationStates; // parralel to unitArray
    
    u32 serializer;
    EntitySerialResultDynamicArray entitySerialMap; // this is just huge and that fine???
@@ -526,6 +566,11 @@ static u64 GetStandardFlags(EntityType type)
       {
          return EntityFlag_BlocksUnit | EntityFlag_SupportsUnit;
       }break;
+      case Entity_Bit:
+      {
+         return EntityFlag_Interactable; // ?, they do not really have to get Updated I guess.
+      }break;
+      
       InvalidDefaultCase;
    };
    return 0;
@@ -582,8 +627,33 @@ static Entity CreateWall(EntityManager *entityManager, v3i pos, f32 scale = 1.0f
    
    entityData.meshId      = meshId;
    
+   Entity *e = CreateEntityInternal(entityManager, entityData);
+   
+   BitData data = {};
+   data.serial = e->serial;
+   ArrayAdd(&entityManager->bitData, data);
+   
+   return *e;
+}
+
+
+static Entity CreateBit(EntityManager *entityManager, v3i pos, f32 scale = 1.0f, Quaternion orientation = {1, 0, 0, 0}, v3 offset = V3(), v4 color = V4(1, 1, 1, 1), u32 meshId = 0xFFFFFFFF)
+{
+   EntityData entityData;
+   entityData.orientation = orientation;
+   entityData.physicalPos = pos;
+   entityData.offset      = offset;
+   entityData.color       = color;
+   entityData.scale       = scale;
+   
+   entityData.type        = Entity_Bit;
+   entityData.flags       = GetStandardFlags(Entity_Bit);
+   
+   entityData.meshId      = meshId;
+   
    return *CreateEntityInternal(entityManager, entityData);
 }
+
 
 static Entity CreateEntityNone(EntityManager *entityManager, v3i pos, f32 scale = 1.0f, Quaternion orientation = {1, 0, 0, 0}, v3 offset = V3(), v4 color = V4(1, 1, 1, 1), u32 meshId = 0xFFFFFFFF)
 {
@@ -619,6 +689,11 @@ static Entity CreateEntity(EntityManager *entityManager, EntityType type, u32 me
       {
          return CreateWall(entityManager, pos, scale, orientation, offset, color, meshId);
       }break;
+      case Entity_Bit:
+      {
+         return CreateBit(entityManager, pos, scale, orientation, offset, color, meshId);
+      }break;
+      
       
       InvalidDefaultCase;
    }
@@ -638,11 +713,13 @@ static void InitEntityManager(EntityManager *entityManager, Arena *currentStateA
    entityManager->noneArray = EntityCreateDynamicArray(&entityManager->alloc, 10);
    entityManager->unitArray = EntityCreateDynamicArray(&entityManager->alloc, 10);
    entityManager->wallArray = EntityCreateDynamicArray(&entityManager->alloc, level->entities.amount);
+   entityManager->bitArray  = EntityCreateDynamicArray(&entityManager->alloc, 10);
    
    entityManager->animationStates = AnimationStateCreateDynamicArray(&entityManager->alloc);
    
    entityManager->entitySerialMap = EntitySerialResultCreateDynamicArray(&entityManager->alloc, level->entities.amount);
    entityManager->unitData = UnitDataCreateDynamicArray(&entityManager->alloc);
+   entityManager->bitData  = BitDataCreateDynamicArray(&entityManager->alloc);
    
    For(level->entities)
    {
@@ -689,12 +766,31 @@ static v3i GetAdvanceForOneStep(UnitInstruction step)
       
       default:
       {
-         advance = {};
-         Die;
+         advance = {}; // todo robustness, should we fill this out?
       }break;
       
    }
    return advance;
+}
+
+static v3i ToTilemapDir(v3 d)
+{
+   
+   i32 xSign = (d.x > 0) ? 1 : -1;
+   i32 ySign = (d.y > 0) ? 1 : -1;
+   
+   if (BoxNorm(d) <= 0.5f)
+   {
+      return V3i();
+   }
+   else if ((f32)ySign * d.y > (f32)xSign * d.x)
+   {
+      return ((ySign > 0) ? V3i(0, 1, 0) : V3i(0, -1, 0));
+   }
+   else
+   {
+      return ((xSign > 0) ? V3i(1, 0, 0) : V3i(-1, 0, 0));
+   }
 }
 
 static UnitInstruction GetOneStepForDir(v3i dir)
@@ -727,4 +823,16 @@ static UnitInstruction GetOneStepForDir(v3i dir)
 static v3i SnapToTileMap(v3 pos)
 {
    return V3i((i32)pos.x, (i32)pos.y, (i32)pos.z);
+}
+
+static v3i RoundToTileMap(v3 pos)
+{
+   return V3i((i32)floorf(pos.x + 0.5f), (i32)floorf(pos.y + 0.5f), (i32)floorf(pos.z + 0.5f));
+}
+
+static BitData *GetBitData(EntityManager *entityManager, Entity *bit)
+{
+   Assert(bit->type == Entity_Bit);
+   u32 index = (u32)(bit - entityManager->bitArray.data);
+   return (entityManager->bitData + index);
 }
