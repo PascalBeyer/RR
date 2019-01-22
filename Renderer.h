@@ -24,11 +24,6 @@ enum RenderGroupEntryType
 	RenderGroup_EntryTriangleMesh,
 };
 
-enum OpenGLShaderType : u8 /// ???
-{
-   
-};
-
 enum OpenGLShaderFlags : u32
 {
    ShaderFlags_None           = 0x0,
@@ -49,7 +44,8 @@ struct RenderSetup
    m4x4 projection;
 	m4x4 cameraTransform;
    m4x4 shadowMat;
-   v3 transformedLightP;
+   v3 lightP;
+   v3 cameraP;
 };
 
 struct RenderGroupEntryHeader
@@ -80,7 +76,7 @@ struct EntryClear
 struct EntryTriangleMesh
 {
    RenderGroupEntryHeader header;
-   VertexFormatType vertexType;
+   u32 vertexFormatSize;
    
    u32 meshType;
    m4x4 objectTransform;
@@ -167,7 +163,6 @@ static void PushOrthogonalSetup(RenderGroup *rg, b32 zeroToOne, u32 flags)
    EntryChangeRenderSetup *entry = PushRenderEntry(EntryChangeRenderSetup);
    RenderSetup *setup = &entry->setup;
    
-   
    if(zeroToOne)
    {
       m4x4 ortho = Orthogonal(1.0f, 1.0f);
@@ -205,8 +200,9 @@ static void PushProjectiveSetup(RenderGroup *rg, Camera camera, LightSource ligh
    {//projective Codes
       setup->projection = Projection(commands->aspectRatio, camera.focalLength);
       setup->cameraTransform = CameraTransform(camera.orientation, camera.pos);;
-      setup->transformedLightP = (setup->cameraTransform * V4(lightSource.pos, 1.0f)).xyz;
+      setup->lightP = lightSource.pos;
       setup->shadowMat = CameraTransform(lightSource.orientation, lightSource.pos);
+      setup->cameraP = camera.pos;
    }
    
    rg->currentLines = NULL;
@@ -334,9 +330,9 @@ static void PushTriangleMesh(RenderGroup *rg, TriangleMesh *mesh, Quaternion ori
    // todo most of these could be stored on the asset entry. But maybe this should just be on there for cache
    // this depeds whether I usually access these per id or per mesh, per id we might be able to only get the 
    // asset entry. We might be able to get rid of meshes that way.
-   meshHeader->vertexType = mesh->vertexType;
-   meshHeader->vertexVBO = mesh->vertexVBO;
-   meshHeader->indexVBO = mesh->indexVBO;
+   meshHeader->vertexFormatSize = mesh->vertexFormatSize;
+   meshHeader->vertexVBO  = mesh->vertexVBO;
+   meshHeader->indexVBO   = mesh->indexVBO;
    
    meshHeader->indexSets = mesh->indexSets;
    meshHeader->textureIDs = arr;
@@ -354,7 +350,7 @@ static void PushTriangleMesh(RenderGroup *rg, u32 meshId, Quaternion orientation
    PushTriangleMesh(rg, mesh, orientation, pos, scale, scaleColor);
 }
 
-
+// todo unify this with pushTriangle mesh.
 static void PushAnimatedMesh(RenderGroup *rg, TriangleMesh *mesh, Quaternion orientation, v3 pos, f32 scale, v4 scaleColor, m4x4Array boneStates)
 {
    if (!mesh) return; // todo think about this, we want this if we redo our mesh write
@@ -366,7 +362,7 @@ static void PushAnimatedMesh(RenderGroup *rg, TriangleMesh *mesh, Quaternion ori
       arr[i] = GetTexture(rg->assetHandler, mesh->indexSets[i].mat.bitmapID).index;
    }
    
-   meshHeader->vertexType = mesh->vertexType;
+   meshHeader->vertexFormatSize = mesh->vertexFormatSize;
    meshHeader->vertexVBO = mesh->vertexVBO;
    meshHeader->indexVBO = mesh->indexVBO;
    

@@ -354,5 +354,10 @@ static void LevelsHelper(StringArray args)
    }
 }
 
+static void NoteHelper(StringArray args)
+{
+   ConsoleOutput("Noted.");
+}
+
 #endif // ! RR_CONSOLECOMMANDS
 

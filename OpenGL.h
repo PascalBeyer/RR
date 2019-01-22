@@ -256,15 +256,16 @@ struct OpenGLProgram
    //uniforms
    GLuint projection;
 	GLuint cameraTransform;
-	GLuint shadowTransform;
-	GLuint lightP;
+   GLuint objectTransform;
 	GLuint scaleColor;
+   GLuint shadowTransform;
    GLuint boneStates;
    GLuint ka;
    GLuint kd;
    GLuint ks;
+   GLuint lightP;
+   GLuint cameraP;
    
-	//GLuint cameraPos;
 	GLuint specularExponent;
    
 	GLuint depthSampler;
@@ -437,7 +438,7 @@ static OpenGLProgram OpenGLMakeProgram(char *shaderCode, u32 flags)
 	glShaderSource(vertexShaderID, ArrayCount(vertexShaderCode), vertexShaderCode, 0);
 	glCompileShader(vertexShaderID);
    
-#define GEOM 0
+#define GEOM 1
 #if GEOM
 	GLuint geometryShaderID = glCreateShader(GL_GEOMETRY_SHADER);
 	GLchar *geometryShaderCode[] =
@@ -529,17 +530,19 @@ static OpenGLProgram OpenGLMakeProgram(char *shaderCode, u32 flags)
    ret.boneIndices = glGetAttribLocation(ret.program, "boneIndices");
    ret.boneWeights = glGetAttribLocation(ret.program, "boneWeights");
    
-	ret.projection = glGetUniformLocation(ret.program, "projection");
+	ret.projection      = glGetUniformLocation(ret.program, "projection");
 	ret.cameraTransform = glGetUniformLocation(ret.program, "cameraTransform");
-	ret.depthSampler = glGetUniformLocation(ret.program, "depthTexture");
-	ret.textureSampler = glGetUniformLocation(ret.program, "textureSampler");
+   ret.objectTransform = glGetUniformLocation(ret.program, "objectTransform");
+	ret.depthSampler    = glGetUniformLocation(ret.program, "depthTexture");
+	ret.textureSampler  = glGetUniformLocation(ret.program, "textureSampler");
 	ret.shadowTransform = glGetUniformLocation(ret.program, "shadowTransform");
-	ret.lightP = glGetUniformLocation(ret.program, "lightPos");
-	
+   
+	ret.lightP           = glGetUniformLocation(ret.program, "lightPos");
 	ret.specularExponent = glGetUniformLocation(ret.program, "specularExponent");
-   ret.ka = glGetUniformLocation(ret.program, "ka");
-   ret.kd = glGetUniformLocation(ret.program, "kd");
-   ret.ks = glGetUniformLocation(ret.program, "ks");
+   ret.ka               = glGetUniformLocation(ret.program, "ka");
+   ret.kd               = glGetUniformLocation(ret.program, "kd");
+   ret.ks               = glGetUniformLocation(ret.program, "ks");
+   ret.cameraP          = glGetUniformLocation(ret.program, "cameraPos");
    
    ret.textureIndex = (flags & ShaderFlags_MultiTextured) ? glGetAttribLocation(ret.program, "textureIndex") : glGetUniformLocation(ret.program, "textureIndex");
    
@@ -569,7 +572,6 @@ static void RegisterTriangleMesh(TriangleMesh *mesh)
    if(mesh->skeleton.bones.amount)
    {
       stride = sizeof(VertexFormatPCUNBD);
-      mesh->vertexType = VertexFormat_PCUNBD;
       v3Array colors = PushArray(frameArena, v3, mesh->skeleton.bones.amount);
       
       RandomSeries series = GetRandomSeries();
@@ -634,7 +636,7 @@ static void RegisterTriangleMesh(TriangleMesh *mesh)
    else
    {
       stride = sizeof(VertexFormatPCUN);
-      mesh->vertexType = VertexFormat_PCUN;
+      
       VertexFormatPCUN *packedData = PushData(frameArena, VertexFormatPCUN, 0);
       
       for(u32 i = 0; i < mesh->positions.amount; i++)
@@ -648,6 +650,8 @@ static void RegisterTriangleMesh(TriangleMesh *mesh)
       
       data = packedData;
    }
+   
+   mesh->vertexFormatSize = stride;
    
 	Assert(mesh->positions.amount < 65536); // <, because reset index
    
@@ -686,7 +690,6 @@ struct OpenGLUniformInfo
 {
    GLuint vertexBuffer = 0xFFFFFFFF;
    GLuint indexBuffer  = 0xFFFFFFFF;
-   m4x4 shadowMat = {}; // more part of the setup
    m4x4 objectTransform = Identity();
    v4 scaleColor = V4(1.0f, 1.0f, 1.0f, 1.0f);
    m4x4Array boneStates = {};
@@ -701,8 +704,14 @@ static void BeginUseProgram(OpenGLContext *context, OpenGLProgram *prog, RenderS
    glBindTexture(GL_TEXTURE_2D_ARRAY, globalTextureArray);
    glUniformMatrix4fv(prog->projection, 1, GL_TRUE, setup.projection.a[0]);
    
+   glUniformMatrix4fv(prog->cameraTransform, 1, GL_TRUE, setup.cameraTransform.a[0]);
+   
    if (prog->flags & ShaderFlags_ShadowMapping)
    {
+      
+      glUniformMatrix4fv(prog->shadowTransform, 1, GL_TRUE, setup.shadowMat.a[0]);
+      
+      // this as well
       glActiveTexture(GL_TEXTURE1);
       glBindTexture(GL_TEXTURE_2D, context->shadowBuffer.depth);
       glActiveTexture(GL_TEXTURE0);
@@ -710,25 +719,19 @@ static void BeginUseProgram(OpenGLContext *context, OpenGLProgram *prog, RenderS
    
    if(prog->flags & ShaderFlags_Phong)
    {
-      v3 lightP = setup.transformedLightP;
+      v3 lightP = setup.lightP;
       glUniform3f(prog->lightP, lightP.x, lightP.y, lightP.z);
+      v3 camP = setup.cameraP;
+      glUniform3f(prog->cameraP, camP.x, camP.y, camP.z);
    }
    
 }
 
 static void SetupUniforms(OpenGLProgram *prog, RenderSetup setup, OpenGLUniformInfo uniforms)
 {
-   m4x4 mat = setup.cameraTransform * uniforms.objectTransform;
-   glUniformMatrix4fv(prog->cameraTransform, 1, GL_TRUE, mat.a[0]);
-	
-   
    glUniform4f(prog->scaleColor, uniforms.scaleColor.r, uniforms.scaleColor.g, uniforms.scaleColor.b, uniforms.scaleColor.a); // rgba?
    
-   if (prog->flags & ShaderFlags_ShadowMapping)
-   {
-      m4x4 shadowMat = uniforms.shadowMat * uniforms.objectTransform;
-      glUniformMatrix4fv(prog->shadowTransform, 1, GL_TRUE, shadowMat.a[0]);
-   }
+   glUniformMatrix4fv(prog->objectTransform, 1, GL_TRUE, uniforms.objectTransform.a[0]);
    
    if(prog->flags & ShaderFlags_Animated)
    {
@@ -741,137 +744,52 @@ static void SetupUniforms(OpenGLProgram *prog, RenderSetup setup, OpenGLUniformI
    }
    
    glBindBuffer(GL_ARRAY_BUFFER, uniforms.vertexBuffer);
-   if(uniforms.indexBuffer != 0xFFFFFFFF) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, uniforms.indexBuffer);
-}
-
-
-
-static void BeginAttribArraysPC(OpenGLProgram *prog)
-{
-   glEnableVertexAttribArray(prog->vertP);
-	glEnableVertexAttribArray(prog->vertC);
-   
-   glVertexAttribPointer(prog->vertP, 3, GL_FLOAT, false, sizeof(VertexFormatPC), (void *)OffsetOf(VertexFormatPC, p));
-   glVertexAttribPointer(prog->vertC, 4, GL_UNSIGNED_BYTE, true, sizeof(VertexFormatPC), (void *)OffsetOf(VertexFormatPC, c));
-   
-}
-
-
-static void BeginAttribArraysPCU(OpenGLProgram *prog)
-{
-   glEnableVertexAttribArray(prog->vertP);
-	glEnableVertexAttribArray(prog->vertC);
-   
-   glVertexAttribPointer(prog->vertP, 3, GL_FLOAT, false, sizeof(VertexFormatPCU), (void *)OffsetOf(VertexFormatPCU, p));
-   glVertexAttribPointer(prog->vertC, 4, GL_UNSIGNED_BYTE, true, sizeof(VertexFormatPCU), (void *)OffsetOf(VertexFormatPCU, c));
-   
-	if(prog->flags & ShaderFlags_Textured)
-	{
-      glEnableVertexAttribArray(prog->vertUV);
-		glVertexAttribPointer(prog->vertUV, 2, GL_FLOAT, false, sizeof(VertexFormatPCU), (void *)OffsetOf(VertexFormatPCU, uv));
-	}
-}
-
-static void BeginAttribArraysPCUI(OpenGLProgram *prog)
-{
-   glEnableVertexAttribArray(prog->vertP);
-	glEnableVertexAttribArray(prog->vertC);
-   
-   glVertexAttribPointer(prog->vertP, 3, GL_FLOAT, false, sizeof(VertexFormatPCUI), (void *)OffsetOf(VertexFormatPCUI, p));
-   glVertexAttribPointer(prog->vertC, 4, GL_UNSIGNED_BYTE, true, sizeof(VertexFormatPCUI), (void *)OffsetOf(VertexFormatPCUI, c));
-   
-	if(prog->flags & ShaderFlags_Textured)
-	{
-      glEnableVertexAttribArray(prog->vertUV);
-		glVertexAttribPointer(prog->vertUV, 2, GL_FLOAT, false, sizeof(VertexFormatPCUI), (void *)OffsetOf(VertexFormatPCUI, uv));
-	}
-   
-   if(prog->flags & ShaderFlags_MultiTextured)
+   if(uniforms.indexBuffer != 0xFFFFFFFF) 
    {
-      Assert(!(prog->flags & ShaderFlags_Textured));
-      glEnableVertexAttribArray(prog->vertUV);
-		glVertexAttribPointer(prog->vertUV, 2, GL_FLOAT, false, sizeof(VertexFormatPCUI), (void *)OffsetOf(VertexFormatPCUI, uv));
-      glEnableVertexAttribArray(prog->textureIndex);
-		glVertexAttribIPointer(prog->textureIndex, 1, GL_UNSIGNED_SHORT, sizeof(VertexFormatPCUI), (void *)OffsetOf(VertexFormatPCUI, textureIndex));
-   }
-}
-
-static void BeginAttribArraysPCUN(OpenGLProgram *prog)
-{
-   glEnableVertexAttribArray(prog->vertP);
-   glEnableVertexAttribArray(prog->vertC);
-   
-   glVertexAttribPointer(prog->vertP, 3, GL_FLOAT, false, sizeof(VertexFormatPCUN), (void *)OffsetOf(VertexFormatPCUN, p));
-   glVertexAttribPointer(prog->vertC, 4, GL_UNSIGNED_BYTE, true, sizeof(VertexFormatPCUN), (void *)OffsetOf(VertexFormatPCUN, c));
-   
-   if(prog->flags & ShaderFlags_Textured)
-   {
-      glEnableVertexAttribArray(prog->vertUV);
-      glVertexAttribPointer(prog->vertUV, 2, GL_FLOAT, false, sizeof(VertexFormatPCUN), (void *)OffsetOf(VertexFormatPCUN, uv));
-   }
-   
-   if(prog->flags & ShaderFlags_Phong)
-   {
-      glEnableVertexAttribArray(prog->vertN);
-      glVertexAttribPointer(prog->vertN, 3, GL_FLOAT, false, sizeof(VertexFormatPCUN), (void *)OffsetOf(VertexFormatPCUN, n));
-   }
-}
-
-static void BeginAttribArraysPCUNBD(OpenGLProgram *prog)
-{
-   glEnableVertexAttribArray(prog->vertP);
-   glEnableVertexAttribArray(prog->vertC);
-   
-   glVertexAttribPointer(prog->vertP, 3, GL_FLOAT, false, sizeof(VertexFormatPCUNBD), (void *)OffsetOf(VertexFormatPCUNBD, p));
-   glVertexAttribPointer(prog->vertC, 4, GL_UNSIGNED_BYTE, true, sizeof(VertexFormatPCUNBD), (void *)OffsetOf(VertexFormatPCUNBD, c));
-   
-   if(prog->flags & ShaderFlags_Textured)
-   {
-      glEnableVertexAttribArray(prog->vertUV);
-      glVertexAttribPointer(prog->vertUV, 2, GL_FLOAT, false, sizeof(VertexFormatPCUNBD), (void *)OffsetOf(VertexFormatPCUNBD, uv));
-   }
-   
-   if(prog->flags & ShaderFlags_Phong)
-   {
-      glEnableVertexAttribArray(prog->vertN);
-      glVertexAttribPointer(prog->vertN, 3, GL_FLOAT, false, sizeof(VertexFormatPCUNBD), (void *)OffsetOf(VertexFormatPCUNBD, n));
-   }
-   
-   if(prog->flags & ShaderFlags_Animated)
-   {
-      glEnableVertexAttribArray(prog->boneIndices);
-      glVertexAttribIPointer(prog->boneIndices, 4, GL_INT, sizeof(VertexFormatPCUNBD), (void *)OffsetOf(VertexFormatPCUNBD, bi));
-      
-      glEnableVertexAttribArray(prog->boneWeights);
-      glVertexAttribPointer(prog->boneWeights, 4, GL_FLOAT, false, sizeof(VertexFormatPCUNBD), (void *)OffsetOf(VertexFormatPCUNBD, bw));
+      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, uniforms.indexBuffer);
    }
 }
 
 static void BeginAttribArrays(OpenGLProgram *prog, u32 vertexFormatSize)
 {
-   switch (type)
+   glEnableVertexAttribArray(prog->vertP);
+   glEnableVertexAttribArray(prog->vertC);
+   
+   glVertexAttribPointer(prog->vertP, 3, GL_FLOAT, false, vertexFormatSize, (void *)OffsetOf(VertexFormatTemplate, p));
+   glVertexAttribPointer(prog->vertC, 4, GL_UNSIGNED_BYTE, true, vertexFormatSize, (void *)OffsetOf(VertexFormatTemplate, c));
+   
+   if(prog->flags & ShaderFlags_Textured)
    {
-      case VertexFormat_PC:
-      {
-         BeginAttribArraysPC(prog);
-      }break;
-      case VertexFormat_PCU:
-      {
-         BeginAttribArraysPCU(prog);
-      }break;
-      case VertexFormat_PCUN:
-      {
-         BeginAttribArraysPCUN(prog);
-      }break;
-      case VertexFormat_PCUNBD:
-      {
-         BeginAttribArraysPCUNBD(prog);
-      }break;
+      glEnableVertexAttribArray(prog->vertUV);
+      glVertexAttribPointer(prog->vertUV, 2, GL_FLOAT, false, vertexFormatSize, (void *)OffsetOf(VertexFormatTemplate, uv));
+   }
+   
+   if(prog->flags & ShaderFlags_MultiTextured)
+   {
+      Assert(!(prog->flags & ShaderFlags_Textured));
+      glEnableVertexAttribArray(prog->vertUV);
+      glVertexAttribPointer(prog->vertUV, 2, GL_FLOAT, false, vertexFormatSize, (void *)OffsetOf(VertexFormatTemplate, uv));
+      glEnableVertexAttribArray(prog->textureIndex);
+      glVertexAttribIPointer(prog->textureIndex, 1, GL_UNSIGNED_SHORT, vertexFormatSize, (void *)OffsetOf(VertexFormatTemplate, textureIndex));
+   }
+   
+   if(prog->flags & ShaderFlags_Phong)
+   {
+      glEnableVertexAttribArray(prog->vertN);
+      glVertexAttribPointer(prog->vertN, 3, GL_FLOAT, false, vertexFormatSize, (void *)OffsetOf(VertexFormatTemplate, n));
+   }
+   
+   if(prog->flags & ShaderFlags_Animated)
+   {
+      glEnableVertexAttribArray(prog->boneIndices);
+      glVertexAttribIPointer(prog->boneIndices, 4, GL_INT, vertexFormatSize, (void *)OffsetOf(VertexFormatTemplate, bi));
       
-      InvalidDefaultCase;
+      glEnableVertexAttribArray(prog->boneWeights);
+      glVertexAttribPointer(prog->boneWeights, 4, GL_FLOAT, false, vertexFormatSize, (void *)OffsetOf(VertexFormatTemplate, bw));
    }
 }
 
+// todo end all of them?
 static void EndAttribArrays(OpenGLProgram *prog)
 {
    glDisableVertexAttribArray(prog->vertP);
@@ -1066,7 +984,6 @@ static OpenGLContext OpenGLInit(bool modernContext)
    
    
    //glEnable(GL_PRIMITIVE_RESTART_FIXED_INDEX);
-   
    glDepthMask(GL_TRUE);
    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
    glDepthFunc(GL_LEQUAL);
@@ -1176,7 +1093,7 @@ static void RenderIntoShadowMap(RenderCommands *rg, OpenGLContext *context)
             
             SetupUniforms(prog, currentSetup, uniforms);
             
-            BeginAttribArrays(prog, meshHeader->vertexType);
+            BeginAttribArrays(prog, meshHeader->vertexFormatSize);
             
             For(meshHeader->indexSets)
             {
@@ -1216,6 +1133,7 @@ static void RenderIntoShadowMap(RenderCommands *rg, OpenGLContext *context)
    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
+// todo make all  sizeof() dependent on the elements, not on the types.
 void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
 {
    TimedBlock;
@@ -1266,13 +1184,12 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             EntryTexturedQuads *quadHeader = (EntryTexturedQuads *)header;
             
             OpenGLUniformInfo uniforms;
-            uniforms.shadowMat    = shadowMat;
             uniforms.vertexBuffer = context->vertexBuffer;
             uniforms.indexBuffer  = context->indexBuffer;
             uniforms.textureIndex = quadHeader->vertexBuffer[0].textureIndex; // so textured works
             
             SetupUniforms(prog, currentSetup, uniforms);
-            BeginAttribArraysPCUI(prog);
+            BeginAttribArrays(prog, sizeof(VertexFormatPCUI));
             
             glBufferData(GL_ARRAY_BUFFER, 4u * quadHeader->count * sizeof(quadHeader->vertexBuffer[0]), quadHeader->vertexBuffer, GL_STREAM_DRAW);
             glBufferData(GL_ELEMENT_ARRAY_BUFFER, 6u * quadHeader->count * sizeof(quadHeader->indexBuffer[0]), quadHeader->indexBuffer, GL_STREAM_DRAW);
@@ -1288,12 +1205,11 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             EntryColoredVertices *trianglesHeader = (EntryColoredVertices *)header;
             
             OpenGLUniformInfo uniforms;
-            uniforms.shadowMat = shadowMat;
             uniforms.vertexBuffer = context->vertexBuffer;
             
             SetupUniforms(prog, currentSetup, uniforms);
             
-            BeginAttribArraysPC(prog);
+            BeginAttribArrays(prog, sizeof(VertexFormatPC));
             
             glBufferData(GL_ARRAY_BUFFER, trianglesHeader->vertexCount * sizeof(VertexFormatPC), trianglesHeader->data, GL_STREAM_COPY);
             glDrawArrays(GL_TRIANGLES, 0, trianglesHeader->vertexCount);
@@ -1308,7 +1224,6 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             
             OpenGLUniformInfo uniforms;
             uniforms.objectTransform = meshHeader->objectTransform;
-            uniforms.shadowMat       = shadowMat;
             uniforms.scaleColor      = meshHeader->scaleColor;
             uniforms.vertexBuffer    = meshHeader->vertexVBO;
             uniforms.indexBuffer     = meshHeader->indexVBO;
@@ -1316,7 +1231,7 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             
             SetupUniforms(prog, currentSetup, uniforms);
             
-            BeginAttribArrays(prog, meshHeader->vertexType);
+            BeginAttribArrays(prog, meshHeader->vertexFormatSize);
             
             for(u32 i = 0; i < meshHeader->indexSets.amount; i++)
             {
@@ -1365,13 +1280,13 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
          {
             EntryColoredVertices *lineHeader = (EntryColoredVertices*)header;
             
-#if 0
+#if !GEOM
             OpenGLUniformInfo uniforms;
             uniforms.vertexBuffer = context->vertexBuffer;
             
             SetupUniforms(prog, currentSetup, uniforms);
             
-            BeginAttribArraysPC(prog);
+            BeginAttribArrays(prog, sizeof(VertexFormatPC));
             glBufferData(GL_ARRAY_BUFFER, lineHeader->vertexCount * sizeof(VertexFormatPC), lineHeader->data, GL_STREAM_COPY);
             glDrawArrays(GL_LINES, 0, lineHeader->vertexCount);
             

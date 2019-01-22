@@ -33,15 +33,17 @@
 // uniforms
 uniform mat4x4 projection;
 uniform mat4x4 cameraTransform;
-uniform vec4 scaleColor;
+uniform mat4x4 objectTransform;
+uniform v4 scaleColor;
 
 #ifdef ShadowMapping
 uniform mat4x4 shadowTransform;
 #endif
 
 #ifdef Phong
-uniform vec3 lightPos;
-// allready transfomed for now, so we do not need a third matrix, that is the transform with out the object Transform
+uniform v3 cameraPos;
+uniform v3 lightPos;
+
 uniform f32 specularExponent;
 uniform v3 ka;
 uniform v3 kd;
@@ -76,37 +78,39 @@ in v4i boneIndices;
 in v4  boneWeights;
 #endif
 
-// out
+out VS_OUT{
+   // out
 #ifdef MultiTextured
-flat out u32 fragIndex;
-smooth out v2 fragCoord;
+   flat out u32 fragIndex;
+   smooth out v2 fragCoord;
 #endif
-
+   
 #ifdef Textured
-smooth out v2 fragCoord;
+   smooth out v2 fragCoord;
 #endif
-
+   
 #ifdef ShadowMapping
-smooth out vec4 shadowCoord;
+   smooth out vec4 shadowCoord;
 #endif
-
+   
 #ifdef Phong
-smooth out v3 ambient;
-smooth out v3 diffuse;
-smooth out v3 specular;
+   smooth out v3 ambient;
+   smooth out v3 diffuse;
+   smooth out v3 specular;
 #endif
-
-smooth out vec4 fragColor;
+   
+   smooth out vec4 fragColor;
+} vs_out;
 
 void main(void)
 {
    //pass through
-   fragColor = vertC * scaleColor;
+   vs_out.fragColor = vertC * scaleColor;
    
    v4 inputVertex = vec4(vertP, 1);
    
 #ifdef Textured
-   fragCoord = vertUV;
+   vs_out.fragCoord = vertUV;
 #endif
    
 #ifdef Animated
@@ -120,8 +124,9 @@ void main(void)
    animatedVertex = (boneWeights.x * valx) + (boneWeights.y * valy) + (boneWeights.z * valz) + (boneWeights.w * valw);
    inputVertex = V4(animatedVertex, 1.0f);
 #endif
-   // we premul the cameraTransform by the objectTransform
-   vec4 vertexInCameraSpace = cameraTransform * inputVertex;
+   
+   vec4 vertexInWorldSpace  = objectTransform * inputVertex;
+   vec4 vertexInCameraSpace = cameraTransform * vertexInWorldSpace;
    gl_Position = projection * vertexInCameraSpace;
    
 #ifdef ZBias
@@ -131,39 +136,35 @@ void main(void)
    
    
 #ifdef ShadowMapping
-#ifdef Animated // hack
-   inputVertex = boneWeights[0] * boneStates[boneIndices[0]] * inputVertex;
-#endif
-   shadowCoord = shadowTransform * inputVertex;
+   vs_out.shadowCoord = shadowTransform * vertexInWorldSpace;
 #endif
    
 #ifdef Phong
-   // todo pass the object transform for this? I don't know why we work in camera space.
-   // but the camera transform should be an isometry so whatevs
-   
    // simple ambient light ka
-   ambient = ka;
+   vs_out.ambient = ka;
    
    // simple diffuse light
-   vec3 point = vertexInCameraSpace.xyz;
-   vec4 transformedNormal = cameraTransform * vec4(vertN, 0);
-   vec3 normal = normalize(transformedNormal.xyz);
+   vec3 point = vertexInWorldSpace.xyz;
+   vec4 transformedNormal = objectTransform * vec4(vertN, 0);
+   vec3 normal = normalize(transformedNormal.xyz); // we neeed this, as objectTransform scales.
    
    vec3 lightDirection = normalize(lightPos - point);
+   vs_out.diffuse = max(dot(lightDirection, normal), 0) * kd;
    
-   diffuse = max(dot(lightDirection, normal), 0) * kd;
    
    // simple specular light
-   vec3 incomingLightDir = -lightDirection;
-   vec3 reflected = reflect(incomingLightDir, normal); //incomingLightDir - 2.0 * dot(incomingLightDir, normal) * normal;
-   vec3 viewing = normalize(-point);
+   v3 incomingLightDir = -lightDirection;
+   v3 reflected = reflect(incomingLightDir, normal); 
+   
+   // we can just pass this in
+   vec3 viewing = normalize(cameraPos - point);
    float specularBase = max(dot(viewing, reflected),0);
-   specular = pow(specularBase, specularExponent) * ks;
+   vs_out.specular = pow(specularBase, specularExponent) * ks;
 #endif
    
 #ifdef MultiTextured
-   fragCoord = vertUV;
-   fragIndex = textureIndex;
+   vs_out.fragCoord = vertUV;
+   vs_out.fragIndex = textureIndex;
 #endif
    
 }
@@ -172,59 +173,83 @@ void main(void)
 #ifdef GeometryCode
 
 layout (triangles) in;
-layout (triangle_strip, max_vertices = 54) out;
+layout (triangle_strip, max_vertices = 3) out;
 
+in VS_OUT
+{
+#ifdef MultiTextured
+   flat   in u32 fragIndex;
+   smooth in v2 fragCoord;
+#endif
+   
+#ifdef Textured
+   smooth in v2 fragCoord;
+#endif
+   
+#ifdef ShadowMapping
+   smooth in vec4 shadowCoord;
+#endif
+   
+#ifdef Phong
+   smooth in v3 ambient;
+   smooth in v3 diffuse;
+   smooth in v3 specular;
+#endif
+   
+   smooth in vec4 fragColor;
+} gs_in[];
 
+// out
+#ifdef Phong
+smooth out v3 ambient;
+smooth out v3 specular;
+smooth out v3 diffuse;
+#endif
+
+#ifdef ShadowMapping
+smooth out vec4 shadowCoord;
+#endif
+
+#ifdef MultiTextured
+flat   out u32 fragIndex;
+smooth out v2  fragCoord;
+#endif
+
+#ifdef Textured
+smooth out vec2 fragCoord;
+#endif
 
 smooth out vec4 fragColor;
 
 void main()
 {
-   
-   v4 midPoint  = 0.3333 * (gl_in[0].gl_Position + gl_in[1].gl_Position + gl_in[2].gl_Position);
-   v4 desiredPoint = V4(0, 0, 0, 1);
-   
-   fragColor = color;
-   
-   gl_Position = gl_in[0].gl_Position;
-   EmitVertex();
-   gl_Position = gl_in[1].gl_Position;
-   EmitVertex();
-   gl_Position = gl_in[2].gl_Position;
-   EmitVertex();
-   
-   
+   for(u32 i = 0; i < 3; i++)
+   {
+#ifdef Phong
+      ambient   = gs_in[i].ambient;
+      specular  = gs_in[i].specular;
+      diffuse   = gs_in[i].diffuse;
+#endif
+      
+#ifdef ShadowMapping
+      shadowCoord = gs_in[i].shadowCoord;
+#endif
+      
+#ifdef MultiTextured
+      fragIndex = gs_in[i].fragIndex;
+      fragCoord = gs_in[i].fragCoord;
+#endif
+      
+#ifdef Textured
+      fragCoord = gs_in[i].fragCoord;
+#endif
+      fragColor   = gs_in[i].fragColor;
+      
+      gl_Position = gl_in[i].gl_Position;
+      
+      EmitVertex();
+   }
    EndPrimitive();
-   
-   gl_Position = gl_in[0].gl_Position;
-   EmitVertex();
-   gl_Position = gl_in[1].gl_Position;
-   EmitVertex();
-   gl_Position = desiredPoint;
-   EmitVertex();
-   
-   
-   EndPrimitive();
-   
-   gl_Position = gl_in[2].gl_Position;
-   EmitVertex();
-   gl_Position = gl_in[1].gl_Position;
-   EmitVertex();
-   gl_Position = desiredPoint;
-   EmitVertex();
-   
-   EndPrimitive();
-   
-   gl_Position = gl_in[0].gl_Position;
-   EmitVertex();
-   gl_Position = gl_in[2].gl_Position;
-   EmitVertex();
-   gl_Position = desiredPoint;
-   EmitVertex();
-   
-   EndPrimitive();
-   
-   
 } 
 
 
@@ -232,6 +257,22 @@ void main()
 
 #ifdef FragmentCode // FragmentCode
 
+// uniform
+#ifdef ShadowMapping
+uniform sampler2D depthTexture;
+#endif
+
+#ifdef MultiTextured
+uniform sampler2DArray textureSampler;
+#endif
+
+#ifdef Textured
+uniform u32 textureIndex;
+uniform sampler2DArray textureSampler;
+#endif
+
+
+// in
 smooth in vec4 fragColor;
 
 #ifdef Phong
@@ -242,19 +283,15 @@ smooth in v3 diffuse;
 
 #ifdef ShadowMapping
 smooth in vec4 shadowCoord;
-uniform sampler2D depthTexture;
 #endif
 
 #ifdef MultiTextured
-flat in u32 fragIndex;
-smooth in vec2 fragCoord;
-uniform sampler2DArray textureSampler;
+flat   in u32 fragIndex;
+smooth in v2  fragCoord;
 #endif
 
 #ifdef Textured
-uniform u32 textureIndex;
 smooth in vec2 fragCoord;
-uniform sampler2DArray textureSampler;
 #endif
 
 // out

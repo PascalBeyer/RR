@@ -591,8 +591,9 @@ struct TriangleMesh
    
 	AABB aabb;
    
-   VertexFormatType vertexType;
-	u32 vertexVBO; // to init this call glBufferData and glBindData
+   // OpenGL draw stuff
+   u32 vertexFormatSize;
+   u32 vertexVBO; // to init this call glBufferData and glBindData
 	u32 indexVBO;
 };
 

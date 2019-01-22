@@ -119,7 +119,7 @@ static void RenderPathCreator(RenderGroup *rg, EntityManager *entityManager, Exe
    {
       if(i == Entity_Dude)
       {
-#if 1
+#if 0
          For(state, entityManager->animationStates)
          {
             Entity *e = GetEntity(entityManager, state->serial);
@@ -132,8 +132,8 @@ static void RenderPathCreator(RenderGroup *rg, EntityManager *entityManager, Exe
          For(entityManager->unitArray)
          {
             
-            PushTriangleMesh(rg, it->meshId, it->orientation, V3((it->physicalPos)) + it->offset, it->scale, V4(0.75f, 0.0f, 0.0f, 0.0f));
-            PushTriangleMesh(rg, it->meshId, it->orientation, V3((it->initialPos)) + it->offset, it->scale,
+            PushTriangleMesh(rg, it->meshId, it->orientation, it->visualPos, it->scale, V4(0.75f, 0.0f, 0.0f, 0.0f));
+            PushTriangleMesh(rg, it->meshId, it->orientation, it->visualPos, it->scale,
                              it->color * it->frameColor);
             
          }
@@ -615,7 +615,7 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor)
 
 static void RenderEditor(RenderGroup *rg, AssetHandler *assetHandler, Editor editor, Input input)
 {
-   //PushDebugPointCuboid(rg, editor.focusPoint);
+   PushDebugPointCuboid(rg, editor.levelInfo.lightSource.pos, V4(1.0f, 0.8f, 0.7f, 0.1f));
    
    EditorEntities *editorEntities = &editor.editorEntities;
    PushProjectiveSetup(rg, editor.camera, editor.levelInfo.lightSource, ShaderFlags_Textured|ShaderFlags_Phong|ShaderFlags_ShadowMapping);
