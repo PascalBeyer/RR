@@ -20,6 +20,7 @@
 
 // these are all the defines in this file:
 // VertexCode
+// FragmentCode
 // ShadowMapping
 // Phong
 // Textured
@@ -27,17 +28,29 @@
 // ZBias
 // MultiTextured
 
-#ifdef VertexCode
-// Vertex Code
+#ifdef VertexCode // Vertex Code
 
 // uniforms
 uniform mat4x4 projection;
 uniform mat4x4 cameraTransform;
-
 uniform vec4 scaleColor;
 
 #ifdef ShadowMapping
 uniform mat4x4 shadowTransform;
+#endif
+
+#ifdef Phong
+uniform vec3 lightPos;
+// allready transfomed for now, so we do not need a third matrix, that is the transform with out the object Transform
+uniform f32 specularExponent;
+uniform v3 ka;
+uniform v3 kd;
+uniform v3 ks;
+#endif
+
+#ifdef Animated
+const int Max_Num_Bones = 50;
+uniform mat4x4 boneStates[Max_Num_Bones];
 #endif
 
 // in
@@ -47,12 +60,29 @@ in vec4 vertC;
 #ifdef MultiTextured
 in u32 textureIndex;
 in v2 vertUV;
+#endif
+
+#ifdef Textured
+in v2 vertUV;
+#endif
+
+#ifdef Phong
+in vec3 vertN;
+#endif
+
+
+#ifdef Animated
+in v4i boneIndices;
+in v4  boneWeights;
+#endif
+
+// out
+#ifdef MultiTextured
 flat out u32 fragIndex;
 smooth out v2 fragCoord;
 #endif
 
 #ifdef Textured
-in v2 vertUV;
 smooth out v2 fragCoord;
 #endif
 
@@ -61,25 +91,9 @@ smooth out vec4 shadowCoord;
 #endif
 
 #ifdef Phong
-uniform vec3 lightPos;
-// allready transfomed for now, so we do not need a third matrix, that is the transform with out the object Transform
-
-in vec3 vertN;
-uniform f32 specularExponent;
-uniform v3 ka;
-uniform v3 kd;
-uniform v3 ks;
-
 smooth out v3 ambient;
 smooth out v3 diffuse;
 smooth out v3 specular;
-#endif
-
-#ifdef Animated
-const int Max_Num_Bones = 50;
-uniform mat4x4 boneStates[Max_Num_Bones];
-in v4i boneIndices;
-in v4  boneWeights;
 #endif
 
 smooth out vec4 fragColor;
@@ -153,9 +167,70 @@ void main(void)
 #endif
    
 }
+#endif
 
-#else
-//Fragment Code
+#ifdef GeometryCode
+
+layout (triangles) in;
+layout (triangle_strip, max_vertices = 54) out;
+
+
+
+smooth out vec4 fragColor;
+
+void main()
+{
+   
+   v4 midPoint  = 0.3333 * (gl_in[0].gl_Position + gl_in[1].gl_Position + gl_in[2].gl_Position);
+   v4 desiredPoint = V4(0, 0, 0, 1);
+   
+   fragColor = color;
+   
+   gl_Position = gl_in[0].gl_Position;
+   EmitVertex();
+   gl_Position = gl_in[1].gl_Position;
+   EmitVertex();
+   gl_Position = gl_in[2].gl_Position;
+   EmitVertex();
+   
+   
+   EndPrimitive();
+   
+   gl_Position = gl_in[0].gl_Position;
+   EmitVertex();
+   gl_Position = gl_in[1].gl_Position;
+   EmitVertex();
+   gl_Position = desiredPoint;
+   EmitVertex();
+   
+   
+   EndPrimitive();
+   
+   gl_Position = gl_in[2].gl_Position;
+   EmitVertex();
+   gl_Position = gl_in[1].gl_Position;
+   EmitVertex();
+   gl_Position = desiredPoint;
+   EmitVertex();
+   
+   EndPrimitive();
+   
+   gl_Position = gl_in[0].gl_Position;
+   EmitVertex();
+   gl_Position = gl_in[2].gl_Position;
+   EmitVertex();
+   gl_Position = desiredPoint;
+   EmitVertex();
+   
+   EndPrimitive();
+   
+   
+} 
+
+
+#endif
+
+#ifdef FragmentCode // FragmentCode
 
 smooth in vec4 fragColor;
 

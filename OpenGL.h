@@ -86,6 +86,7 @@
 
 // GL Version 3.2
 #define GL_TEXTURE_2D_MULTISAMPLE         0x9100
+#define GL_GEOMETRY_SHADER                0x8DD9
 
 // GL Version 4.3
 #define GL_DEBUG_OUTPUT_SYNCHRONOUS       0x8242
@@ -398,7 +399,7 @@ static OpenGLProgram OpenGLMakeProgram(char *shaderCode, u32 flags)
       Assert(err == GL_NO_ERROR);
    }
    
-   S("#version 130 \n", frameArena);
+   S("#version 150 \n", frameArena);
    
    if(flags & ShaderFlags_Phong)
    {
@@ -424,28 +425,42 @@ static OpenGLProgram OpenGLMakeProgram(char *shaderCode, u32 flags)
    {
       S("#define MultiTextured \n", frameArena);
    }
-   
    *PushStruct(frameArena, Char) = '\0';
+   
    EndArray(frameArena, Char, defines);
    
    GLuint vertexShaderID = glCreateShader(GL_VERTEX_SHADER);
 	GLchar *vertexShaderCode[] =
 	{
-		defines.cstr, "#define VertexCode \n ", shaderCode
+		defines.cstr, "#define VertexCode \n", shaderCode
 	};
 	glShaderSource(vertexShaderID, ArrayCount(vertexShaderCode), vertexShaderCode, 0);
 	glCompileShader(vertexShaderID);
    
+#define GEOM 0
+#if GEOM
+	GLuint geometryShaderID = glCreateShader(GL_GEOMETRY_SHADER);
+	GLchar *geometryShaderCode[] =
+	{
+		defines.cstr, "#define GeometryCode \n", shaderCode
+	};
+	glShaderSource(geometryShaderID, ArrayCount(geometryShaderCode), geometryShaderCode, 0);
+	glCompileShader(geometryShaderID);
+#endif
+   
 	GLuint fragmentShaderID = glCreateShader(GL_FRAGMENT_SHADER);
 	GLchar *fragmentShaderCode[] =
 	{
-		defines.cstr, shaderCode
+		defines.cstr, "#define FragmentCode \n", shaderCode
 	};
 	glShaderSource(fragmentShaderID, ArrayCount(fragmentShaderCode), fragmentShaderCode, 0);
 	glCompileShader(fragmentShaderID);
    
 	GLuint programID = glCreateProgram();
 	glAttachShader(programID, vertexShaderID);
+#if GEOM
+   glAttachShader(programID, geometryShaderID);
+#endif
 	glAttachShader(programID, fragmentShaderID);
 	glLinkProgram(programID);
    
@@ -467,9 +482,15 @@ static OpenGLProgram OpenGLMakeProgram(char *shaderCode, u32 flags)
 		GLsizei length;
 		char programError[4096];
 		char vertexError[4096];
+#if GEOM
+      char geomError[4096];
+#endif
 		char fragmentError[4096];
 		glGetProgramInfoLog(programID, sizeof(programError), &length, programError);
 		glGetShaderInfoLog(vertexShaderID, sizeof(vertexError), &length, vertexError);
+#if GEOM
+      glGetShaderInfoLog(geometryShaderID, sizeof(geomError), &length, geomError);
+#endif
 		glGetShaderInfoLog(fragmentShaderID, sizeof(fragmentError), &length, fragmentError);
       
       
@@ -478,6 +499,9 @@ static OpenGLProgram OpenGLMakeProgram(char *shaderCode, u32 flags)
       fprintf(stderr, programError);
       fprintf(stderr, "Vertex error:\n");
       fprintf(stderr, vertexError);
+      
+      // todo here goem error
+      
       fprintf(stderr, "Fragment error:\n");
       fprintf(stderr, fragmentError);
       fprintf(stderr, "\n");
@@ -720,6 +744,8 @@ static void SetupUniforms(OpenGLProgram *prog, RenderSetup setup, OpenGLUniformI
    if(uniforms.indexBuffer != 0xFFFFFFFF) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, uniforms.indexBuffer);
 }
 
+
+
 static void BeginAttribArraysPC(OpenGLProgram *prog)
 {
    glEnableVertexAttribArray(prog->vertP);
@@ -821,7 +847,7 @@ static void BeginAttribArraysPCUNBD(OpenGLProgram *prog)
    }
 }
 
-static void BeginAttribArrays(OpenGLProgram *prog, VertexFormatType type)
+static void BeginAttribArrays(OpenGLProgram *prog, u32 vertexFormatSize)
 {
    switch (type)
    {
@@ -1339,6 +1365,7 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
          {
             EntryColoredVertices *lineHeader = (EntryColoredVertices*)header;
             
+#if 0
             OpenGLUniformInfo uniforms;
             uniforms.vertexBuffer = context->vertexBuffer;
             
@@ -1349,7 +1376,7 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             glDrawArrays(GL_LINES, 0, lineHeader->vertexCount);
             
             EndAttribArrays(prog);
-            
+#endif
             
             pBufferIt += sizeof(*lineHeader);
          }break;

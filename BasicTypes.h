@@ -72,6 +72,7 @@ typedef int64_t	i64;
 typedef int b32;
 typedef float f32;
 typedef double f64;
+
 typedef uintptr_t uintptr;
 
 typedef uintptr_t umm;

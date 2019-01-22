@@ -24,6 +24,11 @@ enum RenderGroupEntryType
 	RenderGroup_EntryTriangleMesh,
 };
 
+enum OpenGLShaderType : u8 /// ???
+{
+   
+};
+
 enum OpenGLShaderFlags : u32
 {
    ShaderFlags_None           = 0x0,

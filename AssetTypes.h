@@ -512,6 +512,24 @@ enum VertexFormatType
    VertexFormat_PCUNBD,
 };
 
+// NOTE  WARNING The identifiers have to be unique, st this dumb hack works
+// this is used to simplify the OffsetOf situation for setting up Attrib arrays
+struct VertexFormatTemplate
+{
+   v3  p;
+   u32 c;
+   v2  uv;
+   union 
+   {
+      v3  n;
+      u16 textureIndex;
+   };
+   
+   v4i bi;
+   v4  bw;
+};
+
+
 struct VertexFormatPC
 {
 	v3  p;
