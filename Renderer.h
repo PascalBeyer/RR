@@ -156,31 +156,22 @@ static RenderGroupEntryHeader *PushRenderEntry_(RenderGroup *rg, u32 size, Rende
 	return result;
 }
 
-static void PushOrthogonalSetup(RenderGroup *rg, b32 zeroToOne, u32 flags)
+static void PushOrthogonalSetup(RenderGroup *rg, u32 flags)
 {
    TimedBlock;
+   if(rg->setup.isProjective == false  && rg->setup.flags == flags) return;
    
    RenderCommands *commands = rg->commands;
    EntryChangeRenderSetup *entry = PushRenderEntry(EntryChangeRenderSetup);
    RenderSetup *setup = &entry->setup;
    
-   if(zeroToOne)
    {
       m4x4 ortho = Orthogonal(1.0f, 1.0f);
       
       setup->projection = Translate(ortho, V3(-1.0f, 1.0f, 0.0f));
       setup->cameraTransform = Identity();
-      
+      setup->isProjective = false;
    }
-   else
-   {
-      m4x4 ortho = Orthogonal((f32)commands->width, (f32)commands->height);
-      
-      setup->projection = Translate(ortho, V3(-1.0f, 1.0f, 0.0f));
-      setup->cameraTransform = Identity();
-   }
-   
-   setup->isProjective = false;
    
    // todo reuse the rest of the memory!
    rg->currentLines = NULL;
@@ -195,6 +186,9 @@ static void PushOrthogonalSetup(RenderGroup *rg, b32 zeroToOne, u32 flags)
 static void PushProjectiveSetup(RenderGroup *rg, Camera camera, LightSource lightSource, u32 flags)
 {
    TimedBlock;
+   
+   // todo  this is fine for now, but if we doit like this we should have frame data, like camera pos and lightsource.... it does not really make sense to pass them every time.
+   if(rg->setup.isProjective && rg->setup.flags == flags) return;
    
    RenderCommands *commands = rg->commands;
    EntryChangeRenderSetup *entry = PushRenderEntry(EntryChangeRenderSetup);
@@ -377,12 +371,11 @@ static void PushAnimatedMesh(RenderGroup *rg, TriangleMesh *mesh, Quaternion ori
    meshHeader->scaleColor = scaleColor;
    
    meshHeader->boneStates = boneStates;
-   meshHeader->meshType = mesh->type;
+   meshHeader->meshType   = mesh->type;
 }
 
 static void PushAnimatedMesh(RenderGroup *rg, u32 meshId, Quaternion orientation, v3 pos, f32 scale, v4 scaleColor, m4x4Array boneStates)
 {
-   
    PushAnimatedMesh(rg, GetMesh(rg->assetHandler, meshId), orientation, pos, scale, scaleColor, boneStates);
 }
 
@@ -658,7 +651,7 @@ static VertexFormatPCUI *GetTexturedQuadMemory(RenderGroup *rg)
    }
 }
 
-static void PushTexturedQuad(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, TextureIndex textureIndex, bool inverted = false,  v2 minUV = {0, 0}, v2 maxUV = {1, 1}, v4 color = {1, 1, 1, 1})
+static void PushTexturedQuad(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, TextureIndex textureIndex, bool inverted = false,  v2 minUV = {0, 0}, v2 maxUV = {1, 1}, u32 c = 0xFFFFFFFF)
 {
    VertexFormatPCUI *verts = GetTexturedQuadMemory(rg);
    if(!verts) return;
@@ -684,7 +677,6 @@ static void PushTexturedQuad(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, Textur
       
    }
    
-   u32 c = Pack4x8(color);
    verts[0].c = c;
    verts[1].c = c;
    verts[2].c = c;
@@ -702,7 +694,7 @@ static void PushTexturedQuad(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, Textur
 static void PushTexturedQuad(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, u32 textureId, bool inverted = false,  v2 minUV = {0, 0}, v2 maxUV = {1, 1}, v4 color = {1, 1, 1, 1})
 {
    TextureIndex textureIndex = GetTexture(rg->assetHandler, textureId);
-   PushTexturedQuad(rg, p1, p2, p3, p4, textureIndex, inverted, minUV, maxUV, color);
+   PushTexturedQuad(rg, p1, p2, p3, p4, textureIndex, inverted, minUV, maxUV, Pack4x8(color));
 }
 
 static void PushTexturedRect(RenderGroup *rg, v2 p1, f32 width, f32 height, TextureIndex textureIndex,  bool inverted = false, v2 minUV = {0, 0}, v2 maxUV = {1, 1}, v4 color = {1, 1, 1, 1})
@@ -710,7 +702,7 @@ static void PushTexturedRect(RenderGroup *rg, v2 p1, f32 width, f32 height, Text
    v2 p2 = p1 + V2(width, 0);
    v2 p3 = p1 + V2(0, height);
    v2 p4 = p1 + V2(width, height);
-   PushTexturedQuad(rg, i12(p1), i12(p2), i12(p3), i12(p4), textureIndex, inverted, minUV, maxUV, color);
+   PushTexturedQuad(rg, i12(p1), i12(p2), i12(p3), i12(p4), textureIndex, inverted, minUV, maxUV, Pack4x8(color));
 }
 
 static void PushTexturedRect(RenderGroup *rg, v2 p1, f32 width, f32 height, u32 textureId,  bool inverted = false, v2 minUV = {0, 0}, v2 maxUV = {1, 1}, v4 color = {1, 1, 1, 1})
@@ -720,67 +712,50 @@ static void PushTexturedRect(RenderGroup *rg, v2 p1, f32 width, f32 height, u32 
    v2 p2 = p1 + V2(width, 0);
    v2 p3 = p1 + V2(0, height);
    v2 p4 = p1 + V2(width, height);
-   PushTexturedQuad(rg, i12(p1), i12(p2), i12(p3), i12(p4), textureIndex, inverted, minUV, maxUV, color);
+   PushTexturedQuad(rg, i12(p1), i12(p2), i12(p3), i12(p4), textureIndex, inverted, minUV, maxUV, Pack4x8(color));
 }
 
-static void PushQuadrilateral(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, v4 color)
+static void PushQuadrilateral(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, u32 c)
 {
    TextureIndex textureIndex = GetTexture(rg->assetHandler, rg->assetHandler->whiteTextureId);
-   PushTexturedQuad(rg, p1, p2, p3, p4, textureIndex, false, {0, 0}, {1, 1}, color);
+   PushTexturedQuad(rg, p1, p2, p3, p4, textureIndex, false, {0, 0}, {1, 1}, c);
 }
 
 static void PushRectangle(RenderGroup *rg, v3 pos, v3 vec1, v3 vec2, v4 color)
 {
-   PushQuadrilateral(rg, pos, pos + vec1, pos + vec2, pos + vec1 + vec2, color);
+   PushQuadrilateral(rg, pos, pos + vec1, pos + vec2, pos + vec1 + vec2, Pack4x8(color));
 }
 
-#define Orthogonal_Rectangle_OFFSET 0.0000001f
-
-static void PushRectangle(RenderGroup *rg, v2 min, v2 max, v4 color)
+static void PushRectangle(RenderGroup *rg, v2 min, v2 max, i8 layer, u32 c)
 {
    v2 p1 = min;
    v2 p2 = V2(max.x, min.y);
    v2 p3 = V2(min.x, max.y);
    v2 p4 = max;
    
-   PushQuadrilateral(rg, V3(p1, Orthogonal_Rectangle_OFFSET), V3(p2, Orthogonal_Rectangle_OFFSET), V3(p3, Orthogonal_Rectangle_OFFSET), V3(p4, Orthogonal_Rectangle_OFFSET), color);
-}
-
-static void PushRectangle(RenderGroup *rg, v2 min, v2 max, u32 c)
-{
-   v2 p1 = min;
-   v2 p2 = V2(max.x, min.y);
-   v2 p3 = V2(min.x, max.y);
-   v2 p4 = max;
+   // only negative exponents, retains sign of layer looses first bit..
+   i32 up = (layer << 24) | (1 << 31); 
+   f32 Zlayer = *(f32 *)&up;
    
-   PushQuadrilateral(rg, V3(p1, Orthogonal_Rectangle_OFFSET), V3(p2, Orthogonal_Rectangle_OFFSET), V3(p3, Orthogonal_Rectangle_OFFSET), V3(p4, Orthogonal_Rectangle_OFFSET), Unpack4x8(c));
+   PushQuadrilateral(rg, V3(p1, Zlayer), V3(p2, Zlayer), V3(p3, Zlayer), V3(p4, Zlayer), c);
 }
 
-static void PushRectangle(RenderGroup *rg, v2 pos, f32 width, f32 height, f32 zOffset, v4 color)
+static void PushRectangle(RenderGroup *rg, v2 min, v2 max, i8 layer, v4 color)
 {
-   v2 vec1 = V2(width, 0.0f);
-   v2 vec2 = V2(0.0f, height);
-   
-   PushQuadrilateral(rg, V3(pos, zOffset), V3(pos + vec1, zOffset), V3(pos + vec2, zOffset), V3(pos + vec1 + vec2, zOffset), color);
+   PushRectangle(rg, min, max, layer, Pack4x8(color));
 }
 
-static void PushRectangle(RenderGroup *rg, v2 pos, f32 width, f32 height, u32 c)
+static void PushRectangle(RenderGroup *rg, v2 pos, f32 width, f32 height, i8 layer, u32 c)
 {
-   v2 vec1 = V2(width, 0.0f);
-   v2 vec2 = V2(0.0f, height);
-   
-   PushQuadrilateral(rg, V3(pos, Orthogonal_Rectangle_OFFSET), V3(pos + vec1, Orthogonal_Rectangle_OFFSET), V3(pos + vec2, Orthogonal_Rectangle_OFFSET), V3(pos + vec1 + vec2, Orthogonal_Rectangle_OFFSET), Unpack4x8(c));
+   PushRectangle(rg, pos, pos + V2(width, height), layer, c);
 }
 
-static void PushRectangle(RenderGroup *rg, v2 pos, f32 width, f32 height, v4 color)
+static void PushRectangle(RenderGroup *rg, v2 pos, f32 width, f32 height, i8 layer, v4 color)
 {
-   v2 vec1 = V2(width, 0.0f);
-   v2 vec2 = V2(0.0f, height);
-   
-   PushQuadrilateral(rg, V3(pos, Orthogonal_Rectangle_OFFSET), V3(pos + vec1, Orthogonal_Rectangle_OFFSET), V3(pos + vec2, Orthogonal_Rectangle_OFFSET), V3(pos + vec1 + vec2, Orthogonal_Rectangle_OFFSET), color);
+   PushRectangle(rg, pos, pos + V2(width, height), layer, Pack4x8(color));
 }
 
-static void PushCenteredRectangle(RenderGroup *rg, v2 pos, float width, float height, v4 color)
+static void PushCenteredRectangle(RenderGroup *rg, v2 pos, float width, float height, i8 layer, v4 color)
 {
    v2 vec1 = V2(width, 0.0f);    
    v2 vec2 = V2(0.0f, height);
@@ -790,9 +765,10 @@ static void PushCenteredRectangle(RenderGroup *rg, v2 pos, float width, float he
    v2 p3 = (pos + vec2 - 0.5f * (vec1 + vec2));
    v2 p4 = (pos + vec1 + vec2 - 0.5f * (vec1 + vec2));
    
-   PushQuadrilateral(rg, V3(p1, Orthogonal_Rectangle_OFFSET), V3(p2, Orthogonal_Rectangle_OFFSET), V3(p3, Orthogonal_Rectangle_OFFSET), V3(p4, Orthogonal_Rectangle_OFFSET), color);
+   PushQuadrilateral(rg, pos - 0.5f * V2(width, height), pos + 0.5f * V2(width, height), layer, Pack4x8(color));
 }
 
+// exactly used in colorpicker...
 static void PushRectangle(RenderGroup *rg, v2 pos, f32 width, f32 height, u32 c1, u32 c2, u32 c3, u32 c4)
 {
    v2 p1 = pos;
@@ -803,8 +779,6 @@ static void PushRectangle(RenderGroup *rg, v2 pos, f32 width, f32 height, u32 c1
    PushTriangle(rg, i12(p1), i12(p2), i12(p3), c1, c2, c3);
    PushTriangle(rg, i12(p2), i12(p3), i12(p4), c2, c3, c4);
 }
-
-#undef Orthogonal_Rectangle_OFFSET
 
 
 static f32 PushString(RenderGroup *rg, v2 pos, unsigned char* string, u32 stringLength, f32 size, v4 color = V4(1, 1, 1, 1))
