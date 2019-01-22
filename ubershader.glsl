@@ -31,7 +31,7 @@
 #ifdef VertexCode // Vertex Code
 
 // uniforms
-uniform mat4x4 projection;
+
 uniform mat4x4 cameraTransform;
 uniform mat4x4 objectTransform;
 uniform v4 scaleColor;
@@ -99,7 +99,9 @@ out VS_OUT{
    smooth out v3 specular;
 #endif
    
-   smooth out vec4 fragColor;
+   smooth out v4 p; //in camera space
+   
+   smooth out v4 fragColor;
 } vs_out;
 
 void main(void)
@@ -127,8 +129,8 @@ void main(void)
    
    vec4 vertexInWorldSpace  = objectTransform * inputVertex;
    vec4 vertexInCameraSpace = cameraTransform * vertexInWorldSpace;
-   gl_Position = projection * vertexInCameraSpace;
    
+   vs_out.p = vertexInCameraSpace;
 #ifdef ZBias
    gl_Position = gl_Position / gl_Position.w;
    gl_Position.z = -1.0f; // what should this value be?
@@ -173,7 +175,9 @@ void main(void)
 #ifdef GeometryCode
 
 layout (triangles) in;
-layout (triangle_strip, max_vertices = 3) out;
+layout (triangle_strip, max_vertices = 6) out;
+
+uniform mat4x4 projection;
 
 in VS_OUT
 {
@@ -195,6 +199,8 @@ in VS_OUT
    smooth in v3 diffuse;
    smooth in v3 specular;
 #endif
+   
+   smooth in v4 p;
    
    smooth in vec4 fragColor;
 } gs_in[];
@@ -245,11 +251,12 @@ void main()
 #endif
       fragColor   = gs_in[i].fragColor;
       
-      gl_Position = gl_in[i].gl_Position;
+      gl_Position = projection * gs_in[i].p;
       
       EmitVertex();
    }
    EndPrimitive();
+   
 } 
 
 

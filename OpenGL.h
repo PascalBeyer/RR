@@ -294,6 +294,16 @@ struct FrameBuffer
    u32 height;
 };
 
+
+struct BlitProgram
+{
+   GLuint program;
+   GLuint vertP;
+   GLuint vertUV;
+   GLuint textureSampler;
+   
+};
+
 struct OpenGLContext
 {
    OpenGLInfo info;
@@ -305,6 +315,9 @@ struct OpenGLContext
    
    FrameBuffer renderBuffer;
    FrameBuffer shadowBuffer;
+   FrameBuffer orthogonalBuffer;
+   
+   BlitProgram blitProgram;
    
    OpenGLProgram shaders[ShaderArray_Size];
 };
@@ -391,6 +404,58 @@ static void WINAPI OpenGLDebugCallback(GLenum source, GLenum type, GLuint id, GL
 	}
 }
 
+static BlitProgram CompileBlitProgram()
+{
+   BlitProgram ret;
+   File file = LoadFile("src/simple.glsl", frameArena);
+   
+   char *shaderCode = (char *)file.data;
+   
+   GLuint vertexShaderID = glCreateShader(GL_VERTEX_SHADER);
+   GLchar *vertexShaderCode[] =
+   {
+      "#version 150\n", "#define VertexCode \n", shaderCode
+   };
+   glShaderSource(vertexShaderID, ArrayCount(vertexShaderCode), vertexShaderCode, 0);
+   glCompileShader(vertexShaderID);
+   
+   GLuint fragmentShaderID = glCreateShader(GL_FRAGMENT_SHADER);
+   GLchar *fragmentShaderCode[] =
+   {
+      "#version 150\n", "#define FragmentCode \n", shaderCode
+   };
+   glShaderSource(fragmentShaderID, ArrayCount(fragmentShaderCode), fragmentShaderCode, 0);
+   glCompileShader(fragmentShaderID);
+   
+   GLuint programID = glCreateProgram();
+   glAttachShader(programID, vertexShaderID);
+   glAttachShader(programID, fragmentShaderID);
+   glLinkProgram(programID);
+   
+   glValidateProgram(programID);
+   GLint linkValidated = false;
+   glGetProgramiv(programID, GL_LINK_STATUS, &linkValidated);
+   
+   {
+      GLuint err = glGetError();
+      Assert(err == GL_NO_ERROR);
+   }
+   
+   glUseProgram(programID);
+   
+   ret.program = programID;
+   ret.vertP  = glGetAttribLocation(ret.program, "vertP");
+   ret.vertUV  = glGetAttribLocation(ret.program, "vertUV");
+   
+   ret.textureSampler  = glGetUniformLocation(programID, "textureSampler");
+   glUniform1i(ret.textureSampler, Sampler_Texture);
+   
+   glUseProgram(0);
+   
+   
+   return ret;
+}
+
 static OpenGLProgram OpenGLMakeProgram(char *shaderCode, u32 flags)
 {
    String defines = PushArray(frameArena, Char, 0);
@@ -431,44 +496,42 @@ static OpenGLProgram OpenGLMakeProgram(char *shaderCode, u32 flags)
    EndArray(frameArena, Char, defines);
    
    GLuint vertexShaderID = glCreateShader(GL_VERTEX_SHADER);
-	GLchar *vertexShaderCode[] =
-	{
-		defines.cstr, "#define VertexCode \n", shaderCode
-	};
-	glShaderSource(vertexShaderID, ArrayCount(vertexShaderCode), vertexShaderCode, 0);
-	glCompileShader(vertexShaderID);
+   GLchar *vertexShaderCode[] =
+   {
+      defines.cstr, "#define VertexCode \n", shaderCode
+   };
+   glShaderSource(vertexShaderID, ArrayCount(vertexShaderCode), vertexShaderCode, 0);
+   glCompileShader(vertexShaderID);
    
-#define GEOM 1
-#if GEOM
-	GLuint geometryShaderID = glCreateShader(GL_GEOMETRY_SHADER);
-	GLchar *geometryShaderCode[] =
-	{
-		defines.cstr, "#define GeometryCode \n", shaderCode
-	};
-	glShaderSource(geometryShaderID, ArrayCount(geometryShaderCode), geometryShaderCode, 0);
-	glCompileShader(geometryShaderID);
-#endif
    
-	GLuint fragmentShaderID = glCreateShader(GL_FRAGMENT_SHADER);
-	GLchar *fragmentShaderCode[] =
-	{
-		defines.cstr, "#define FragmentCode \n", shaderCode
-	};
-	glShaderSource(fragmentShaderID, ArrayCount(fragmentShaderCode), fragmentShaderCode, 0);
-	glCompileShader(fragmentShaderID);
+   GLuint geometryShaderID = glCreateShader(GL_GEOMETRY_SHADER);
+   GLchar *geometryShaderCode[] =
+   {
+      defines.cstr, "#define GeometryCode \n", shaderCode
+   };
+   glShaderSource(geometryShaderID, ArrayCount(geometryShaderCode), geometryShaderCode, 0);
+   glCompileShader(geometryShaderID);
    
-	GLuint programID = glCreateProgram();
-	glAttachShader(programID, vertexShaderID);
-#if GEOM
+   GLuint fragmentShaderID = glCreateShader(GL_FRAGMENT_SHADER);
+   GLchar *fragmentShaderCode[] =
+   {
+      defines.cstr, "#define FragmentCode \n", shaderCode
+   };
+   glShaderSource(fragmentShaderID, ArrayCount(fragmentShaderCode), fragmentShaderCode, 0);
+   glCompileShader(fragmentShaderID);
+   
+   GLuint programID = glCreateProgram();
+   
+   glAttachShader(programID, vertexShaderID);
    glAttachShader(programID, geometryShaderID);
-#endif
-	glAttachShader(programID, fragmentShaderID);
-	glLinkProgram(programID);
+   glAttachShader(programID, fragmentShaderID);
    
-	glValidateProgram(programID);
-	GLint linkValidated = false;
-	glGetProgramiv(programID, GL_LINK_STATUS, &linkValidated);
-	//glGetProgramiv(programID, GL_COMPILE_STATUS, &compileValidated);
+   glLinkProgram(programID);
+   
+   glValidateProgram(programID);
+   GLint linkValidated = false;
+   glGetProgramiv(programID, GL_LINK_STATUS, &linkValidated);
+   //glGetProgramiv(programID, GL_COMPILE_STATUS, &compileValidated);
    
    
    {
@@ -477,22 +540,19 @@ static OpenGLProgram OpenGLMakeProgram(char *shaderCode, u32 flags)
    }
    
    
-	GLint validated = linkValidated;
-	if (!validated)
-	{
-		GLsizei length;
-		char programError[4096];
-		char vertexError[4096];
-#if GEOM
+   GLint validated = linkValidated;
+   if (!validated)
+   {
+      GLsizei length;
+      char programError[4096];
+      char vertexError[4096];
       char geomError[4096];
-#endif
-		char fragmentError[4096];
-		glGetProgramInfoLog(programID, sizeof(programError), &length, programError);
-		glGetShaderInfoLog(vertexShaderID, sizeof(vertexError), &length, vertexError);
-#if GEOM
+      char fragmentError[4096];
+      
+      glGetProgramInfoLog(programID, sizeof(programError), &length, programError);
+      glGetShaderInfoLog(vertexShaderID, sizeof(vertexError), &length, vertexError);
       glGetShaderInfoLog(geometryShaderID, sizeof(geomError), &length, geomError);
-#endif
-		glGetShaderInfoLog(fragmentShaderID, sizeof(fragmentError), &length, fragmentError);
+      glGetShaderInfoLog(fragmentShaderID, sizeof(fragmentError), &length, fragmentError);
       
       
       fprintf(stderr, "OpenGL shader error:\n");
@@ -511,8 +571,8 @@ static OpenGLProgram OpenGLMakeProgram(char *shaderCode, u32 flags)
       
       ExitProcess(0);
       
-		Assert(!"ShaderError");
-	}
+      Assert(!"ShaderError");
+   }
    
    Assert(programID);
    
@@ -522,23 +582,23 @@ static OpenGLProgram OpenGLMakeProgram(char *shaderCode, u32 flags)
    ret.flags = flags;
    ret.program = programID;
    
-	glUseProgram(programID);
-	ret.vertP  = glGetAttribLocation(ret.program, "vertP");
-	ret.vertC  = glGetAttribLocation(ret.program, "vertC");
-	ret.vertUV = glGetAttribLocation(ret.program, "vertUV");
-	ret.vertN  = glGetAttribLocation(ret.program, "vertN");
+   glUseProgram(programID);
+   ret.vertP  = glGetAttribLocation(ret.program, "vertP");
+   ret.vertC  = glGetAttribLocation(ret.program, "vertC");
+   ret.vertUV = glGetAttribLocation(ret.program, "vertUV");
+   ret.vertN  = glGetAttribLocation(ret.program, "vertN");
    ret.boneIndices = glGetAttribLocation(ret.program, "boneIndices");
    ret.boneWeights = glGetAttribLocation(ret.program, "boneWeights");
    
-	ret.projection      = glGetUniformLocation(ret.program, "projection");
-	ret.cameraTransform = glGetUniformLocation(ret.program, "cameraTransform");
+   ret.projection      = glGetUniformLocation(ret.program, "projection");
+   ret.cameraTransform = glGetUniformLocation(ret.program, "cameraTransform");
    ret.objectTransform = glGetUniformLocation(ret.program, "objectTransform");
-	ret.depthSampler    = glGetUniformLocation(ret.program, "depthTexture");
-	ret.textureSampler  = glGetUniformLocation(ret.program, "textureSampler");
-	ret.shadowTransform = glGetUniformLocation(ret.program, "shadowTransform");
+   ret.depthSampler    = glGetUniformLocation(ret.program, "depthTexture");
+   ret.textureSampler  = glGetUniformLocation(ret.program, "textureSampler");
+   ret.shadowTransform = glGetUniformLocation(ret.program, "shadowTransform");
    
-	ret.lightP           = glGetUniformLocation(ret.program, "lightPos");
-	ret.specularExponent = glGetUniformLocation(ret.program, "specularExponent");
+   ret.lightP           = glGetUniformLocation(ret.program, "lightPos");
+   ret.specularExponent = glGetUniformLocation(ret.program, "specularExponent");
    ret.ka               = glGetUniformLocation(ret.program, "ka");
    ret.kd               = glGetUniformLocation(ret.program, "kd");
    ret.ks               = glGetUniformLocation(ret.program, "ks");
@@ -550,20 +610,20 @@ static OpenGLProgram OpenGLMakeProgram(char *shaderCode, u32 flags)
    ret.boneStates = glGetUniformLocation(ret.program, "boneStates");
    
    glUniform1i(ret.textureSampler, Sampler_Texture);
-	glUniform1i(ret.depthSampler,   Sampler_Depth);
-	
+   glUniform1i(ret.depthSampler,   Sampler_Depth);
+   
    {
       GLuint err = glGetError();
       Assert(err == GL_NO_ERROR);
    }
    
    
-	return ret;
+   return ret;
 }
 
 static void RegisterTriangleMesh(TriangleMesh *mesh)
 {
-	void *data = NULL;
+   void *data = NULL;
    u32 stride = 0; 
    
    Arena *arena = globalDebugState.arena;
@@ -653,16 +713,16 @@ static void RegisterTriangleMesh(TriangleMesh *mesh)
    
    mesh->vertexFormatSize = stride;
    
-	Assert(mesh->positions.amount < 65536); // <, because reset index
+   Assert(mesh->positions.amount < 65536); // <, because reset index
    
-	//todo look up what those GL_Stream_Draw mean?
+   //todo look up what those GL_Stream_Draw mean?
    glGenBuffers(1, &mesh->vertexVBO);
-	glBindBuffer(GL_ARRAY_BUFFER, mesh->vertexVBO);
-	glBufferData(GL_ARRAY_BUFFER, mesh->positions.amount * stride, data, GL_STREAM_DRAW);
+   glBindBuffer(GL_ARRAY_BUFFER, mesh->vertexVBO);
+   glBufferData(GL_ARRAY_BUFFER, mesh->positions.amount * stride, data, GL_STREAM_DRAW);
    
    glGenBuffers(1, &mesh->indexVBO);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->indexVBO);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh->indices.amount * sizeof(mesh->indices[0]), mesh->indices.data, GL_STREAM_DRAW);
+   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->indexVBO);
+   glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh->indices.amount * sizeof(mesh->indices[0]), mesh->indices.data, GL_STREAM_DRAW);
    
 }
 
@@ -673,14 +733,14 @@ static void UpdateWrapingTexture(TextureIndex textureIndex, u32 width, u32 heigh
    glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, textureIndex.index, width, height, 1, GL_BGRA_EXT, GL_UNSIGNED_BYTE, pixels);
 #else
    glBindTexture(GL_TEXTURE_2D, (GLuint)bitmap.textureHandle);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, bitmap.width, bitmap.height, 0, GL_BGRA_EXT, GL_UNSIGNED_BYTE, bitmap.pixels);
+   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, bitmap.width, bitmap.height, 0, GL_BGRA_EXT, GL_UNSIGNED_BYTE, bitmap.pixels);
    
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+   //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+   //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 #endif
    
    glBindTexture(GL_TEXTURE_2D, 0);
@@ -698,7 +758,7 @@ struct OpenGLUniformInfo
 
 static void BeginUseProgram(OpenGLContext *context, OpenGLProgram *prog, RenderSetup setup)
 {
-	glUseProgram(prog->program);
+   glUseProgram(prog->program);
    
    // this can be in the setup of the programs
    glBindTexture(GL_TEXTURE_2D_ARRAY, globalTextureArray);
@@ -708,7 +768,6 @@ static void BeginUseProgram(OpenGLContext *context, OpenGLProgram *prog, RenderS
    
    if (prog->flags & ShaderFlags_ShadowMapping)
    {
-      
       glUniformMatrix4fv(prog->shadowTransform, 1, GL_TRUE, setup.shadowMat.a[0]);
       
       // this as well
@@ -789,7 +848,6 @@ static void BeginAttribArrays(OpenGLProgram *prog, u32 vertexFormatSize)
    }
 }
 
-// todo end all of them?
 static void EndAttribArrays(OpenGLProgram *prog)
 {
    glDisableVertexAttribArray(prog->vertP);
@@ -808,6 +866,13 @@ static void EndAttribArrays(OpenGLProgram *prog)
       glDisableVertexAttribArray(prog->boneIndices);
       glDisableVertexAttribArray(prog->boneWeights);
    }
+   
+   if(prog->flags & ShaderFlags_MultiTextured)
+   {
+      glDisableVertexAttribArray(prog->vertUV);
+      glDisableVertexAttribArray(prog->textureIndex);
+   }
+   
 }
 
 
@@ -845,10 +910,9 @@ static OpenGLContext OpenGLInit(bool modernContext)
    
    ret.shaderFile = LoadFile("src/ubershader.glsl", globalAlloc);
    
+   ret.blitProgram = CompileBlitProgram();
+   
    u32 amountOfMultiSamples = Min(info.amountOfMultiSamples, 4u);
-   
-   
-   
    
    FrameBuffer renderBuffer;
    // todo make this passed in
@@ -929,8 +993,55 @@ static OpenGLContext OpenGLInit(bool modernContext)
       Assert(status == GL_FRAMEBUFFER_COMPLETE);
    }
    
-   FrameBuffer shadowBuffer;
    
+   FrameBuffer orthogonalBuffer;
+   // todo make this passed in
+   orthogonalBuffer.width  = 1280;
+   orthogonalBuffer.height = 720;
+   {
+      // orthogonalBuffer
+      GLuint texture_map;
+      glGenTextures(1, &texture_map);
+      glBindTexture(GL_TEXTURE_2D, texture_map);
+      
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+      
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, orthogonalBuffer.width, orthogonalBuffer.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+      
+      orthogonalBuffer.texture = texture_map;
+      glBindTexture(GL_TEXTURE_2D, 0);
+      
+      GLuint depth_texture;
+      glGenTextures(1, &depth_texture);
+      glBindTexture(GL_TEXTURE_2D, depth_texture);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, orthogonalBuffer.width, orthogonalBuffer.height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE, NULL);
+      
+      orthogonalBuffer.depth = depth_texture;
+      
+      // Build the framebuffer.
+      GLuint framebuffer;
+      glGenFramebuffers(1, &framebuffer);
+      glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)framebuffer);
+      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture_map, 0);
+      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth_texture, 0);
+      orthogonalBuffer.id = framebuffer;
+   }
+   
+   ret.orthogonalBuffer = orthogonalBuffer;
+   
+   {
+      GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+      Assert(status == GL_FRAMEBUFFER_COMPLETE);
+   }
+   
+   
+   FrameBuffer shadowBuffer;
    {
       GLuint shadowFrameBuffer;
       shadowBuffer.width  = 1024;
@@ -958,7 +1069,6 @@ static OpenGLContext OpenGLInit(bool modernContext)
       shadowBuffer.texture = 0xFFFFFFFF;
       
    }
-   
    ret.shadowBuffer = shadowBuffer;
    
    {
@@ -992,7 +1102,7 @@ static OpenGLContext OpenGLInit(bool modernContext)
    glEnable(GL_SAMPLE_ALPHA_TO_ONE);
    glEnable(GL_MULTISAMPLE);
    glEnable(GL_FRAMEBUFFER_SRGB); // not sure....
-   glEnable(GL_CULL_FACE);
+   glDisable(GL_CULL_FACE);
    
    glEnable(GL_BLEND);
    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
@@ -1051,7 +1161,6 @@ static void RenderIntoShadowMap(RenderCommands *rg, OpenGLContext *context)
 {
    TimedBlock;
    
-   glDisable(GL_CULL_FACE);
    //glCullFace(GL_FRONT);
    
    OpenGLProgram *prog = GetOpenGLProgram(context, ShaderFlags_None);
@@ -1150,9 +1259,6 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
       }
    };
    
-   glBindFramebuffer(GL_FRAMEBUFFER, context->renderBuffer.id);
-   glViewport(0, 0, context->renderBuffer.width, context->renderBuffer.height);  // is this per framebuffer?
-   
    RenderSetup currentSetup = {};
    m4x4 shadowMat = {};
    OpenGLProgram *prog = NULL;
@@ -1169,6 +1275,14 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             EntryChangeRenderSetup *setupHeader = (EntryChangeRenderSetup *)header;
             
             RenderSetup *newSetup = &setupHeader->setup;
+            
+            if(newSetup->isProjective != currentSetup.isProjective)
+            {
+               FrameBuffer *buffer = newSetup->isProjective ? &context->renderBuffer : &context->orthogonalBuffer;
+               
+               glBindFramebuffer(GL_FRAMEBUFFER, buffer->id);
+               glViewport(0, 0, buffer->width, buffer->height);
+            }
             
             currentSetup = setupHeader->setup;
             shadowMat = biasMatrix * currentSetup.projection * currentSetup.shadowMat;
@@ -1274,13 +1388,20 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             glClearColor(clearHeader->color.r, clearHeader->color.g, clearHeader->color.b, clearHeader->color.a);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             
+            
+            glBindFramebuffer(GL_FRAMEBUFFER, context->orthogonalBuffer.id);
+            glClearDepth(1.0f);
+            glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            
+            
             pBufferIt += sizeof(*clearHeader);
          }break;
          case RenderGroup_EntryLines:
          {
             EntryColoredVertices *lineHeader = (EntryColoredVertices*)header;
             
-#if !GEOM
+#if 0
             OpenGLUniformInfo uniforms;
             uniforms.vertexBuffer = context->vertexBuffer;
             
@@ -1313,6 +1434,45 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
    
    glBlitFramebuffer(0, 0, context->renderBuffer.width, context->renderBuffer.height, 0, 0, rg->width, rg->height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+   
+#if 1
+   {
+      BlitProgram *blit = &context->blitProgram;
+      glUseProgram(blit->program);
+      struct VertexFormatP2U
+      {
+         v2 p;
+         v2 uv;
+      };
+      glBindTexture(GL_TEXTURE_2D, context->orthogonalBuffer.texture);
+      
+      VertexFormatP2U arr[6]
+      {
+         {V2(-1, -1), V2(0, 0)},
+         {V2(+1, -1), V2(1, 0)},
+         {V2(-1, +1), V2(0, 1)},
+         
+         {V2(-1, +1), V2(0, 1)},
+         {V2(+1, -1), V2(1, 0)},
+         {V2(+1, +1), V2(1, 1)},
+      };
+      
+      glEnableVertexAttribArray(blit->vertP);
+      glEnableVertexAttribArray(blit->vertUV);
+      
+      glVertexAttribPointer(blit->vertP, 2, GL_FLOAT, false, sizeof(arr[0]), (void *)OffsetOf(VertexFormatP2U, p));
+      glVertexAttribPointer(blit->vertUV, 2, GL_FLOAT, false, sizeof(arr[0]), (void *)OffsetOf(VertexFormatP2U, uv));
+      
+      glBindBuffer(GL_ARRAY_BUFFER, context->vertexBuffer);
+      glBufferData(GL_ARRAY_BUFFER, 6 * sizeof(arr[0]), arr, GL_STREAM_COPY);
+      glDrawArrays(GL_TRIANGLES, 0, 6);
+      
+      glDisableVertexAttribArray(blit->vertP);
+      glDisableVertexAttribArray(blit->vertUV);
+      
+      
+   }
+#endif
    
    //flush
    rg->pushBufferSize = 0;

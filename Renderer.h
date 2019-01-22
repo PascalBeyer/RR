@@ -41,6 +41,7 @@ enum OpenGLShaderFlags : u32
 struct RenderSetup 
 {
 	u32 flags;
+   b32 isProjective; // todo we could actually join this with the flags, if we just make it real big, bigger then size.
    m4x4 projection;
 	m4x4 cameraTransform;
    m4x4 shadowMat;
@@ -179,6 +180,8 @@ static void PushOrthogonalSetup(RenderGroup *rg, b32 zeroToOne, u32 flags)
       setup->cameraTransform = Identity();
    }
    
+   setup->isProjective = false;
+   
    // todo reuse the rest of the memory!
    rg->currentLines = NULL;
    rg->currentTriangles = NULL;
@@ -203,6 +206,7 @@ static void PushProjectiveSetup(RenderGroup *rg, Camera camera, LightSource ligh
       setup->lightP = lightSource.pos;
       setup->shadowMat = CameraTransform(lightSource.orientation, lightSource.pos);
       setup->cameraP = camera.pos;
+      setup->isProjective = true;
    }
    
    rg->currentLines = NULL;
