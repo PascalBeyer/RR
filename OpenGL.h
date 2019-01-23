@@ -503,7 +503,8 @@ static OpenGLProgram OpenGLMakeProgram(char *shaderCode, u32 flags)
    glShaderSource(vertexShaderID, ArrayCount(vertexShaderCode), vertexShaderCode, 0);
    glCompileShader(vertexShaderID);
    
-   
+#define GEOM 1
+#if GEOM
    GLuint geometryShaderID = glCreateShader(GL_GEOMETRY_SHADER);
    GLchar *geometryShaderCode[] =
    {
@@ -511,6 +512,7 @@ static OpenGLProgram OpenGLMakeProgram(char *shaderCode, u32 flags)
    };
    glShaderSource(geometryShaderID, ArrayCount(geometryShaderCode), geometryShaderCode, 0);
    glCompileShader(geometryShaderID);
+#endif
    
    GLuint fragmentShaderID = glCreateShader(GL_FRAGMENT_SHADER);
    GLchar *fragmentShaderCode[] =
@@ -523,7 +525,9 @@ static OpenGLProgram OpenGLMakeProgram(char *shaderCode, u32 flags)
    GLuint programID = glCreateProgram();
    
    glAttachShader(programID, vertexShaderID);
+#if GEOM
    glAttachShader(programID, geometryShaderID);
+#endif
    glAttachShader(programID, fragmentShaderID);
    
    glLinkProgram(programID);
@@ -546,12 +550,16 @@ static OpenGLProgram OpenGLMakeProgram(char *shaderCode, u32 flags)
       GLsizei length;
       char programError[4096];
       char vertexError[4096];
+#if GEOM
       char geomError[4096];
+#endif
       char fragmentError[4096];
       
       glGetProgramInfoLog(programID, sizeof(programError), &length, programError);
       glGetShaderInfoLog(vertexShaderID, sizeof(vertexError), &length, vertexError);
+#if GEOM
       glGetShaderInfoLog(geometryShaderID, sizeof(geomError), &length, geomError);
+#endif
       glGetShaderInfoLog(fragmentShaderID, sizeof(fragmentError), &length, fragmentError);
       
       

@@ -151,6 +151,9 @@ static void RenderPathCreator(RenderGroup *rg, EntityManager *entityManager, Exe
 
 static void RenderPathCreatorUI(RenderGroup *rg, PathCreator *pathCreator)
 {
+   
+   RenderValueDisplay(rg, &pathCreator->valueDisplay, 0);
+   
    switch (pathCreator->state)
    {
       case PathCreator_CreatingPath:
@@ -282,12 +285,13 @@ static void RenderColorPicker(RenderGroup *rg, ColorPicker *picker)
       0xFFFF0000, // blue
    };
    
+   // sliderColors
    for (u32 i = 0; i < 6; i++)
    {
       PushRectangle(rg, V2(picker->sliderPos.x + i * scaledWidth, picker->sliderPos.y), scaledWidth, picker->sliderHeight, 0, colors[i], colors[(i + 1)], colors[i], colors[(i + 1)]);
    }
    
-   //SliderRect
+   // Picker Color
    Tweekable(f32, sliderSlider);
    
    f32 ppx = picker->pos.x + picker->pickerPos.x;
@@ -295,7 +299,7 @@ static void RenderColorPicker(RenderGroup *rg, ColorPicker *picker)
    
    PushRectangle(rg, picker->pos, picker->width, picker->height, 1, 0xFFFFFFFF, picker->sliderColor, 0xFF000000, 0xFF000000);
    
-   //picker rect
+   // picker pointer
    PushRectangle(rg, V2(ppx - 2.0f * picker->border, ppy - 2.0f * picker->border), 4.0f * picker->border, 1.0f * picker->border, 1, borderColor);
    PushRectangle(rg, V2(ppx - 2.0f * picker->border, ppy + 2.0f * picker->border), 4.0f * picker->border, 1.0f * picker->border, 1, borderColor);
    PushRectangle(rg, V2(ppx - 2.0f * picker->border, ppy - 2.0f * picker->border), 1.0f * picker->border, 4.0f * picker->border, 1, borderColor);
@@ -351,6 +355,9 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor)
    
    u32 xyz = editor.panel.hotValueXYZ;
    v2 valuePos = p->pos + V2(editorBorderWidth, editorBorderWidth + editorHeaderWidth);
+   
+   String textInputString = CreateString(p->textInput.inputBuffer, p->textInput.amount);
+   
    For(p->values)
    {
       
@@ -391,7 +398,7 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor)
             
             if (p->values.data + p->hotValue == it)
             {
-               PushString(rg, continuePos, 0, p->textInput.string, editorPanelFontSize);
+               PushString(rg, continuePos, 0, textInputString, editorPanelFontSize);
                break;
             }
             
@@ -434,7 +441,7 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor)
          {
             if (p->values.data + p->hotValue == it)
             {
-               PushString(rg, continuePos, 0, p->textInput.string, editorPanelFontSize);
+               PushString(rg, continuePos, 0, textInputString, editorPanelFontSize);
                break;
             }
             
@@ -447,7 +454,7 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor)
             
             if (xyz == 'x' && (p->values.data + p->hotValue == it))
             {
-               String str = FormatString("x: %s", p->textInput.string);
+               String str = FormatString("x: %s", textInputString);
                PushString(rg, writePos, 0, str, editorPanelFontSize);
             }
             else
@@ -460,7 +467,7 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor)
             
             if (xyz == 'y' && (p->values.data + p->hotValue == it))
             {
-               String str = FormatString("y: %s", p->textInput.string);
+               String str = FormatString("y: %s", textInputString);
                PushString(rg, writePos, 0, str, editorPanelFontSize);
             }
             else
@@ -476,7 +483,7 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor)
             
             if (xyz == 'x' && (p->values.data + p->hotValue == it))
             {
-               String str = FormatString("x: %s", p->textInput.string);
+               String str = FormatString("x: %s", textInputString);
                PushString(rg, writePos, 0, str, editorPanelFontSize);
             }
             else
@@ -487,7 +494,7 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor)
             writePos.y += editorPanelFontSize;
             if (xyz == 'y' && (p->values.data + p->hotValue == it))
             {
-               String str = FormatString("y: %s", p->textInput.string);
+               String str = FormatString("y: %s", textInputString);
                PushString(rg, writePos, 0, str, editorPanelFontSize);
             }
             else
@@ -499,7 +506,7 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor)
             
             if (xyz == 'z' && (p->values.data + p->hotValue == it))
             {
-               String str = FormatString("z: %s", p->textInput.string);
+               String str = FormatString("z: %s", textInputString);
                PushString(rg, writePos, 0, str, editorPanelFontSize);
             }
             else
@@ -513,7 +520,7 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor)
             
             if (xyz == 'x' && (p->values.data + p->hotValue == it))
             {
-               String str = FormatString("x: %s", p->textInput.string);
+               String str = FormatString("x: %s", textInputString);
                PushString(rg, writePos, 0, str, editorPanelFontSize);
             }
             else
@@ -524,7 +531,7 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor)
             writePos.y += editorPanelFontSize;
             if (xyz == 'y' && (p->values.data + p->hotValue == it))
             {
-               String str = FormatString("y: %s", p->textInput.string);
+               String str = FormatString("y: %s", textInputString);
                PushString(rg, writePos, 0, str, editorPanelFontSize);
             }
             else
@@ -536,7 +543,7 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor)
             
             if (xyz == 'z' && (p->values.data + p->hotValue == it))
             {
-               String str = FormatString("z: %s", p->textInput.string);
+               String str = FormatString("z: %s", textInputString);
                PushString(rg, writePos, 0, str, editorPanelFontSize);
             }
             else
@@ -556,7 +563,7 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor)
             val.z = Round(angle.ZRotation / (2.0f * PI) * 360.0f) + 180;
             if (xyz == 'x' && (p->values.data + p->hotValue == it))
             {
-               String str = FormatString("xRot: %s", p->textInput.string);
+               String str = FormatString("xRot: %s", textInputString);
                PushString(rg, writePos, 0, str, editorPanelFontSize);
             }
             else
@@ -567,7 +574,7 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor)
             writePos.y += editorPanelFontSize;
             if (xyz == 'y' && (p->values.data + p->hotValue == it))
             {
-               String str = FormatString("yRot: %s", p->textInput.string);
+               String str = FormatString("yRot: %s", textInputString);
                PushString(rg, writePos, 0, str, editorPanelFontSize);
             }
             else
@@ -579,7 +586,7 @@ static void RenderEditorPanel(RenderGroup *rg, Editor editor)
             
             if (xyz == 'z' && (p->values.data + p->hotValue == it))
             {
-               String str = FormatString("zRot: %s", p->textInput.string);
+               String str = FormatString("zRot: %s", textInputString);
                PushString(rg, writePos, 0, str, editorPanelFontSize);
             }
             else

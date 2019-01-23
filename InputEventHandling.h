@@ -969,12 +969,12 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
             Char c = KeyToChar(message.key, false);
             if (c == '-' || c == '.' || '0' <= c && c <= '9')
             {
-               if (t->string.length + 1 <= t->maxLength)
+               if (t->amount + 1 <= ArrayCount(t->inputBuffer))
                {
-                  t->string[t->string.length++] = c;
+                  t->inputBuffer[t->amount++] = c;
                   return;
                }
-               ConsoleOutputError("To many symbols, exceeds max length of 50");
+               ConsoleOutputError("To many symbols, exceeds max length of 255");
                
                return;
             }
@@ -984,9 +984,9 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
             {
                case Key_backSpace:
                {
-                  if (t->string.length)
+                  if (t->amount)
                   {
-                     t->string.length--;
+                     t->amount--;
                   }
                   return;
                }break;
@@ -1000,7 +1000,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                   {
                      case Tweeker_f32:
                      {
-                        f32 newValue = StoF(t->string, &success);
+                        f32 newValue = StoF(CreateString(t->inputBuffer, t->amount), &success);
                         if (success)
                         {
                            *val.f = newValue;
@@ -1010,7 +1010,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      }break;
                      case Tweeker_u32:
                      {
-                        u32 newValue = StoU(t->string, &success);
+                        u32 newValue = StoU(CreateString(t->inputBuffer, t->amount), &success);
                         if (success)
                         {
                            *val.u = newValue;
@@ -1021,7 +1021,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      
                      case Tweeker_v2:
                      {
-                        f32 newValue = StoF(t->string, &success);
+                        f32 newValue = StoF(CreateString(t->inputBuffer, t->amount), &success);
                         if (success)
                         {
                            switch (editor->panel.hotValueXYZ)
@@ -1046,7 +1046,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      }break;
                      case Tweeker_v3:
                      {
-                        f32 newValue = StoF(t->string, &success);
+                        f32 newValue = StoF(CreateString(t->inputBuffer, t->amount), &success);
                         if (success)
                         {
                            switch (editor->panel.hotValueXYZ)
@@ -1075,7 +1075,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      }break;
                      case Tweeker_v3i:
                      {
-                        i32 newValue = StoI(t->string, &success);
+                        i32 newValue = StoI(CreateString(t->inputBuffer, t->amount), &success);
                         if (success)
                         {
                            switch (editor->panel.hotValueXYZ)
@@ -1104,7 +1104,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      }break;
                      case Tweeker_EulerAngle:
                      {
-                        f32 newValue = StoF(t->string, &success);
+                        f32 newValue = StoF(CreateString(t->inputBuffer, t->amount), &success);
                         
                         if (!success)
                         {
@@ -1143,7 +1143,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                      InvalidDefaultCase;
                   }
                   
-                  t->string.length = 0;
+                  t->amount = 0;
                   editor->panel.hotValue = 0xFFFFFFFF;
                   
                   EditorPushUndo(editor);
@@ -1154,7 +1154,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                case Key_leftMouse:
                case Key_rightMouse:
                {
-                  t->string.length = 0;
+                  t->amount = 0;
                   editor->panel.hotValue = 0xFFFFFFFF;
                   EditorGoToNone(editor);
                }break;

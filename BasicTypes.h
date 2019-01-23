@@ -59,6 +59,10 @@ static bool operator!(type##Array arr)											\
 #define ForC(...) Expand(GET_MACRO3(__VA_ARGS__, Ignored, ForCVarArr, ForCArr)(__VA_ARGS__))
 
 
+#define EachArr(bound) for(u32 it = 0; it < bound; it++)
+#define EachVarArr(it, bound) for(u32 it = 0; it < bound; it++)
+#define Each(...) Expand(GET_MACRO3(__VA_ARGS__, Ignored, EachVarArr, EachArr)(__VA_ARGS__))
+
 #include <stdint.h>
 
 typedef uint8_t u8;

@@ -264,12 +264,6 @@ static TweekerPointer CreateTweekerPointer(TweekerType type, char *name, void *a
 
 DefineDynamicArray(TweekerPointer);
 
-struct TextInput
-{
-	String string;
-	u32 maxLength;
-};
-
 struct EditorPanel
 {
 	b32 visible;
@@ -624,9 +618,7 @@ static Editor InitEditor(Arena *constantArena)
    ret.panel.pos = initialEditorPanelPos;
    ret.panel.visible = false;
    ret.panel.values = TweekerPointerCreateDynamicArray(globalAlloc);
-   ret.panel.textInput.string = PushArray(constantArena, Char, 50);
-   ret.panel.textInput.string.length = 0;
-   ret.panel.textInput.maxLength = 50;
+   ret.panel.textInput.amount = 0;
    ret.panel.hotValue = 0xFFFFFFFF;
    
    ret.focusPoint = V3();

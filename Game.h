@@ -35,6 +35,7 @@
 #include "SoundMixer.h"
 #include "Renderer.h"
 
+#include "gui.h"
 #include "Simulate.h"
 
 #include "KdTree.h"
@@ -45,7 +46,6 @@
 #include "InputEventHandling.h"
 
 #include "Draw.h"
-
 
 enum GameMode
 {
@@ -266,13 +266,17 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
          Tweekable(b32, debugCam);
          Camera *cam = debugCam ? &exe->debugCamera : &exe->camera;
          
+         
          UpdateColorPickers(editor, input);
          
          switch (exe->state)
          {
             case Execute_PathCreator:
             {
-               RenderPathCreator(rg, entityManager, exe, &exe->pathCreator, assetHandler, input);
+               PathCreator *pathCreator = &exe->pathCreator;
+               
+               PathCreatorBuildUI(pathCreator, entityManager);
+               RenderPathCreator(rg, entityManager, exe, pathCreator, assetHandler, input);
             }break;
             case Execute_Simulation:
             {

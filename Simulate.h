@@ -11,7 +11,9 @@ struct PathCreator
 	u32 hotUnit;
 	PathCreatorState state;
    
-	Rectangle2D resetUnitButton;
+   ValueDisplay valueDisplay;
+   
+   Rectangle2D resetUnitButton;
 	Rectangle2D	finishButton;
 };
 
@@ -23,7 +25,50 @@ static PathCreator InitPathCreator()
 	ret.finishButton = CreateRectangle2D(V2(0.8f, 0.7f), 0.2f, 0.1f);
 	ret.resetUnitButton = CreateRectangle2D(V2(0.8f, 0.8f), 0.2f, 0.1f);
    
-	return ret;
+   ValueDisplay *display = &ret.valueDisplay;
+   
+   display->headerString = S("DumbHeader");
+   display->amountOfEntries = 0;
+   display->rect = CreateRectangle2D(V2(0.7f, 0.1f), 0.2f, 0.6f);
+   display->hotValue = 0xFFFFFFFF;
+   display->hotEntry = 0xFFFFFFFF;
+   display->visible = true;
+   display->fontSize = 0.05f;
+   display->borderSize = 0.003f;
+   display->headerSize = 0.1f;
+   display->borderColor     = V4(1.0f, 0.2f, 0.2f, 0.2f);
+   display->backGroundColor = V4(1.0f, 0.5f, 0.7f, 0.9f);
+   display->entryColor      = V4(1.0f, 0.2f, 0.4f, 0.8f);
+   display->headerColor     = V4(1.0f, 0.2f, 0.4f, 0.8f);
+   
+   return ret;
+}
+
+static void PathCreatorBuildUI(PathCreator *pathCreator, EntityManager *entityManager)
+{
+   ValueDisplay *display = &pathCreator->valueDisplay;
+   Reset(display);
+   
+   if(pathCreator->hotUnit == 0xFFFFFFFF)
+   {
+      display->visible = false;
+      return;
+   }
+   else
+   {
+      display->visible = true;
+   }
+   
+   UnitData *unitData = entityManager->unitData + pathCreator->hotUnit;
+   
+   For(unitData->instructions)
+   {
+      StringArray arr = PushArray(frameArena, String, 1);
+      arr[0] = UnitInstructionToString(*it);
+      
+      AddEntry(display, *it, arr);
+   }
+   
 }
 
 // todo copy and paste of editor.h, they will differ eventrually, because this shout utilize the entity tree.
