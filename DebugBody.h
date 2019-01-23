@@ -51,7 +51,6 @@ enum DebugUIElementFlag
    
 };
 
-
 static void DrawTweekers(RenderGroup *rg)
 {
 	Tweekable(f32, tweekerFontSize);
@@ -89,10 +88,10 @@ static void DrawTweekers(RenderGroup *rg)
 	u32 i = 1;
 	while (stack)
 	{
-		PushString(rg, V2(tweekerFontSize, i++ * 1.1f * tweekerFontSize), (char *)stack->function, tweekerFontSize);
+		PushString(rg, V2(tweekerFontSize, i++ * 1.1f * tweekerFontSize), 0, (char *)stack->function, tweekerFontSize);
 		for (auto it = stack->first; it; it = it->next)
 		{
-			PushString(rg, V2(3.0f * tweekerFontSize, i++ * 1.1f * tweekerFontSize), it->tweeker->name, tweekerFontSize);
+			PushString(rg, V2(3.0f * tweekerFontSize, i++ * 1.1f * tweekerFontSize), 0, it->tweeker->name, tweekerFontSize);
 		}
 		stack = stack->next;
 	}
@@ -237,14 +236,14 @@ static void DrawDebugRecords(RenderGroup *rg, f32 secondsPerFrame, Input input)
 	memcpy(frameCopy.data, frameInfo.times.data, frameInfo.times.amount * sizeof(FrameTimeInfo));
 #endif // todo sort
    
-	PushRectangle(rg, V2(0.1f, 0.2f), 0.75f, debugDisplayBarSize * (f32)frameInfo.times.amount, V4(0.95f, 0.0f, 0.0f, 0.0f));
+	PushRectangle(rg, V2(0.1f, 0.2f), 0.75f, debugDisplayBarSize * (f32)frameInfo.times.amount, 2, V4(0.95f, 0.0f, 0.0f, 0.0f));
    
 	For(frameInfo.times)
 	{
 		u32 it_index = (u32)(it - frameInfo.times.data);
 		if (!debugInfoArray[it_index].function) continue;
 		String toDisplay = FormatString("%25lbc* %9rbf32ms, %2rbu32hit", debugInfoArray[it_index].function, (f32)((f64)it->cycles * secondsPerCycle * 1000.0), it->hitCount);
-		PushString(rg, V2(0.1f, 0.2f + it_index * debugDisplayBarSize), toDisplay, debugDisplayBarSize);
+		PushString(rg, V2(0.1f, 0.2f + it_index * debugDisplayBarSize), 0, toDisplay, debugDisplayBarSize);
 	}
    
 	f64 cycleMult = 1.0 / amountOfCyclesToDisplay;
@@ -256,7 +255,7 @@ static void DrawDebugRecords(RenderGroup *rg, f32 secondsPerFrame, Input input)
 	}
    
 	u32 depth = 0;
-   PushOrthogonalSetup(rg, true, ShaderFlags_None);
+   PushOrthogonalSetup(rg, ShaderFlags_None);
    
 	for (DebugEvent *it = firstEvent; it < firstEvent + amountOfEventsToHandle; it++)
 	{
@@ -277,12 +276,19 @@ static void DrawDebugRecords(RenderGroup *rg, f32 secondsPerFrame, Input input)
             f32 width = (f32)(cycleD * cycleMult);
             
             u32 color = debugInfoArray[it->debugRecordIndex].color;
-            PushRectangle(rg, pos, width, debugDisplayBarSize, color, color, color, color);
+            v2 p1 = pos;
+            v2 p2 = V2(pos.x + width, pos.y);
+            v2 p3 = V2(pos.x, pos.y + debugDisplayBarSize);
+            v2 p4 = V2(pos.x + width, pos.y  + debugDisplayBarSize);
+            
+            PushTriangle(rg, p1, p2, p3, 0, color);
+            PushTriangle(rg, p3, p2, p4, 0, color);
+            
             if (PointInRectangle(pos, width, debugDisplayBarSize, input.mouseZeroToOne))
             {
-               PushOrthogonalSetup(rg, true, ShaderFlags_MultiTextured);
-               PushString(rg, input.mouseZeroToOne, debugInfoArray[it->debugRecordIndex].function, debugDisplayBarSize);
-               PushOrthogonalSetup(rg, true, ShaderFlags_None);
+               PushOrthogonalSetup(rg, ShaderFlags_MultiTextured);
+               PushString(rg, input.mouseZeroToOne, -1, debugInfoArray[it->debugRecordIndex].function, debugDisplayBarSize);
+               PushOrthogonalSetup(rg, ShaderFlags_None);
             }
             
             depth--;

@@ -363,7 +363,7 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
 #endif
    }
    
-   PushOrthogonalSetup(rg, true, ShaderFlags_MultiTextured); 
+   PushOrthogonalSetup(rg, ShaderFlags_MultiTextured); 
    
    switch (state->mode)
    {
@@ -392,7 +392,7 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
    UpdateConsole(input);
    DrawConsole(rg);
    
-   PushString(rg, V2(0.75f, 0.01f), GameModeStrings[state->mode], 0.03f);
+   PushString(rg, V2(0.75f, 0.01f), -6, GameModeStrings[state->mode], 0.03f);
    
    ToOutput(soundMixer, soundBuffer);
    

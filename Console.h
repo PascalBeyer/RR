@@ -801,7 +801,7 @@ static void ConsoleDrawSelection(RenderGroup *rg, String string, u32 first, u32 
    
    Tweekable(v4, consoleSelectionColor); // V4(1.0f, 0.0f, 0.2f, 0.45f)
    
-   PushRectangle(rg, V2(selectionMinX, yMin), V2(selectionMaxX, yMax), consoleSelectionColor);
+   PushRectangle(rg, V2(selectionMinX, yMin), V2(selectionMaxX, yMax), console.selectionLayer, consoleSelectionColor);
 }
 
 
@@ -818,12 +818,12 @@ static void DrawConsole(RenderGroup *rg)
    
    
    //mainField
-   PushRectangle(rg, p1, V2(1 - console.scrollbarWidth, console.openness) - V2(0, console.textInputFieldSize), V4(1.0f, 0.5f, 0.6f, 0.85f));
+   PushRectangle(rg, p1, V2(1 - console.scrollbarWidth, console.openness) - V2(0, console.textInputFieldSize), console.backLayer,  V4(1.0f, 0.5f, 0.6f, 0.85f));
    
    //typeField
    Tweekable(v4, consoleTextFieldColor); //V4(1.0f, 0.6f, 0.7f, 0.85f)
    v2 typeFieldPos = p3 - V2(0, console.textInputFieldSize);
-   PushRectangle(rg, typeFieldPos, p4, consoleTextFieldColor);
+   PushRectangle(rg, typeFieldPos, p4, console.middleLayer,  consoleTextFieldColor);
    
    //cursor
    if (ConsoleActive() && (console.cursorTimer < 0.5f) && !(console.selecting & SelectTag_History))
@@ -833,7 +833,7 @@ static void DrawConsole(RenderGroup *rg)
       
       f32 stringLengthUpToCursor = GetActualStringLength(preCursorString, console.fontSize, globalFont); 
       v2 cursorPos = V2(console.typeFieldXOffset + stringLengthUpToCursor - console.typeFieldTextScrollOffset, typeFieldPos.y);
-      PushRectangle(rg, cursorPos, console.cursorWidth, console.fontSize, V4(1.0f, 1.0f, 1.0f, 0.85f));
+      PushRectangle(rg, cursorPos, console.cursorWidth, console.fontSize, console.selectionLayer, V4(1.0f, 1.0f, 1.0f, 0.85f));
    }
    
    //typefield Selection
@@ -942,15 +942,15 @@ static void DrawConsole(RenderGroup *rg)
    
    //typefield Text
    v2 typeFieldTextPos = p3 + V2(console.typeFieldXOffset - console.typeFieldTextScrollOffset, -console.textInputFieldSize);
-   PushString(rg, typeFieldTextPos - V2(0.001f, 0.001f), console.inputString, console.fontSize, V4(1.0f, 0.5f, 0.5f, 0.5f));
-   PushString(rg, typeFieldTextPos, console.inputString, console.fontSize, V4(1.0f, 1.0f, 1.0f, 1.0f)); 
+   PushString(rg, typeFieldTextPos - V2(0.001f, 0.001f), console.textLayer, console.inputString, console.fontSize, V4(1.0f, 0.5f, 0.5f, 0.5f));
+   PushString(rg, typeFieldTextPos, console.textLayer, console.inputString, console.fontSize, V4(1.0f, 1.0f, 1.0f, 1.0f)); 
    
    //History Text
    for (i32 i = bottomLine; i >= topLine; i--)
    {
       f32 pos = (f32)(console.historyLength - console.historyPos - i);
       v4 color = ColorForHistoryEntry(console.history[i].flag);
-      PushString(rg, consoleFieldFirstRow - pos * V2(0, lineSize), console.history[i].entry, console.fontSize, color);
+      PushString(rg, consoleFieldFirstRow - pos * V2(0, lineSize), console.textLayer, console.history[i].entry, console.fontSize, color);
    }
    
    //scrollbar
@@ -958,7 +958,7 @@ static void DrawConsole(RenderGroup *rg)
    v2 scrollbarFieldMin = V2(1.0f - console.scrollbarWidth, 0.0f);
    v2 scrollbarFieldMax = V2(1.0f, scrollbarBottom);
    Tweekable(v4, consoleScrollbarBackGroundColor);
-   PushRectangle(rg, scrollbarFieldMin, scrollbarFieldMax, consoleScrollbarBackGroundColor);
+   PushRectangle(rg, scrollbarFieldMin, scrollbarFieldMax, console.middleLayer, consoleScrollbarBackGroundColor);
    
    Tweekable(v4, consoleScrollbarColor); //V4(1.0f, 0.5f, 0.6f, 0.85f)
    if(console.historyLength)
@@ -969,7 +969,7 @@ static void DrawConsole(RenderGroup *rg)
       v2 scrollbarMin = V2(1.0f - console.scrollbarWidth + 0.003f, scrollMiny);
       v2 scrollbarMax = V2(1.0f - 0.003f, scrollMaxy);
       
-      PushRectangle(rg, scrollbarMin, scrollbarMax, consoleScrollbarColor);
+      PushRectangle(rg, scrollbarMin, scrollbarMax, console.selectionLayer, consoleScrollbarColor);
    }
 }
 

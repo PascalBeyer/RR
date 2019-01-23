@@ -303,9 +303,35 @@ static void PushTriangle(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v4 color = V4(1, 
 {
    PushTriangle(rg, p1, p2, p3, Pack4x8(color));
 }
-static void PushTriangle(RenderGroup *rg, v2 p1, v2 p2, v2 p3, v4 color = V4(1, 1, 1, 1))
+
+static f32 LayerToZLayer(i8 layer)
 {
-   PushTriangle(rg, i12(p1), i12(p2), i12(p3), Pack4x8(color));
+   // only negative exponents, retains sign of layer looses first bit..
+#if 0
+   i8 bias     = (1 << 7) - 1;
+   i8 biasedExp = exp + bias;
+   u32 whatsThis = (((u32)biasedExp) << 23);
+   u32 up = whatsThis | (1u << 30); 
+   f32 Zlayer = *(f32 *)&up;
+#else
+   
+   f32 zLayer;
+   if(layer >= 0)
+   {
+      zLayer = 1.0f - 0.5f/((u32) layer + 1); // maps 0... to 0.5, .... 
+   }
+   else
+   {
+      zLayer = 0.5f / ((u32)(-layer) + 1);
+   }
+#endif
+   return zLayer;
+}
+
+static void PushTriangle(RenderGroup *rg, v2 p1, v2 p2, v2 p3, i8 layer, u32 c)
+{
+   f32 zLayer = LayerToZLayer(layer);
+   PushTriangle(rg, V3(p1, zLayer), V3(p2, zLayer), V3(p3, zLayer), c);
 }
 static void PushTriangle(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 color)
 {
@@ -651,7 +677,7 @@ static VertexFormatPCUI *GetTexturedQuadMemory(RenderGroup *rg)
    }
 }
 
-static void PushTexturedQuad(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, TextureIndex textureIndex, bool inverted = false,  v2 minUV = {0, 0}, v2 maxUV = {1, 1}, u32 c = 0xFFFFFFFF)
+static void PushTexturedQuad(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, TextureIndex textureIndex, bool inverted,  v2 minUV, v2 maxUV, u32 c1, u32 c2, u32 c3, u32 c4)
 {
    VertexFormatPCUI *verts = GetTexturedQuadMemory(rg);
    if(!verts) return;
@@ -677,10 +703,10 @@ static void PushTexturedQuad(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, Textur
       
    }
    
-   verts[0].c = c;
-   verts[1].c = c;
-   verts[2].c = c;
-   verts[3].c = c;
+   verts[0].c = c1;
+   verts[1].c = c2;
+   verts[2].c = c3;
+   verts[3].c = c4;
    
    u16 castTextureIndex = (u16)textureIndex.index;
    Assert(castTextureIndex == textureIndex.index);
@@ -691,28 +717,38 @@ static void PushTexturedQuad(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, Textur
    verts[3].textureIndex = castTextureIndex;
 }
 
+
+static void PushTexturedQuad(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, TextureIndex textureIndex, bool inverted = false,  v2 minUV = {0, 0}, v2 maxUV = {1, 1}, u32 c = 0xFFFFFFFF)
+{
+   PushTexturedQuad(rg, p1, p2, p3, p4, textureIndex, inverted,  minUV, maxUV, c, c, c, c);
+}
+
+
 static void PushTexturedQuad(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, u32 textureId, bool inverted = false,  v2 minUV = {0, 0}, v2 maxUV = {1, 1}, v4 color = {1, 1, 1, 1})
 {
    TextureIndex textureIndex = GetTexture(rg->assetHandler, textureId);
    PushTexturedQuad(rg, p1, p2, p3, p4, textureIndex, inverted, minUV, maxUV, Pack4x8(color));
 }
 
-static void PushTexturedRect(RenderGroup *rg, v2 p1, f32 width, f32 height, TextureIndex textureIndex,  bool inverted = false, v2 minUV = {0, 0}, v2 maxUV = {1, 1}, v4 color = {1, 1, 1, 1})
+static void PushTexturedRect(RenderGroup *rg, v2 p1, f32 width, f32 height, TextureIndex textureIndex, i8 layer,  bool inverted = false, v2 minUV = {0, 0}, v2 maxUV = {1, 1}, v4 color = {1, 1, 1, 1})
 {
+   f32 zLayer = LayerToZLayer(layer);
    v2 p2 = p1 + V2(width, 0);
    v2 p3 = p1 + V2(0, height);
    v2 p4 = p1 + V2(width, height);
-   PushTexturedQuad(rg, i12(p1), i12(p2), i12(p3), i12(p4), textureIndex, inverted, minUV, maxUV, Pack4x8(color));
+   PushTexturedQuad(rg, V3(p1, zLayer), V3(p2, zLayer), V3(p3, zLayer), V3(p4, zLayer), textureIndex, inverted, minUV, maxUV, Pack4x8(color));
 }
 
-static void PushTexturedRect(RenderGroup *rg, v2 p1, f32 width, f32 height, u32 textureId,  bool inverted = false, v2 minUV = {0, 0}, v2 maxUV = {1, 1}, v4 color = {1, 1, 1, 1})
+static void PushTexturedRect(RenderGroup *rg, v2 p1, f32 width, f32 height, u32 textureId, i8 layer,  bool inverted = false, v2 minUV = {0, 0}, v2 maxUV = {1, 1}, v4 color = {1, 1, 1, 1})
 {
    TextureIndex textureIndex = GetTexture(rg->assetHandler, textureId);
+   
+   f32 zLayer = LayerToZLayer(layer);
    
    v2 p2 = p1 + V2(width, 0);
    v2 p3 = p1 + V2(0, height);
    v2 p4 = p1 + V2(width, height);
-   PushTexturedQuad(rg, i12(p1), i12(p2), i12(p3), i12(p4), textureIndex, inverted, minUV, maxUV, Pack4x8(color));
+   PushTexturedQuad(rg, V3(p1, zLayer), V3(p2, zLayer), V3(p3, zLayer), V3(p4, zLayer), textureIndex, inverted, minUV, maxUV, Pack4x8(color));
 }
 
 static void PushQuadrilateral(RenderGroup *rg, v3 p1, v3 p2, v3 p3, v3 p4, u32 c)
@@ -733,9 +769,7 @@ static void PushRectangle(RenderGroup *rg, v2 min, v2 max, i8 layer, u32 c)
    v2 p3 = V2(min.x, max.y);
    v2 p4 = max;
    
-   // only negative exponents, retains sign of layer looses first bit..
-   i32 up = (layer << 24) | (1 << 31); 
-   f32 Zlayer = *(f32 *)&up;
+   f32 Zlayer = LayerToZLayer(layer);
    
    PushQuadrilateral(rg, V3(p1, Zlayer), V3(p2, Zlayer), V3(p3, Zlayer), V3(p4, Zlayer), c);
 }
@@ -765,23 +799,25 @@ static void PushCenteredRectangle(RenderGroup *rg, v2 pos, float width, float he
    v2 p3 = (pos + vec2 - 0.5f * (vec1 + vec2));
    v2 p4 = (pos + vec1 + vec2 - 0.5f * (vec1 + vec2));
    
-   PushQuadrilateral(rg, pos - 0.5f * V2(width, height), pos + 0.5f * V2(width, height), layer, Pack4x8(color));
+   PushRectangle(rg, pos - 0.5f * V2(width, height), pos + 0.5f * V2(width, height), layer, Pack4x8(color));
 }
 
 // exactly used in colorpicker...
-static void PushRectangle(RenderGroup *rg, v2 pos, f32 width, f32 height, u32 c1, u32 c2, u32 c3, u32 c4)
+static void PushRectangle(RenderGroup *rg, v2 pos, f32 width, f32 height, i8 layer, u32 c1, u32 c2, u32 c3, u32 c4)
 {
    v2 p1 = pos;
    v2 p2 = V2(pos.x + width, pos.y);
    v2 p3 = V2(pos.x, pos.y + height);
    v2 p4 = pos + V2(width, height);
    
-   PushTriangle(rg, i12(p1), i12(p2), i12(p3), c1, c2, c3);
-   PushTriangle(rg, i12(p2), i12(p3), i12(p4), c2, c3, c4);
+   TextureIndex textureIndex = GetTexture(rg->assetHandler, rg->assetHandler->whiteTextureId);
+   f32 zLayer = LayerToZLayer(layer);
+   
+   PushTexturedQuad(rg, V3(p1, zLayer), V3(p2, zLayer), V3(p3, zLayer), V3(p4, zLayer), textureIndex, false, {0, 0}, {1, 1}, c1, c2, c3, c4);
 }
 
 
-static f32 PushString(RenderGroup *rg, v2 pos, unsigned char* string, u32 stringLength, f32 size, v4 color = V4(1, 1, 1, 1))
+static f32 PushString(RenderGroup *rg, v2 pos, i8 layer, unsigned char* string, u32 stringLength, f32 size, v4 color = V4(1, 1, 1, 1))
 {
    TimedBlock;
    
@@ -811,7 +847,7 @@ static f32 PushString(RenderGroup *rg, v2 pos, unsigned char* string, u32 string
       
       v2 writePos = V2(x + offSetX, y + offSetY);
       
-      PushTexturedRect(rg, writePos, scaledWidth, scaledHeight, tex, true, data.minUV, data.maxUV);
+      PushTexturedRect(rg, writePos, scaledWidth, scaledHeight, tex, layer, true, data.minUV, data.maxUV);
       float actualFloatWidth = data.xAdvance * fScale;
       x += actualFloatWidth;
       
@@ -820,14 +856,14 @@ static f32 PushString(RenderGroup *rg, v2 pos, unsigned char* string, u32 string
    return (x - pos.x);
 }
 
-static f32 PushString(RenderGroup *rg, v2 pos, const char* string, f32 size, v4 color = V4(1, 1, 1, 1))
+static f32 PushString(RenderGroup *rg, v2 pos, i8 layer, const char* string, f32 size, v4 color = V4(1, 1, 1, 1))
 {
-   return PushString(rg, pos, (unsigned char *)string, NullTerminatedStringLength(string), size, color);
+   return PushString(rg, pos, layer, (unsigned char *)string, NullTerminatedStringLength(string), size, color);
 }
 
-static f32 PushString(RenderGroup *rg, v2 pos, String string, f32 size, v4 color = V4(1, 1, 1, 1))
+static f32 PushString(RenderGroup *rg, v2 pos, i8 layer, String string, f32 size, v4 color = V4(1, 1, 1, 1))
 {
-   return PushString(rg, pos, string.data, string.length, size, color);
+   return PushString(rg, pos, layer, string.data, string.length, size, color);
 }
 
 

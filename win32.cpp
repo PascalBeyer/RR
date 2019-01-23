@@ -1081,6 +1081,13 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
    QueryPerformanceCounter(&timeCounter);
    Input input = {};
    
+   
+   for(i8 i = -10; i < 10; i++)
+   {
+      ConsoleOutput("%i32 : %f32", (i32)i, LayerToZLayer(i));
+   }
+   
+   
    while (running)
    {	
       if (globalGamePaused)
@@ -1154,8 +1161,8 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
       float screenWidth = (f32)renderCommands.width;
       float screenHeight = (f32)renderCommands.height;
       
-      PushOrthogonalSetup(rg, true, ShaderFlags_MultiTextured);
-      PushString(rg, V2(0.001f, 0.001f), s, 0.02f);
+      PushOrthogonalSetup(rg,  ShaderFlags_MultiTextured);
+      PushString(rg, V2(0.001f, 0.001f), -3, s, 0.02f);
       //DrawTweekers(rg, font);
       DrawDebugRecords(rg, targetSecondsPerFrame, input);
 #endif
