@@ -66,6 +66,15 @@ static Arena *InitArena(void *memory, u32 capacity)
 	return ret;
 }
 
+static Arena CreateArena(void *memory, u32 capacity)
+{
+   Arena ret;
+   ret.base     = (u8 *)memory;
+   ret.current  = (u8 *)memory;
+   ret.capacity = capacity;
+   return ret;
+}
+
 static Arena *PushArena(Arena *arena, u32 capacity)
 {
 	u32 size = capacity + sizeof(Arena);
@@ -75,7 +84,7 @@ static Arena *PushArena(Arena *arena, u32 capacity)
 
 // this leaks whenever buckets has to be resized. 
 // this also leaks the rest of a bucket when we do not fit.
-struct BucketBuffer
+struct BucketBuffer // I think this is unteseted....
 {
    Arena *arena;
    u16 bucketSize;

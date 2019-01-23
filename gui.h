@@ -19,14 +19,15 @@ static b32 MaybeAddChar(TextInput *t, Char c)
 struct ValueDisplayEntry
 {
    u32 type;
-   StringArray values; // we assume you alloced this somehow, frameArena or sth
+   // these are in the entry buffer
+   String values[10];
+   u32 valueAmount;
 };
 
 enum ValueDisplayState 
 {
    ValueDisplay_None,
    ValueDisplay_DragingDisplay,
-   
 };
 
 struct ValueDisplay
@@ -36,6 +37,9 @@ struct ValueDisplay
    String headerString;
    u32 amountOfEntries;
    ValueDisplayEntry entries[30];
+   
+   u8  entryBuffer[512];
+   u32 entryBufferAt;
    
    Rectangle2D rect;
    u32 hotEntry; // unactive if hotValue == 0xFFFFFFFF;
@@ -50,22 +54,47 @@ struct ValueDisplay
    f32 borderSize;
    f32 headerSize;
    f32 fontSize;
+   
+   ValueDisplayEntry *currentEntry;
 };
 
 static void Reset(ValueDisplay *display)
 {
    display->amountOfEntries = 0;
+   display->entryBufferAt = 0;
 }
 
 // we assume you alloced  string  somehow, frameArena or sth
-static void AddEntry(ValueDisplay *display, u32 type, StringArray values)
+static void AddEntry(ValueDisplay *display, u32 type)
 {
    if(display->amountOfEntries + 1 < ArrayCount(display->entries))
    {
       ValueDisplayEntry *entry = display->entries + display->amountOfEntries++;
       entry->type = type;
-      entry->values = values;
+      entry->valueAmount = 0;
+      display->currentEntry = entry;
    }
+}
+
+static void AddValue(ValueDisplay *display, char *format, ...)
+{
+   if(display->currentEntry->valueAmount == ArrayCount(display->currentEntry->values))
+   {
+      Die;
+      return;
+   }
+   
+   Arena arena = CreateArena(display->entryBuffer + display->entryBufferAt, ArrayCount(display->entryBuffer) - display->entryBufferAt);
+   
+   va_list argList;
+	va_start(argList, format);
+	String toPrint = StringFormatHelper(&arena, format, argList);
+	va_end(argList);
+   
+   // todo this is a bit of a hack, what we really want here is just a buffer.
+   display->entryBufferAt += (u32)(arena.current - arena.base);
+   
+   display->currentEntry->values[display->currentEntry->valueAmount++] = toPrint;
 }
 
 static void PushRectangle(RenderGroup *rg, Rectangle2D rect, u32 layer, v4 color)
@@ -127,8 +156,9 @@ static void RenderValueDisplay(RenderGroup *rg, ValueDisplay *display, u32 baseL
       f32 height = 0.0f;
       u32 bufferAt = 0;
       
-      For(entry->values)
+      Each(j, entry->valueAmount)
       {
+         String *it = entry->values + j;
          PushRelString(rg, fit, (char *)it->data, it->length, p + V2(0.0f, height), display->fontSize, stringLayer);
          height += display->fontSize;
       }

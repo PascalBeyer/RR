@@ -30,10 +30,10 @@ static PathCreator InitPathCreator()
    display->headerString = S("DumbHeader");
    display->amountOfEntries = 0;
    display->rect = CreateRectangle2D(V2(0.7f, 0.1f), 0.2f, 0.6f);
-   display->hotValue = 0xFFFFFFFF;
-   display->hotEntry = 0xFFFFFFFF;
-   display->visible = true;
-   display->fontSize = 0.05f;
+   display->hotValue   = 0xFFFFFFFF;
+   display->hotEntry   = 0xFFFFFFFF;
+   display->visible    = true;
+   display->fontSize   = 0.05f;
    display->borderSize = 0.003f;
    display->headerSize = 0.1f;
    display->borderColor     = V4(1.0f, 0.2f, 0.2f, 0.2f);
@@ -63,12 +63,11 @@ static void PathCreatorBuildUI(PathCreator *pathCreator, EntityManager *entityMa
    
    For(unitData->instructions)
    {
-      StringArray arr = PushArray(frameArena, String, 1);
-      arr[0] = UnitInstructionToString(*it);
+      String val = UnitInstructionToString(*it);
       
-      AddEntry(display, *it, arr);
+      AddEntry(display, *it);
+      AddValue(display, val.cstr);
    }
-   
 }
 
 // todo copy and paste of editor.h, they will differ eventrually, because this shout utilize the entity tree.
@@ -170,47 +169,47 @@ static Entity *GetHotEntity(Camera cam, EntityManager *entityManager, AssetHandl
 
 enum ExecuteState
 {
-	Execute_None,
+   Execute_None,
    
-	Execute_LevelBegin,
-	Execute_PlacingUnits,
-	Execute_PathCreator,
-	Execute_Simulation,
-	Execute_Victory,
+   Execute_LevelBegin,
+   Execute_PlacingUnits,
+   Execute_PathCreator,
+   Execute_Simulation,
+   Execute_Victory,
    
-	Execute_Count,
+   Execute_Count,
 };
 
 struct SimData
 {
-	u32 blocksNeeded;
-	u32 blocksCollected;
-	f32 timeScale;
+   u32 blocksNeeded;
+   u32 blocksCollected;
+   f32 timeScale;
 };
 
 struct ExecuteData
 {
-	u32 state;
+   u32 state;
    
    b32 debug;
    b32 middleMouseDown;
    Camera debugCamera;
    
-	Camera camera;
+   Camera camera;
    LightSource lightSource;
    
-	u32 at; // are these used?
-	f32 t;
+   u32 at; // are these used?
+   f32 t;
    
-	PathCreator pathCreator;
-	SimData simData;
+   PathCreator pathCreator;
+   SimData simData;
 };
 
 static void ChangeExecuteState(EntityManager *entityManager, ExecuteData *exe, ExecuteState state)
 {
-	exe->state = state;
-	switch (state)
-	{
+   exe->state = state;
+   switch (state)
+   {
       case Execute_LevelBegin:
       {
          
@@ -244,7 +243,7 @@ static void ChangeExecuteState(EntityManager *entityManager, ExecuteData *exe, E
       }break;
       
       InvalidDefaultCase;
-	}
+   }
 }
 
 static b32 ShouldPhysicallyMove(Entity *e)
@@ -254,27 +253,27 @@ static b32 ShouldPhysicallyMove(Entity *e)
 
 static b32 MaybePhysicallyMove(Entity *e, EntityManager *entityManager)
 {
-	v3i intendedPos = RoundToTileMap(e->visualPos);
+   v3i intendedPos = RoundToTileMap(e->visualPos);
    
    if(intendedPos == e->physicalPos) {return false;}
    
-	EntityPtrArray blockingEntities = GetEntities(entityManager, intendedPos);
+   EntityPtrArray blockingEntities = GetEntities(entityManager, intendedPos);
    
-	if(blockingEntities.amount)
-	{
-		return false;
-	}
+   if(blockingEntities.amount)
+   {
+      return false;
+   }
    RemoveEntityFromTree(entityManager, e);
    e->physicalPos = intendedPos;
    InsertEntity(entityManager, e);
    
-	e->flags |= EntityFlag_IsMoving;
+   e->flags |= EntityFlag_IsMoving;
    return true;
 }
 
 static void GameExecuteUpdate(EntityManager *entityManager, ExecuteData *exe, AssetHandler *assetHandler, Input input)
 {
-	
+   
    TimedBlock;
    f32 timePassed = input.dt * exe->simData.timeScale;
    exe->t += timePassed;
