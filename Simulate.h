@@ -28,18 +28,6 @@ static PathCreator InitPathCreator()
    ValueDisplay *display = &ret.valueDisplay;
    
    display->headerString = S("DumbHeader");
-   display->amountOfEntries = 0;
-   display->rect = CreateRectangle2D(V2(0.7f, 0.1f), 0.2f, 0.6f);
-   display->hotValue   = 0xFFFFFFFF;
-   display->hotEntry   = 0xFFFFFFFF;
-   display->visible    = true;
-   display->fontSize   = 0.05f;
-   display->borderSize = 0.003f;
-   display->headerSize = 0.1f;
-   display->borderColor     = V4(1.0f, 0.2f, 0.2f, 0.2f);
-   display->backGroundColor = V4(1.0f, 0.5f, 0.7f, 0.9f);
-   display->entryColor      = V4(1.0f, 0.2f, 0.4f, 0.8f);
-   display->headerColor     = V4(1.0f, 0.2f, 0.4f, 0.8f);
    
    return ret;
 }

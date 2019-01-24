@@ -816,7 +816,6 @@ static void DrawConsole(RenderGroup *rg)
    v2 p4 = V2(1, console.openness);
    
    
-   
    //mainField
    PushRectangle(rg, p1, V2(1 - console.scrollbarWidth, console.openness) - V2(0, console.textInputFieldSize), console.backLayer,  V4(1.0f, 0.5f, 0.6f, 0.85f));
    

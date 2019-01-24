@@ -65,7 +65,6 @@ struct Console
 	f32 cursorTimer = 0.0f;
 	f32 cursorWidth = 0.001f;
    
-	
 	u32 firstSelectPos = 0;
 	u32 endSelectPos = 0;
 	b32 selecting = false;

@@ -152,8 +152,15 @@ bool PointInRectangle(v2 pos, float width, float height, v2 pointToCheck)
 struct Rectangle2D
 {
 	v2 pos;
-	f32 width;
-	f32 height;
+   union 
+   {
+      v2 dimensions;
+      struct
+      {
+         f32 width;
+         f32 height;
+      };
+   };
 };
 
 static bool PointInRectangle(Rectangle2D rect, v2 point)
