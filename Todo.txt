@@ -174,3 +174,6 @@ altering entity types, is not undoable right now....
 colorpicker looks aweful.
 what is GL_FrameBuffer_srgb ???? and why are we not using it?
 low-pass filter kenel
+
+for L: Demo modify has an overview over the compiler
+this also has a good amount of stuff for viewing profiling. I should look at that.

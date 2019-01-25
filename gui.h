@@ -34,9 +34,11 @@ enum ValueDisplayState
 
 static ValueDisplayTransientInfo
 {
-   ValueDisplayState state;
-   f32 scrollOffset;
-   Rectangle2D rect;
+   ValueDisplayState state; // this can be in the gui struct, i.e the gui just has a few states.
+   f32 scrollOffset; // we caould have memory for this in gui, dependent on __File__, __line__
+   Rectangle2D rect; 
+   // this memory should get cleared on the end of a frame,  so we could have like a double buffer.
+   // plus we need a count, for loops.
 };
 
 struct ValueDisplay
@@ -76,6 +78,7 @@ enum GUI_ElementType
 struct GUI_Element
 {
    GUI_ElementType type;
+   u32 parent;
 };
 
 struct GUI
@@ -92,7 +95,14 @@ struct GUI
       f32 fontSize       = 0.05f;
    };
    
-   GUI_Element *elements[20];
+   TextInput textInput;
+   
+   
+   u8 buffer[2][2048];
+   
+   u32 bufferUsed;
+   
+   GUI_Element *elements[40];
    u32 amountOfElements = 0;
 };
 
