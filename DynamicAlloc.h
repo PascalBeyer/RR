@@ -446,8 +446,6 @@ static void PooledFixedSizeFree(PooledFixedSizeAllocator *fsa, void *mem)
 DefineDynamicArray(u32Ptr);
 DefineDynamicArray(u32);
 
-
-
 DefineDynamicArray(v3Ptr);
 
 
@@ -464,3 +462,5 @@ DefineDynamicArray(v4);
 
 DefineArray(m4x4);
 DefineArray(m4x4Array);
+
+DefineDFArray(String);

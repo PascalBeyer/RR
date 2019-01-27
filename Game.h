@@ -1,16 +1,21 @@
 #ifndef RR_GAME
 #define RR_GAME
 
+
 #include "BasicTypes.h"
 #include "SIMD.h"
 
-#include "Math.h"
-#include "Debug.h"
-
 #include "Arena.h"
-#include "DynamicAlloc.h"
+#include "Math.h"
+
 #include "String.h"
 #include "LinearAlgebra.h"
+#include "Debug.h"
+
+
+
+
+#include "DynamicAlloc.h"
 
 #include "ConsoleHeader.h"
 #include "Tweeker.h"
@@ -47,6 +52,8 @@
 
 #include "Draw.h"
 
+
+
 enum GameMode
 {
 	Game_Execute,
@@ -54,13 +61,6 @@ enum GameMode
 	Game_TitleScreen,
 	//...
 	Game_Count,
-};
-
-static char* GameModeStrings[Game_Count] =
-{
-	"Execute",
-	"Editor",
-	"TitleScreen"
 };
 
 struct GameState
@@ -81,6 +81,15 @@ struct GameState
 };
 
 static GameState gameState;
+
+
+
+static char* GameModeStrings[Game_Count] =
+{
+	"Execute",
+	"Editor",
+	"TitleScreen"
+};
 
 
 static void SwitchGameMode(GameState *state, GameMode mode)

@@ -24,7 +24,8 @@ struct String
 };
 
 DefineArray(String);
-DefineDFArray(String);
+
+
 
 static String BeginConcatenate(Arena *arena)
 {
