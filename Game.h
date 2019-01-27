@@ -275,7 +275,6 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
             {
                PathCreator *pathCreator = &exe->pathCreator;
                
-               PathCreatorBuildUI(pathCreator, entityManager);
                RenderPathCreator(rg, entityManager, exe, pathCreator, assetHandler, input);
             }break;
             case Execute_Simulation:
@@ -377,7 +376,7 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
       }break;
       case Game_Execute:
       {
-         RenderExecuteUI(rg, exe);
+         RenderExecuteUI(rg, exe, entityManager);
       }break;
       
    }

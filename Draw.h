@@ -149,10 +149,98 @@ static void RenderPathCreator(RenderGroup *rg, EntityManager *entityManager, Exe
    }
 }
 
-static void RenderPathCreatorUI(RenderGroup *rg, PathCreator *pathCreator)
+static void RenderPathCreatorUI(RenderGroup *rg, PathCreator *pathCreator, EntityManager *entitiyManager)
 {
+   i32 baseLayer = 4;
    
-   RenderValueDisplay(rg, &pathCreator->valueDisplay, 0);
+   { // render diplay
+      Rectangle2D displayRect = pathCreator->displayRect;
+      
+      Tweekable(v4, borderColor);
+      Tweekable(v4, editorPanelHeaderColor);
+      v4 headerColor = editorPanelHeaderColor;
+      Tweekable(v4, editorPanelColor);
+      v4 backGroundColor = editorPanelColor;
+      Tweekable(v4, editorPanelValueColor);
+      v4 valueColor = editorPanelValueColor;
+      Tweekable(f32, editorPanelFontSize);
+      f32 fontSize = editorPanelFontSize;
+      Tweekable(f32, editorBorderWidth);
+      f32 borderSize = editorBorderWidth;
+      
+      i32 borderLayer    = baseLayer - 0;
+      i32 backLayer      = baseLayer - 1;
+      i32 entryLayer     = baseLayer - 3;
+      i32 stringLayer    = baseLayer - 4;
+      
+      f32 absoluteBorder = borderSize;
+      
+      Rectangle2D withBorder;
+      withBorder.pos    = displayRect.pos - V2(absoluteBorder, absoluteBorder);
+      withBorder.width  = displayRect.width  + 2.0f * absoluteBorder;
+      withBorder.height = displayRect.height + 2.0f * absoluteBorder;
+      
+      PushRectangle(rg, withBorder, borderLayer, borderColor);
+      PushRectangle(rg, displayRect, backLayer, backGroundColor);
+      
+      // render variables
+      Rectangle2D fit;
+      fit.pos    = displayRect.pos + V2(absoluteBorder, absoluteBorder);
+      fit.width  = displayRect.width  - 2.0f * absoluteBorder;
+      fit.height = displayRect.height - 2.0f * absoluteBorder;
+      
+      if(fit.width <= 0.0f || fit.height <= 0.0f) return;
+      
+      f32 hBorder = absoluteBorder / fit.height;
+      
+      // header
+      f32 headerSize = 0.1f;
+      PushRelRect(rg, fit, V2(), 1.0f, headerSize, entryLayer, headerColor);
+      
+      Rectangle2D entryRect = FitRectangle(fit, V2(0, (headerSize + hBorder)), 1.0f, 1.0f - (headerSize + hBorder));
+      
+      f32 relFontSize = fontSize;
+      f32 scrollOffset = pathCreator->scrollOffset;
+      f32 scrollbarWidth = 0.1f;
+      
+      if(pathCreator->hotUnit != 0xFFFFFFFF)
+      {   // entries
+         // todo make get hot unit
+         UnitData *data = entitiyManager->unitData + pathCreator->hotUnit;
+         
+         UnitInstructionDynamicArray inst = data->instructions;
+         
+         v2 p = V2();
+         For(inst)
+         {
+            u32 bufferAt = 0;
+            f32 thisHeight = relFontSize;
+            
+            f32 yPos = p.y;
+            p.y += thisHeight + hBorder;
+            
+            // could do this with relP
+            if(yPos < scrollOffset) continue;
+            if((yPos + thisHeight - scrollOffset) >= 1.0f) continue;
+            
+            v2 relP = V2(p.x, yPos - scrollOffset);
+            
+            String string = UnitInstructionToString(*it);
+            PushRelString(rg, entryRect, (char *)string.data, string.length, relP, fontSize, stringLayer);
+            
+            PushUnscaledRect(rg, entryRect, relP, 1.0f - (scrollbarWidth + hBorder), thisHeight, entryLayer, valueColor);
+         }
+         
+         f32 totalHeight = p.y;
+         {   // scrollbar
+            
+            Rectangle2D scrollbarRect = FitRectangle(entryRect, V2(1.0f - scrollbarWidth, 0.0f), scrollbarWidth, 1.0f);
+            
+            RenderScrollbar(rg, scrollbarRect, stringLayer, hBorder, totalHeight, scrollOffset, valueColor, backGroundColor);
+         }
+      }
+      
+   }
    
    switch (pathCreator->state)
    {
@@ -178,7 +266,6 @@ static void RenderSimulateUI(RenderGroup *rg, SimData *sim)
    PushRectangle(rg, pos + V2(border, border), percentage * (width - 2.0f * border), (height - 2.0f * border), -1, V4(1.0f, 0.4f, 0.6f, 0.9f));
    String progressString = FormatString("%u32/%u32", sim->blocksCollected, sim->blocksNeeded);
    PushString(rg, pos + V2(border, border), -2, progressString, (height - 2.0f * border));
-   
 }
 
 static void RenderSimulate(RenderGroup *rg, EntityManager *entityManager, ExecuteData *exe)
@@ -224,7 +311,7 @@ static void RenderVictoryUI(RenderGroup *rg)
    PushString(rg, V2(0.1f, 0.1f), 0, "Victory", 0.2f);
 }
 
-static void RenderExecuteUI(RenderGroup *rg, ExecuteData *exe)
+static void RenderExecuteUI(RenderGroup *rg, ExecuteData *exe, EntityManager *entityManager)
 {
    switch (exe->state)
    {
@@ -234,7 +321,7 @@ static void RenderExecuteUI(RenderGroup *rg, ExecuteData *exe)
       }break;
       case Execute_PathCreator:
       {
-         RenderPathCreatorUI(rg, &exe->pathCreator);
+         RenderPathCreatorUI(rg, &exe->pathCreator, entityManager);
       }break;
       case Execute_Simulation:
       {
@@ -246,7 +333,6 @@ static void RenderExecuteUI(RenderGroup *rg, ExecuteData *exe)
       }break;
       
       InvalidDefaultCase;
-      
    }
 }
 

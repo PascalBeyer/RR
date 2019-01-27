@@ -177,3 +177,7 @@ low-pass filter kenel
 
 for L: Demo modify has an overview over the compiler
 this also has a good amount of stuff for viewing profiling. I should look at that.
+
+imgui thoughts:
+we need to push everything every frame, such that we draw everything in the first frame.
+probably we could make list array(void *, size, amount, function(void *) -> String);

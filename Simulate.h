@@ -4,6 +4,11 @@ enum PathCreatorState
 	PathCreator_None,
 	PathCreator_CreatingPath,
 	PathCreator_PlacingUnits, // or something
+   PathCreator_DraggingDisplay,
+   PathCreator_ScrollingDisplay,
+   PathCreator_ResizingDisplay,
+   
+   PathCreator_Count,
 };
 
 struct PathCreator
@@ -11,7 +16,11 @@ struct PathCreator
 	u32 hotUnit;
 	PathCreatorState state;
    
-   ValueDisplay valueDisplay;
+   struct // UI
+   {
+      f32 scrollOffset;
+      Rectangle2D displayRect;
+   };
    
    Rectangle2D resetUnitButton;
 	Rectangle2D	finishButton;
@@ -25,37 +34,10 @@ static PathCreator InitPathCreator()
 	ret.finishButton = CreateRectangle2D(V2(0.8f, 0.7f), 0.2f, 0.1f);
 	ret.resetUnitButton = CreateRectangle2D(V2(0.8f, 0.8f), 0.2f, 0.1f);
    
-   ValueDisplay *display = &ret.valueDisplay;
-   
-   display->headerString = S("DumbHeader");
+   ret.scrollOffset = 0.0f;
+   ret.displayRect  = CreateRectangle2D(V2(0.7f, 0.1f), 0.2f, 0.6f);
    
    return ret;
-}
-
-static void PathCreatorBuildUI(PathCreator *pathCreator, EntityManager *entityManager)
-{
-   ValueDisplay *display = &pathCreator->valueDisplay;
-   Reset(display);
-   
-   if(pathCreator->hotUnit == 0xFFFFFFFF)
-   {
-      display->visible = false;
-      return;
-   }
-   else
-   {
-      display->visible = true;
-   }
-   
-   UnitData *unitData = entityManager->unitData + pathCreator->hotUnit;
-   
-   For(unitData->instructions)
-   {
-      String val = UnitInstructionToString(*it);
-      
-      AddEntry(display, *it);
-      AddValue(display, val.cstr);
-   }
 }
 
 // todo copy and paste of editor.h, they will differ eventrually, because this shout utilize the entity tree.
