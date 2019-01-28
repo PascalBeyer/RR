@@ -122,7 +122,8 @@ static String CreateString(Char *nullTerminatedString)
 static String Append(String a, String b, Arena *arena = frameArena)
 {
 	u32 size = a.length + b.length;
-	String newString = PushArray(arena, Char, a.length + b.length);
+   
+	String newString = PushArray(arena, Char, size);
 	for (u32 i = 0; i < a.length; i++)
 	{
 		newString[i] = a.data[i];
@@ -778,7 +779,6 @@ static String EatToCharReturnHead(String *string, Char c1, Char c2)
 static u32 StoU(String string, b32 *success)
 {
 	u32 sum = 0;
-	u32 exp = 0;
 	for (u32 i = 0; i < string.length; i++)
 	{
 		u32 charToUInt = string[i] - '0';

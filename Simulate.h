@@ -303,7 +303,7 @@ static void GameExecuteUpdate(EntityManager *entityManager, ExecuteData *exe, As
                   Assert(!ShouldPhysicallyMove(e)); 
                   
                   it->at++;
-                  UnitInstruction nextInstruction = it->instructions[it->at % it->instructions.amount];
+                  //UnitInstruction nextInstruction = it->instructions[it->at % it->instructions.amount];
                   
                   e->visualPos = V3(e->physicalPos);
                   

@@ -2,15 +2,14 @@
 #define RR_COLOR
 
 static u32 ColorspaceToggle(u32 color)
-
 {
 	u32 a = (color >> 24 & 0xFF);
 	u32 rOrb = (color >> 16) & 0xFF;
 	u32 g = (color >> 8) & 0xFF;
 	u32 bOrr = (color >> 0) & 0xFF;
-
+   
 	u32 ret = (a << 24) | (bOrr << 16) | (g << 8) | (rOrb << 0);
-
+   return ret;
 }
 
 static u32 RGBAfromHEX(u32 pack)
@@ -19,9 +18,9 @@ static u32 RGBAfromHEX(u32 pack)
 	u32 r = (pack >> 16) & 0xFF;
 	u32 g = (pack >> 8) & 0xFF;
 	u32 b = (pack >> 0) & 0xFF;
-
+   
 	u32 ret = (a << 24) | (b << 16) | (g << 8) | (r << 0);
-
+   
 	return ret;
 }
 

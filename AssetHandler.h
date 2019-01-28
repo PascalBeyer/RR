@@ -184,7 +184,7 @@ static bool AssetExits(AssetHandler *handler, String assetName, AssetType type)
 }
 
 // returns whether we imported something
-static bool ConvertNewAssets(AssetHandler *handler, Arena *currentStateArena)
+static bool ConvertNewAssets(AssetHandler *handler)
 {
 	bool imported = false;
 	StringArray fileNames = FindAllFiles("import\\", "", frameArena);
@@ -284,9 +284,9 @@ static AssetHandler CreateAssetHandler(Arena *arena)
    ret.currentlyLoadedFont = LoadFont(&ret, "font/consola.font");
    globalFont = ret.currentlyLoadedFont;
    
-   if (ConvertNewAssets(&ret, arena))
+   if (ConvertNewAssets(&ret))
    {
-      arena->current = arena->current;
+      arena->current = arenaReset;
       
       ret.textureCatalog = LoadAssetCatalog("textures/", ".texture", Asset_Texture, arena);
       ret.meshCatalog = LoadAssetCatalog("mesh/", ".mesh", Asset_Mesh, arena);
@@ -367,7 +367,7 @@ static TextureIndex GetTexture(AssetHandler *handler, u32 id)
    Assert(type == Asset_Texture);
    u32 index = id - (type << Asset_Type_Offset);
    
-   AssetInfo *entry = &handler->textureCatalog[id];
+   AssetInfo *entry = &handler->textureCatalog[index];
    LoadedTexture *listBase = handler->textureList.base;
    
    if (entry->currentlyLoaded)

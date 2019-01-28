@@ -213,7 +213,6 @@ static void RenderPathCreatorUI(RenderGroup *rg, PathCreator *pathCreator, Entit
          v2 p = V2();
          For(inst)
          {
-            u32 bufferAt = 0;
             f32 thisHeight = relFontSize;
             
             f32 yPos = p.y;

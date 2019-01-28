@@ -488,7 +488,6 @@ DWORD WINAPI ThreadProc(LPVOID param)
 {
 	ThreadInfo *threadInfo = (ThreadInfo *)param;
    
-	char *stringToOutput = (char *)param;
 	for (;;)
 	{
 		if (WorkDone(&workHandler))
@@ -742,6 +741,7 @@ static void OSSetClipBoard(String string)
 		GlobalUnlock(clipbuffer);
       
 		HANDLE ret = SetClipboardData(CF_TEXT, buffer);
+      // todo do I need to do something with this handle?
 		CloseClipboard();
 	}
 }
@@ -957,7 +957,6 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
    
    u32 constantMemorySize = GigaBytes(1);
    u32 frameMemorySize = MegaBytes(100);
-   u32 workingMemorySize = MegaBytes(5);
    
    void *constantMemory = VirtualAlloc(0, constantMemorySize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
    Arena *constantArena = InitArena(constantMemory, constantMemorySize);
@@ -1056,7 +1055,7 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
    i16 *samples = (i16 *)VirtualAlloc(0, soundOutput.secondaryBufferSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
    soundOutput.soundSamples = samples;
    int sampleAmount = soundOutput.secondaryBufferSize / sizeof(i16);
-   for (u32 i = 0; i < (soundOutput.secondaryBufferSize/sizeof(i16)); i++)
+   for (i32 i = 0; i < sampleAmount; i++)
    {
       samples[i] = 0;
    }
@@ -1073,7 +1072,7 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
    f32 gameUpdateHz = (float)(monitorRefreshHz);
    f32 targetSecondsPerFrame = 1.0f / (f32)gameUpdateHz;
    
-   InitGame(windowWidth, windowHeight, &workHandler, constantArena);
+   InitGame(&workHandler, constantArena);
    
    Clear(frameArena);
    
@@ -1157,9 +1156,6 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLi
       RenderGroup *rg = &renderGroup;
       
       String s = FtoS(deltaTime);
-      
-      float screenWidth = (f32)renderCommands.width;
-      float screenHeight = (f32)renderCommands.height;
       
       PushOrthogonalSetup(rg,  ShaderFlags_MultiTextured);
       PushString(rg, V2(0.001f, 0.001f), -3, s, 0.02f);

@@ -71,7 +71,7 @@ struct GameState
    Arena *constantArena; // this really does not have to be here.... its empty anyway.
 	WorkHandler *workHandler;
 	AssetHandler assetHandler;
-	SoundMixer soundMixer;
+	SoundMixer   soundMixer;
    
 	// Mode specific stuff
    Arena *currentStateArena;
@@ -81,8 +81,6 @@ struct GameState
 };
 
 static GameState gameState;
-
-
 
 static char* GameModeStrings[Game_Count] =
 {
@@ -145,7 +143,7 @@ static void SwitchGameMode(GameState *state, GameMode mode)
 
 static bool viewLighting = false;
 
-static void InitGame(int screenWidth, int screenHeight, WorkHandler *workHandler, Arena *constantArena)
+static void InitGame(WorkHandler *workHandler, Arena *constantArena)
 {
 	GameState *ret = &gameState;
    
@@ -156,7 +154,7 @@ static void InitGame(int screenWidth, int screenHeight, WorkHandler *workHandler
 	InitConsole(constantArena);
 	ret->assetHandler = CreateAssetHandler(constantArena);
 	ret->soundMixer = {};
-	ret->editor = InitEditor(constantArena);
+	ret->editor = InitEditor();
 	
 	u32 constantArenaRestCapacity = constantArena->capacity - (u32)(constantArena->current - constantArena->base) - 1;
    
@@ -233,7 +231,7 @@ static void GameUpdateAndRender(GameState *state, RenderCommands *renderCommands
             }break;
             case Game_Editor:
             {
-               EditorHandleEvents(editor, assetHandler, message, input, currentStateArena);
+               EditorHandleEvents(editor, assetHandler, message, input);
             }break;
             InvalidDefaultCase;
             

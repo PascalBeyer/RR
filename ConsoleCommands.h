@@ -314,7 +314,7 @@ static void AddMeshHelper(StringArray args)
    
    if (succsess)
    {
-		TriangleMesh *mesh = GetMesh(&gameState.assetHandler, id);
+		//TriangleMesh *mesh = GetMesh(&gameState.assetHandler, id);
 		EntityData data;
 		data.color = V4(1, 1, 1, 1);
 		data.meshId = id;

@@ -399,7 +399,7 @@ static v3i AdjustForCamera(Camera cam, KeyEnum key)
 	return V3i();
 }
 
-static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeyStateMessage message, Input input, Arena *currentStateArena)
+static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeyStateMessage message, Input input)
 {
    
    EditorEntities *editorEntities = &editor->editorEntities;
@@ -1135,8 +1135,7 @@ static void EditorHandleEvents(Editor *editor, AssetHandler *assetHandler, KeySt
                         }
                         
                         *val.q = EulerAngleToQuaternion(angle);
-                        EulerAngle agains = QuaternionToEulerAngle(*val.q);
-                        i32 sd = 32;
+                        //EulerAngle agains = QuaternionToEulerAngle(*val.q);
                      }break;
                      
                      

@@ -409,7 +409,7 @@ static v3 LerpVector3(v3 v1, float f1, v3 v2, float f2, float t)
 
 static v3 Unpack3x8(u32 *pack)
 {
-	float ignored = (f32)((*pack >> 24) & 0xFF) / 255.0f;
+	//float ignored = (f32)((*pack >> 24) & 0xFF) / 255.0f;
 	float r = (f32)((*pack >> 16) & 0xFF) / 255.0f;
 	float g = (f32)((*pack >> 8) & 0xFF) / 255.0f;
 	float b = (f32)((*pack >> 0) & 0xFF) / 255.0f;
@@ -418,7 +418,7 @@ static v3 Unpack3x8(u32 *pack)
 
 static v3 Unpack3x8(u32 pack)
 {
-	float ignored = (f32)((pack >> 24) & 0xFF) / 255.0f;
+	//float ignored = (f32)((pack >> 24) & 0xFF) / 255.0f;
 	float b = (f32)((pack >> 16) & 0xFF) / 255.0f;
 	float g = (f32)((pack >> 8) & 0xFF) / 255.0f;
 	float r = (f32)((pack >> 0) & 0xFF) / 255.0f;

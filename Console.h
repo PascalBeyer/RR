@@ -107,7 +107,6 @@ static void AddSingleLineToHistory(String string, HistoryEntryEnum flag)
 
 static void AddStringToHistory(String string, HistoryEntryEnum flag = HistoryEntry_Default)
 {
-	float fScale = console.fontSize / (f32)globalFont.charHeight;
 	String toProcess = string;
 	toProcess.length = string.length;
    
@@ -903,7 +902,7 @@ static void DrawConsole(RenderGroup *rg)
          u32 firstLinePosInBuffer = (u32)(console.history[firstLine].entry.data - console.history[0].entry.data);
          u32 firstLineEndInBuffer = (u32)(console.history[firstLine + 1].entry.data - console.history[0].entry.data);
          u32 endLinePosInBuffer = (u32)(console.history[endLine].entry.data - console.history[0].entry.data);
-         u32 endLineEndInBuffer = (u32)(console.history[endLine + 1].entry.data - console.history[0].entry.data);
+         //u32 endLineEndInBuffer = (u32)(console.history[endLine + 1].entry.data - console.history[0].entry.data);
          
          //draw head
          {

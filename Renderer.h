@@ -161,7 +161,6 @@ static void PushOrthogonalSetup(RenderGroup *rg, u32 flags)
    TimedBlock;
    if(rg->setup.isProjective == false  && rg->setup.flags == flags) return;
    
-   RenderCommands *commands = rg->commands;
    EntryChangeRenderSetup *entry = PushRenderEntry(EntryChangeRenderSetup);
    RenderSetup *setup = &entry->setup;
    
@@ -847,7 +846,7 @@ static f32 PushString(RenderGroup *rg, v2 pos, i32 layer, Char* string, u32 stri
       
       v2 writePos = V2(x + offSetX, y + offSetY);
       
-      PushTexturedRect(rg, writePos, scaledWidth, scaledHeight, tex, layer, true, data.minUV, data.maxUV);
+      PushTexturedRect(rg, writePos, scaledWidth, scaledHeight, tex, layer, true, data.minUV, data.maxUV, color);
       float actualFloatWidth = data.xAdvance * fScale;
       x += actualFloatWidth;
       

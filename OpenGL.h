@@ -794,7 +794,7 @@ static void BeginUseProgram(OpenGLContext *context, OpenGLProgram *prog, RenderS
    
 }
 
-static void SetupUniforms(OpenGLProgram *prog, RenderSetup setup, OpenGLUniformInfo uniforms)
+static void SetupUniforms(OpenGLProgram *prog, OpenGLUniformInfo uniforms)
 {
    glUniform4f(prog->scaleColor, uniforms.scaleColor.r, uniforms.scaleColor.g, uniforms.scaleColor.b, uniforms.scaleColor.a); // rgba?
    
@@ -1208,7 +1208,7 @@ static void RenderIntoShadowMap(RenderCommands *rg, OpenGLContext *context)
             uniforms.vertexBuffer    = meshHeader->vertexVBO;
             uniforms.indexBuffer     = meshHeader->indexVBO;
             
-            SetupUniforms(prog, currentSetup, uniforms);
+            SetupUniforms(prog, uniforms);
             
             BeginAttribArrays(prog, meshHeader->vertexFormatSize);
             
@@ -1310,7 +1310,7 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             uniforms.indexBuffer  = context->indexBuffer;
             uniforms.textureIndex = quadHeader->vertexBuffer[0].textureIndex; // so textured works
             
-            SetupUniforms(prog, currentSetup, uniforms);
+            SetupUniforms(prog, uniforms);
             BeginAttribArrays(prog, sizeof(VertexFormatPCUI));
             
             glBufferData(GL_ARRAY_BUFFER, 4u * quadHeader->count * sizeof(quadHeader->vertexBuffer[0]), quadHeader->vertexBuffer, GL_STREAM_DRAW);
@@ -1329,7 +1329,7 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             OpenGLUniformInfo uniforms;
             uniforms.vertexBuffer = context->vertexBuffer;
             
-            SetupUniforms(prog, currentSetup, uniforms);
+            SetupUniforms(prog, uniforms);
             
             BeginAttribArrays(prog, sizeof(VertexFormatPC));
             
@@ -1351,7 +1351,7 @@ void OpenGlRenderGroupToOutput(RenderCommands *rg, OpenGLContext *context)
             uniforms.indexBuffer     = meshHeader->indexVBO;
             uniforms.boneStates      = meshHeader->boneStates;
             
-            SetupUniforms(prog, currentSetup, uniforms);
+            SetupUniforms(prog, uniforms);
             
             BeginAttribArrays(prog, meshHeader->vertexFormatSize);
             

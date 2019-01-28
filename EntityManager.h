@@ -673,7 +673,7 @@ static Entity CreateEntityNone(EntityManager *entityManager, v3i pos, f32 scale 
 }
 
 // this seems pretty bad in retrospect
-static Entity CreateEntity(EntityManager *entityManager, EntityType type, u32 meshId, v3i pos, f32 scale, Quaternion orientation, v3 offset, v4 color, u64 flags)
+static Entity CreateEntity(EntityManager *entityManager, EntityType type, u32 meshId, v3i pos, f32 scale, Quaternion orientation, v3 offset, v4 color)
 {
    switch (type)
    {
@@ -723,7 +723,7 @@ static void InitEntityManager(EntityManager *entityManager, Arena *currentStateA
    
    For(level->entities)
    {
-      CreateEntity(entityManager, it->type, it->meshId, it->physicalPos, it->scale, it->orientation, it->offset, it->color, it->flags);
+      CreateEntity(entityManager, it->type, it->meshId, it->physicalPos, it->scale, it->orientation, it->offset, it->color);
    }
    
 #if 1

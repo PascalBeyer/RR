@@ -57,7 +57,7 @@ static ColorPicker CreateColorPicker(v4 *initialColor)
    ret.width = pickerWidth;
    ret.height = pickerHeight;
    ret.sliderHeight = pickerSliderHeight;
-   ret.headerSize = pickerSliderHeight;
+   ret.headerSize = pickerHeaderSize;
    
    ret.headerPos = ret.pos - V2(0.0f, ret.headerSize + ret.border);
    ret.sliderPos = ret.pos + V2(0.0f, ret.border + ret.height);
@@ -65,7 +65,7 @@ static ColorPicker CreateColorPicker(v4 *initialColor)
    
    ret.pickedColor = initialColor;
    u32 c = Pack4x8(*initialColor);
-   u32 a = (c >> 24) & 0xFF;
+   //u32 a = (c >> 24) & 0xFF;
    u32 b = (c >> 16) & 0xFF;
    u32 g = (c >> 8) & 0xFF;
    u32 r = (c >> 0) & 0xFF;
@@ -459,6 +459,7 @@ static void RemoveEntity(EditorEntities *editorEntities, u32 serial)
 {
 	u32 index = editorEntities->entitySerialMap[serial];
 	Entity *toRemove = editorEntities->entities + index;
+   Assert(toRemove->serial == serial);
    
 	editorEntities->entitySerialMap[serial] = 0xFFFFFFFF;
    
@@ -562,7 +563,7 @@ static v3 GetAveragePosForSelection(Editor *editor)
 	return averagePos;
 }
 
-static void ClearEditorEntities(EditorEntities *ret, Arena *currentStateArena, Level *level)
+static void ClearEditorEntities(EditorEntities *ret, Level *level)
 {
    ret->entitySerializer = 0;
 	ret->entities.amount  = 0;
@@ -578,7 +579,7 @@ static void ClearEditorEntities(EditorEntities *ret, Arena *currentStateArena, L
 
 static void EditorLoadLevel(Editor *editor, Arena *currentStateArena, Level *level)
 {
-   ClearEditorEntities(&editor->editorEntities, currentStateArena, level);
+   ClearEditorEntities(&editor->editorEntities, level);
    
    EditorSelectNothing(editor);
    EditorGoToNone(editor);
@@ -594,7 +595,7 @@ static void EditorLoadLevel(Editor *editor, Arena *currentStateArena, Level *lev
 }
 
 // should the editor be a thing you load when you open it or instanciate?
-static Editor InitEditor(Arena *constantArena)
+static Editor InitEditor()
 {
    Editor ret;
    

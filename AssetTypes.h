@@ -214,7 +214,7 @@ static f32 GetActualStringLength(String string, f32 fontSize, Font font)
 		{
 			CharData data = font.charData[*it];
          
-			f32 scaledWidth = fScale * (f32)data.width;
+			//f32 scaledWidth = fScale * (f32)data.width;
 			float actualFloatWidth = data.xAdvance * fScale;
 			ret += actualFloatWidth;
          

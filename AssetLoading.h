@@ -383,7 +383,6 @@ static TriangleMesh ReadObj(char *fileName, Arena *arena)
 		line = ConsumeNextLineSanitize(&string);
 		while (string.length && line.length == 0 || line[0] == '#') { line = ConsumeNextLineSanitize(&string); }
       
-      u32 vertexArrayLength = 0;
       
 		BeginArray(frameArena, ReadOBJIndex, indices);
 		while (line.length && line[0] == 'f')
@@ -644,7 +643,6 @@ static String DAEEatAttAndReturnIt(String *line, char *att)
 {
 	EatSpaces(line);
    
-	u32 attlength = NullTerminatedStringLength(att);
 	if (!BeginsWithEat(line, att)) { Die; return {}; };
    
 	if (!BeginsWithEat(line, "=\"")) { Die; return {}; };
@@ -2178,7 +2176,7 @@ struct BitmapFileHeader
 #pragma pack(pop)
 
 
-static Bitmap CreateBitmap(char* fileName, Arena *arena, bool wrapping = false)
+static Bitmap CreateBitmap(char* fileName, Arena *arena)
 {
    Bitmap ret = {};
    //TODO: maybe check if its actually a bmp

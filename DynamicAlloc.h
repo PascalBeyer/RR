@@ -209,7 +209,7 @@ static void *BuddyAlloc(BuddyAllocator *alloc, u32 size)
 	u32 desiredSize = (1 << logDesiredSize);
 	//Note : we have to move down the Tree, even tho we know that the "right" sized blocks are at alloc->implicitBoolArray[intoIndexSpace], because we don't want to recurse all the way down the tree, everytime we allocate something.
    
-	u32 intoIndexSpace = (desiredSize >> alloc->logMinimumBlockSize); 
+	//u32 intoIndexSpace = (desiredSize >> alloc->logMinimumBlockSize); 
    
 	// todo maybe make this stackless.
 	DeferRestore(frameArena);

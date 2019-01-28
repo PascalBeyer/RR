@@ -84,7 +84,7 @@ struct KdNode
 };
 
 static u32 debugTriangleIndex = 0;
-static LightingTriangle CreateLightingTriangleFromThreePoints(v3 p1, v3 p2, v3 p3, v3 color, Arena *arena)
+static LightingTriangle CreateLightingTriangleFromThreePoints(v3 p1, v3 p2, v3 p3, v3 color)
 {
 	LightingTriangle ret;
 	ret.pos = p1;
@@ -479,6 +479,8 @@ static void BuildNeighboorLinks(KdNode *root, Arena *tempArena)
 static KdNode *BuildKdNode(LightingTriangle **triangles, u32 triangleAmount, Arena *arena, Arena *transientArena, u32 depth, KdNode *parent, AABB aabb)
 {
 	KdNode *node = PushStruct(arena, KdNode);
+   
+   // parent is unreferanced ????
    
 	if (triangleAmount <= 8 || depth > MAX_KD_TREE_DEPTH)
 	{
