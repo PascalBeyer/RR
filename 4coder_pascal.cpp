@@ -72,7 +72,6 @@ static void set_current_keymap(Application_Links* app, int map)
 
 enum modal_mapid {
    mapid_function = default_maps_count,
-   mapid_numbers,// todo make this a thing
    
 };
 
@@ -111,20 +110,6 @@ CUSTOM_COMMAND_SIG(switch_edit_mode_to_default)
    
    set_theme_colors( app, colors, ArrayCount( colors ) );
 }
-
-
-CUSTOM_COMMAND_SIG(switch_edit_mode_to_numbers)
-{
-   set_current_keymap(app, mapid_numbers);
-   
-   Theme_Color colors[ ] = {
-      { Stag_Cursor, 0xfff7b300 },
-      { Stag_At_Cursor, 0xff000000 },
-   };
-   
-   set_theme_colors( app, colors, ArrayCount( colors ) );
-}
-
 
 struct seek_char_result
 {
@@ -342,33 +327,9 @@ CUSTOM_COMMAND_SIG(write_shift_character)
       write_character_parameter(app, character, length);
       return;
    }
+   
    switch(character[0])
    {
-      
-      case '1':
-      {
-         write_single_character(app, '!');
-      }break;
-      case '2':
-      {
-         write_single_character(app, '"'); // todo make this into a brace thing????
-      }break;
-      case '3':
-      {
-         //this is end curly brace
-      }break;
-      case '4':
-      {
-         write_single_character(app, '\'');
-      }break;
-      case '5':
-      {
-         write_single_character(app, '%');
-      }break;
-      case '6':
-      {
-         write_single_character(app, '&');
-      }break;
       case ',':
       {
          write_single_character(app, ';');
@@ -716,7 +677,6 @@ extern "C" int32_t get_bindings(void *data, int32_t size)
          bind_vanilla_keys(context, write_character);
          
          bind(context, get_key_code("ß"), MDFR_NONE, switch_edit_mode_to_function);
-         bind(context, get_key_code("ä"), MDFR_NONE, switch_edit_mode_to_numbers); 
          
          bind(context, get_key_code("ü"), MDFR_NONE, write_underscore);
          bind(context, get_key_code("ö"), MDFR_NONE, write_semi_colon);
@@ -779,7 +739,6 @@ extern "C" int32_t get_bindings(void *data, int32_t size)
       begin_map(context, mapid_function);
       {
          bind(context, '\t', MDFR_NONE, switch_edit_mode_to_default);
-         bind(context, get_key_code("ä"), MDFR_NONE, switch_edit_mode_to_numbers); 
          
          bind(context, '0', MDFR_NONE, interactive_open_or_new);
          bind(context, 'n', MDFR_NONE, interactive_new);
@@ -831,30 +790,20 @@ extern "C" int32_t get_bindings(void *data, int32_t size)
       {
          inherit_map(context, mapid_file);
          
-         //bind(context, '{', MDFR_NONE, write_double_curly_braces);
-         //bind(context, '(', MDFR_NONE, write_double_round_braces);
+         bind(context, '{', MDFR_NONE, write_double_curly_braces);
+         bind(context, '(', MDFR_NONE, write_double_round_braces);
          bind(context, '[', MDFR_NONE, write_double_index_braces);
          bind(context, '\n', MDFR_NONE, write_and_auto_tab);
          bind(context, '\n', MDFR_SHIFT, write_and_auto_tab);
          
-         //bind(context, '=', MDFR_NONE, write_equals_and_line_up_previous);
-         //bind(context, '}', MDFR_NONE, seek_past_next_curly_brace);
-         //bind(context, ')', MDFR_NONE, seek_past_next_round_brace);
+         bind(context, '=', MDFR_NONE, write_equals_and_line_up_previous);
+         bind(context, '}', MDFR_NONE, seek_past_next_curly_brace);
+         bind(context, ')', MDFR_NONE, seek_past_next_round_brace);
          bind(context, ']', MDFR_NONE, seek_past_next_index_brace);
          
          bind(context, ';', MDFR_NONE, write_and_auto_tab);
          bind(context, '#', MDFR_NONE, write_and_auto_tab);
          
-         bind(context, '0', MDFR_NONE, write_equals_and_line_up_previous);
-         bind(context, '1', MDFR_NONE, write_shift_character);
-         bind(context, '2', MDFR_NONE, write_shift_character);
-         bind(context, '3', MDFR_NONE, seek_past_next_curly_brace);
-         bind(context, '4', MDFR_NONE, write_shift_character);
-         bind(context, '5', MDFR_NONE, write_shift_character);
-         bind(context, '6', MDFR_NONE, write_shift_character);
-         bind(context, '7', MDFR_NONE, write_double_curly_braces);
-         bind(context, '8', MDFR_NONE, write_double_round_braces);
-         bind(context, '9', MDFR_NONE, seek_past_next_round_brace);
          bind(context, ',', MDFR_NONE, write_shift_character);
          bind(context, '<', MDFR_NONE, write_shift_character);
          bind(context, '>', MDFR_NONE, write_shift_character);
@@ -911,52 +860,6 @@ extern "C" int32_t get_bindings(void *data, int32_t size)
       }
       end_map(context);
       
-      begin_map(context, mapid_numbers);
-      {
-         bind(context, '\t', MDFR_NONE, switch_edit_mode_to_default);
-         //bind(context, '\t', MDFR_NONE, switch_edit_mode_to_default); todo semicolon should also do this.
-         bind(context, get_key_code("ß"), MDFR_NONE, switch_edit_mode_to_function);
-         bind(context, ',', MDFR_NONE, write_semicolon_and_switch_to_default);
-         
-         
-         bind(context, '\n', MDFR_NONE, write_and_auto_tab);
-         bind(context, '\n', MDFR_SHIFT, write_and_auto_tab);
-         bind(context, key_back, MDFR_NONE, backspace_char);
-         bind(context, key_back, MDFR_SHIFT, backspace_char);
-         
-         bind(context, '0', MDFR_NONE, write_character);
-         bind(context, '1', MDFR_NONE, write_character);
-         bind(context, '2', MDFR_NONE, write_character);
-         bind(context, '3', MDFR_NONE, write_character);
-         bind(context, '4', MDFR_NONE, write_character);
-         bind(context, '5', MDFR_NONE, write_character);
-         bind(context, '6', MDFR_NONE, write_character);
-         bind(context, '7', MDFR_NONE, write_character);
-         bind(context, '8', MDFR_NONE, write_character);
-         bind(context, '9', MDFR_NONE, write_character);
-         
-         bind(context, 'x', MDFR_NONE, write_character);
-         bind(context, 'a', MDFR_NONE, write_character);
-         bind(context, 'b', MDFR_NONE, write_character);
-         bind(context, 'c', MDFR_NONE, write_character);
-         bind(context, 'd', MDFR_NONE, write_character);
-         bind(context, 'e', MDFR_NONE, write_character);
-         bind(context, 'f', MDFR_NONE, write_character);
-         
-         bind(context, 'm', MDFR_NONE, cursor_mark_swap);
-         
-         //bind(context, 'w', MDFR_NONE, move_up);
-         //bind(context, 's', MDFR_NONE, move_down);
-         //bind(context, 'a', MDFR_NONE, move_left);
-         //bind(context, 'd', MDFR_NONE, move_right);
-         
-         bind(context, 'o', MDFR_NONE, seek_whitespace_up_end_line);
-         bind(context, 'l', MDFR_NONE, seek_whitespace_down_end_line);
-         bind(context, 'k', MDFR_NONE, seek_white_or_token_left);
-         bind(context, get_key_code("ö"), MDFR_NONE, seek_white_or_token_right);
-         
-      }
-      end_map(context);
    }
    
    
