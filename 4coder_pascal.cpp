@@ -212,60 +212,103 @@ CUSTOM_COMMAND_SIG(write_double_round_braces)
    seek_char_result next_char = get_next_non_whitespace_character(app, &buffer, pos);
    
    if(next_char.character == '\n'){
-      
+      write_double_parens:;
       uint8_t character1 = '(';
       uint8_t character2 = ')';
       write_character_parameter(app, &character1, 1);
       write_character_parameter(app, &character2, 1);
       int32_t new_pos = view.cursor.pos + 1;
       view_set_cursor(app, &view, seek_pos(new_pos), true);
-   }
-   else
-   {
+   }else if(next_char.character == ')'){
+      Partial_Cursor start = {};
+      Partial_Cursor end = {};
+      buffer_compute_cursor(app, &buffer, seek_line_char(view.cursor.line, 1), &start);
+      buffer_compute_cursor(app, &buffer, seek_line_char(view.cursor.line, -1), &end);
+      
+      static const int32_t chunk_size = 1024;
+      char chunk[chunk_size];
+      Stream_Chunk stream = {};
+      
+      int32_t i = start.pos;
+      stream.max_end = end.pos;
+      
+      uint32_t opens_found = 0;
+      uint32_t closed_found = 0;
+      
+      if (init_stream_chunk(&stream, app, &buffer, i, chunk, chunk_size)){
+         bool32 still_looping = false;
+         do{
+            for (;i < stream.end; ++i){
+               char c = stream.data[i];
+               if (c == '('){
+                  opens_found++;
+               }else if(c == ')'){
+                  closed_found++;
+               }
+            }
+            still_looping = forward_stream_chunk(&stream);
+         }while(still_looping);
+      }
+      if(opens_found == closed_found){
+         goto write_double_parens;
+      }else{
+         exec_command(app, write_character);
+      }
+   }else{
       exec_command(app, write_character);
    }
 }
 
-CUSTOM_COMMAND_SIG(seek_past_next_curly_brace)
-{
-   uint32_t access = AccessOpen;
-   View_Summary view = get_active_view(app, access);
-   Buffer_Summary buffer = get_buffer(app, view.buffer_id, access);
-   int32_t pos = view.cursor.pos;
-   
-   bool can_return_newline = false;
-   seek_char_result next_char = get_next_non_whitespace_character(app, &buffer, pos, can_return_newline);
-   
-   if(next_char.character == '}')
-   {
-      int32_t new_pos = next_char.position;
-      if(new_pos != buffer.size) new_pos += 1;
-      view_set_cursor(app, &view, seek_pos(new_pos), true);
-   }
-   else
-   {
-      exec_command(app, write_character);
-   }
-}
 
 CUSTOM_COMMAND_SIG(seek_past_next_round_brace)
 {
    uint32_t access = AccessOpen;
    View_Summary view = get_active_view(app, access);
    Buffer_Summary buffer = get_buffer(app, view.buffer_id, access);
-   int32_t pos = view.cursor.pos;
+   int32_t pos           = view.cursor.pos;
    
    bool can_return_newline = false;
    seek_char_result next_char = get_next_non_whitespace_character(app, &buffer, pos, can_return_newline);
    
-   if(next_char.character == ')')
-   {
-      int32_t new_pos = next_char.position;
-      if(new_pos != buffer.size) new_pos += 1;
-      view_set_cursor(app, &view, seek_pos(new_pos), true);
-   }
-   else
-   {
+   if(next_char.character == ')'){
+      Partial_Cursor start = {};
+      Partial_Cursor end = {};
+      buffer_compute_cursor(app, &buffer, seek_line_char(view.cursor.line, 1), &start);
+      buffer_compute_cursor(app, &buffer, seek_line_char(view.cursor.line, -1), &end);
+      
+      static const int32_t chunk_size = 1024;
+      char chunk[chunk_size];
+      Stream_Chunk stream = {};
+      
+      int32_t i = start.pos;
+      stream.max_end = end.pos;
+      
+      uint32_t opens_found = 0;
+      uint32_t closed_found = 0;
+      
+      if (init_stream_chunk(&stream, app, &buffer, i, chunk, chunk_size)){
+         bool32 still_looping = false;
+         do{
+            for (;i < stream.end; ++i){
+               char c = stream.data[i];
+               if (c == '('){
+                  opens_found++;
+               }else if(c == ')'){
+                  closed_found++;
+               }
+            }
+            still_looping = forward_stream_chunk(&stream);
+         }while(still_looping);
+      }
+      
+      if(opens_found <= closed_found){
+         int32_t new_pos = next_char.position;
+         if(new_pos != buffer.size) new_pos += 1;
+         view_set_cursor(app, &view, seek_pos(new_pos), true);
+      }else{
+         exec_command(app, write_character);
+      }
+   }else{
       exec_command(app, write_character);
    }
 }
@@ -349,6 +392,106 @@ CUSTOM_COMMAND_SIG(write_shift_character)
    }
 }
 
+CUSTOM_COMMAND_SIG(pascal_align_first_accurance)
+{
+   Query_Bar align;
+   char align_space[1024];
+   align.prompt = make_lit_string("Align: ");
+   align.string = make_fixed_width_string(align_space);
+   
+   if (!query_user_string(app, &align)) return;
+   if (align.string.size == 0) return;
+   
+   String r = align.string;
+   
+   uint32_t access = AccessOpen;
+   View_Summary view = get_active_view(app, access);
+   Buffer_Summary buffer = get_buffer(app, view.buffer_id, access);
+   if(!buffer.exists) return;
+   
+   Range range = get_view_range(&view);
+   
+   int32_t pos = range.min;
+   int32_t new_pos;
+   buffer_seek_string_forward(app, &buffer, pos, 0, r.str, r.size, &new_pos);
+   
+   Buffer_Edit edits[300];
+   int32_t edit_index = 0;
+   
+   int32_t max_line_len = 0;
+   
+   while (new_pos + r.size <= range.end){
+      Partial_Cursor current;
+      buffer_compute_cursor(app, &buffer, seek_pos(new_pos), &current);
+      
+      // @cleanup: should I do 'move_past_lead_whitespace' here?
+      
+      Partial_Cursor line_start = {};
+      buffer_compute_cursor(app, &buffer, seek_line_char(current.line, 1), &line_start);
+      
+      int32_t align_base = current.pos;
+      if(align_base != line_start.pos){
+         --align_base;
+         
+         char data_chunk[1024];
+         Stream_Chunk stream = {};
+         if (init_stream_chunk(&stream, app, &buffer, align_base, data_chunk, sizeof(data_chunk))){
+            bool32 still_looping = true;
+            do{
+               for (; align_base >= stream.start; --align_base){
+                  if (stream.data[align_base] == '\n' || !char_is_whitespace(stream.data[align_base])){
+                     goto double_break;
+                  }
+               }
+               still_looping = forward_stream_chunk(&stream);
+            }while(still_looping);
+         }
+         double_break:;
+         align_base++;
+      }
+      
+      // add one white space
+      if(align_base != line_start.pos) align_base++;
+      
+      Buffer_Edit *edit = edits + edit_index++;
+      edit->str_start   = 0;
+      edit->start       = align_base;
+      edit->end         = current.pos;
+      edit->len         = (align_base - line_start.pos);
+      
+      if(edit_index >= ArrayCount(edits)) break;
+      
+      max_line_len = (max_line_len > edit->len) ? max_line_len : edit->len;
+      
+      // @note: do not align anything but the first accurance
+      Partial_Cursor line_end = {};
+      buffer_compute_cursor(app, &buffer, seek_line_char(current.line, -1), &line_end);
+      
+      pos = line_end.pos;
+      buffer_seek_string_forward(app, &buffer, pos, 0, r.str, r.size, &new_pos);
+   }
+   
+   
+   Partition *part = &global_part;
+   Temp_Memory temp = begin_temp_memory(part);
+   char *empty_spaces = push_array(part, char, max_line_len);
+   memset(empty_spaces, ' ', max_line_len);
+   
+   int32_t adjust = 0;
+   
+   for(int32_t edit_it = 0; edit_it < edit_index; edit_it++){
+      Buffer_Edit *edit = edits + edit_it;
+      int32_t replace_size = (max_line_len - edit->len);
+      int32_t to_replace_size = edit->end - edit->start;
+      buffer_replace_range(app, &buffer, edit->start + adjust, edit->end + adjust, empty_spaces, replace_size);
+      adjust += replace_size - to_replace_size;
+   }
+   
+   end_temp_memory(temp);
+}
+
+
+// @cleanup: we should reuse this code to implement a _line_up_strings_in_region_
 CUSTOM_COMMAND_SIG(write_equals_and_line_up_previous)
 {
    write_single_character(app, '=');
@@ -601,6 +744,105 @@ START_HOOK_SIG(pascal_start){
 
 
 
+static struct{
+   int32_t view_id;
+   int32_t buffer_id;
+   int32_t pos;
+} global_view_id_to_position[0x100];
+static int32_t global_view_id_to_position_count;
+
+static void pascal_register_view_id_cursor_pair(int32_t view_id, int32_t buffer_id, int32_t pos){
+   for(int32_t i = 0; i < global_view_id_to_position_count; i++){
+      if(global_view_id_to_position[i].view_id == view_id
+         && global_view_id_to_position[i].buffer_id == buffer_id){
+         global_view_id_to_position[i].pos = pos;
+         return;
+      }
+   }
+   
+   int32_t at = global_view_id_to_position_count;
+   
+   if(at < ArrayCount(global_view_id_to_position)){
+      global_view_id_to_position_count++;
+      global_view_id_to_position[at].view_id = view_id;
+      global_view_id_to_position[at].buffer_id  = buffer_id;
+      global_view_id_to_position[at].pos  = pos;
+   }
+}
+
+
+struct pascal_get_cursor_return{
+   int32_t pos; 
+   bool32 valid;
+};
+
+static pascal_get_cursor_return pascal_get_cursor_for_view_id(int32_t view_id, int32_t buffer_id){
+   for(int32_t i = 0; i < global_view_id_to_position_count; i++){
+      if(global_view_id_to_position[i].view_id == view_id
+         && global_view_id_to_position[i].buffer_id == buffer_id){
+         return {global_view_id_to_position[i].pos, true};
+      }
+   }
+   
+   return {-1, false};
+}
+
+static void
+pascal_activate_open_or_new(Application_Links *app, Partition *scratch, Heap *heap,
+                            View_Summary *view, struct Lister_State *state,
+                            String text_field, void *user_data, bool32 clicked){
+   activate_open_or_new(app, scratch, heap, view, state, text_field, user_data, clicked);
+   
+   pascal_get_cursor_return cursor = pascal_get_cursor_for_view_id(view->view_id, view->buffer_id);
+   if(cursor.valid){
+      view_set_cursor(app, view, seek_pos(cursor.pos), true);
+      exec_command(app, center_view);
+   }
+   
+   exec_command(app, switch_edit_mode_to_function);
+}
+
+
+static void
+pascal_activate_switch_buffer(Application_Links *app, Partition *scratch, Heap *heap,
+                              View_Summary *view, struct Lister_State *state,
+                              String text_field, void *user_data, bool32 clicked){
+   activate_switch_buffer(app, scratch, heap, view, state, text_field, user_data, clicked);
+   pascal_get_cursor_return cursor = pascal_get_cursor_for_view_id(view->view_id, view->buffer_id);
+   if(cursor.valid){
+      view_set_cursor(app, view, seek_pos(cursor.pos), true);
+      exec_command(app, center_view);
+   }
+   exec_command(app, switch_edit_mode_to_function);
+}
+
+
+CUSTOM_COMMAND_SIG(pascal_interactive_open_or_new)
+{
+   View_Summary view = get_active_view(app, AccessAll);
+   view_end_ui_mode(app, &view);
+   begin_integrated_lister__file_system_list(app, "Open:", pascal_activate_open_or_new, 0, 0, &view);
+   pascal_register_view_id_cursor_pair(view.view_id, view.buffer_id, view.cursor.pos);
+}
+
+CUSTOM_COMMAND_SIG(pascal_interactive_switch_buffer)
+{
+   View_Summary view = get_active_view(app, AccessAll);
+   view_end_ui_mode(app, &view);
+   begin_integrated_lister__buffer_list(app, "Switch:", pascal_activate_switch_buffer, 0, 0, &view);
+   pascal_register_view_id_cursor_pair(view.view_id, view.buffer_id, view.cursor.pos);
+}
+
+CUSTOM_COMMAND_SIG(pascal_change_active_panel_backwards)
+{
+   View_Summary view = get_active_view(app, AccessAll);
+   get_prev_view_looped_primary_panels(app, &view, AccessAll);
+   if (view.exists){
+      set_active_view(app, &view);
+   }
+   exec_command(app, switch_edit_mode_to_function);
+}
+
 
 extern "C" int32_t get_bindings(void *data, int32_t size)
 {
@@ -631,10 +873,10 @@ extern "C" int32_t get_bindings(void *data, int32_t size)
       begin_map(context, mapid_global);
       {
          bind(context, 'n', MDFR_CTRL, interactive_new);
-         bind(context, 'o', MDFR_CTRL, interactive_open_or_new);
+         bind(context, 'o', MDFR_CTRL, pascal_interactive_open_or_new);
          bind(context, 'o', MDFR_ALT, open_in_other);
          bind(context, 'k', MDFR_CTRL, interactive_kill_buffer);
-         bind(context, 'i', MDFR_CTRL, interactive_switch_buffer);
+         bind(context, 'i', MDFR_CTRL, pascal_interactive_switch_buffer);
          bind(context, 'h', MDFR_CTRL, project_go_to_root_directory);
          bind(context, 'S', MDFR_CTRL, save_all_dirty_buffers);
          bind(context, '.', MDFR_ALT, change_to_build_panel);
@@ -679,6 +921,7 @@ extern "C" int32_t get_bindings(void *data, int32_t size)
          bind(context, get_key_code("ß"), MDFR_NONE, switch_edit_mode_to_function);
          
          bind(context, get_key_code("ü"), MDFR_NONE, write_underscore);
+         bind(context, get_key_code("Ü"), MDFR_NONE, write_underscore);
          bind(context, get_key_code("ö"), MDFR_NONE, write_semi_colon);
          
          bind(context, key_mouse_left, MDFR_NONE, click_set_cursor_and_mark);
@@ -740,17 +983,15 @@ extern "C" int32_t get_bindings(void *data, int32_t size)
       {
          bind(context, '\t', MDFR_NONE, switch_edit_mode_to_default);
          
-         bind(context, '0', MDFR_NONE, interactive_open_or_new);
+         
          bind(context, 'n', MDFR_NONE, interactive_new);
          bind(context, 'v', MDFR_NONE, paste_and_indent);
-         bind(context, '1', MDFR_NONE, list_all_locations);
+         
          bind(context, 'p', MDFR_NONE, seek_end_of_line);
          bind(context, 'i', MDFR_NONE, seek_beginning_of_line);
-         
-         bind(context, '<', MDFR_NONE, change_active_panel_backwards);
+         bind(context, '<', MDFR_NONE, pascal_change_active_panel_backwards);
          bind(context, 'r', MDFR_NONE, reverse_search);
          bind(context, ' ', MDFR_NONE, set_mark);
-         bind(context, '2', MDFR_NONE, replace_in_range);
          bind(context, 'c', MDFR_NONE, copy);
          bind(context, '-', MDFR_NONE, delete_current_scope);
          bind(context, key_back, MDFR_NONE, backspace_word);
@@ -774,8 +1015,14 @@ extern "C" int32_t get_bindings(void *data, int32_t size)
          
          bind(context, ',', MDFR_NONE, comment_line_toggle);
          
+         bind(context, '1', MDFR_NONE, list_all_locations);
+         bind(context, '2', MDFR_NONE, replace_in_range);
+         bind(context, '3', MDFR_NONE, pascal_align_first_accurance);
+         
          bind(context, '7', MDFR_NONE, place_in_scope);
          bind(context, '8', MDFR_NONE, if0_off);
+         bind(context, '9', MDFR_NONE, pascal_interactive_open_or_new);
+         bind(context, '0', MDFR_NONE, pascal_interactive_switch_buffer);
          
          bind(context, '\n', MDFR_NONE, newline_or_goto_position_sticky);
          bind(context, '\n', MDFR_SHIFT, newline_or_goto_position_same_panel_sticky);
@@ -796,8 +1043,9 @@ extern "C" int32_t get_bindings(void *data, int32_t size)
          bind(context, '\n', MDFR_NONE, write_and_auto_tab);
          bind(context, '\n', MDFR_SHIFT, write_and_auto_tab);
          
-         bind(context, '=', MDFR_NONE, write_equals_and_line_up_previous);
-         bind(context, '}', MDFR_NONE, seek_past_next_curly_brace);
+         //bind(context, '=', MDFR_NONE, write_equals_and_line_up_previous);
+         bind(context, '=', MDFR_NONE, write_and_auto_tab);
+         bind(context, '}', MDFR_NONE, write_and_auto_tab);
          bind(context, ')', MDFR_NONE, seek_past_next_round_brace);
          bind(context, ']', MDFR_NONE, seek_past_next_index_brace);
          
