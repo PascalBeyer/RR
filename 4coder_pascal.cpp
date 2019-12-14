@@ -57,9 +57,12 @@
 
 #include "4coder_remapping_commands.cpp" // todo do we need this or is this just specified somewhere
 
+typedef intptr_t smm;
+typedef unsigned char u8;
+typedef int b32;
+typedef unsigned int u32;
 
-static void set_current_keymap(Application_Links* app, int map) 
-{
+static void set_current_keymap(Application_Links* app, int map){
    uint32_t access = AccessAll;
    View_Summary view     = get_active_view(app, access);
    Buffer_Summary buffer = get_buffer(app, view.buffer_id, access);
@@ -70,25 +73,22 @@ static void set_current_keymap(Application_Links* app, int map)
    }
 }
 
-enum modal_mapid {
+enum modal_mapid{
    mapid_function = default_maps_count,
-   
+   latex_map,
 };
 
-CUSTOM_COMMAND_SIG(write_double_colon)
-{
+CUSTOM_COMMAND_SIG(write_double_colon){
    uint8_t character = ':';
    write_character_parameter(app, &character, 1);
 }
 
-CUSTOM_COMMAND_SIG(write_semi_colon)
-{
+CUSTOM_COMMAND_SIG(write_semi_colon){
    uint8_t character = ';';
    write_character_parameter(app, &character, 1);
 }
 
-CUSTOM_COMMAND_SIG(switch_edit_mode_to_function)
-{
+CUSTOM_COMMAND_SIG(switch_edit_mode_to_function){
    set_current_keymap(app, mapid_function);
    
    Theme_Color colors[ ] = {
@@ -99,9 +99,35 @@ CUSTOM_COMMAND_SIG(switch_edit_mode_to_function)
    set_theme_colors( app, colors, ArrayCount( colors ) );
 }
 
-CUSTOM_COMMAND_SIG(switch_edit_mode_to_default)
-{
-   set_current_keymap(app, default_code_map);
+static Theme_Color global_green_cursor[] = { { Stag_Cursor, 0xff00FF00 }, { Stag_At_Cursor, 0xff000000 }, };
+static Theme_Color global_other_cursor[] = { { Stag_Cursor, 0xffFFFF00 }, { Stag_At_Cursor, 0xff000000 }, };
+
+static Theme_Color global_cursor_color[] = { { Stag_Cursor, 0xff00FF00 }, { Stag_At_Cursor, 0xff000000 }, };
+static int global_default_mapid = default_code_map;
+
+CUSTOM_COMMAND_SIG(pascal_switch_code_map){
+   Query_Bar mode_name;
+   char mode_name_space[1024];
+   mode_name.prompt = make_lit_string("Mode Name: ");
+   mode_name.string = make_fixed_width_string(mode_name_space);
+   
+   if (!query_user_string(app, &mode_name)) return;
+   if (mode_name.string.size == 0) return;
+   
+   String name = mode_name.string;
+   
+   if(match_sc(name, "c")){
+      memcpy(&global_cursor_color, &global_green_cursor, sizeof(global_cursor_color));
+      global_default_mapid = default_code_map;
+   }else if(match_sc(name, "latex")){
+      memcpy(&global_cursor_color, &global_other_cursor, sizeof(global_cursor_color));
+      global_default_mapid = latex_map;
+   }
+   // @cleanup: log error?
+}
+
+CUSTOM_COMMAND_SIG(switch_edit_mode_to_default){
+   set_current_keymap(app, global_default_mapid);
    
    Theme_Color colors[ ] = {
       { Stag_Cursor, 0xff00FF00 },
@@ -154,16 +180,14 @@ static seek_char_result get_next_non_whitespace_character(Application_Links *app
 }
 
 
-CUSTOM_COMMAND_SIG(write_double_curly_braces)
-{
+CUSTOM_COMMAND_SIG(write_double_curly_braces){
    View_Summary view = get_active_view(app, AccessProtected);
    Buffer_Summary buffer = get_buffer(app, view.buffer_id, AccessProtected);
    uint32_t pos = view.cursor.pos;
    
    seek_char_result next_char = get_next_non_whitespace_character(app, &buffer, pos);
    
-   if(next_char.character == '\n')
-   {
+   if(next_char.character == '\n'){
       uint8_t character1 = '{';
       char *character2 = "\n}";
       write_character_parameter(app, &character1, 1);
@@ -171,8 +195,7 @@ CUSTOM_COMMAND_SIG(write_double_curly_braces)
       int32_t new_pos = view.cursor.pos + 1;
       view_set_cursor(app, &view, seek_pos(new_pos), true);
    }
-   else
-   {
+   else{
       exec_command(app, write_character);
    }
 }
@@ -196,8 +219,7 @@ CUSTOM_COMMAND_SIG(write_double_index_braces)
       int32_t new_pos = view.cursor.pos + 1;
       view_set_cursor(app, &view, seek_pos(new_pos), true);
    }
-   else
-   {
+   else{
       exec_command(app, write_character);
    }
    
@@ -259,9 +281,7 @@ CUSTOM_COMMAND_SIG(write_double_round_braces)
    }
 }
 
-
-CUSTOM_COMMAND_SIG(seek_past_next_round_brace)
-{
+CUSTOM_COMMAND_SIG(seek_past_next_round_brace){
    uint32_t access = AccessOpen;
    View_Summary view = get_active_view(app, access);
    Buffer_Summary buffer = get_buffer(app, view.buffer_id, access);
@@ -313,8 +333,7 @@ CUSTOM_COMMAND_SIG(seek_past_next_round_brace)
    }
 }
 
-CUSTOM_COMMAND_SIG(write_semicolon_and_switch_to_default)
-{
+CUSTOM_COMMAND_SIG(write_semicolon_and_switch_to_default){
    uint8_t character = ';';
    write_character_parameter(app, &character, 1);
    exec_command(app, switch_edit_mode_to_default);
@@ -330,32 +349,17 @@ CUSTOM_COMMAND_SIG(seek_past_next_index_brace)
    bool can_return_newline = false;
    seek_char_result next_char = get_next_non_whitespace_character(app, &buffer, pos, can_return_newline);
    
-   if(next_char.character == ']')
-   {
+   if(next_char.character == ']'){
       int32_t new_pos = next_char.position;
       if(new_pos != buffer.size) new_pos += 1;
       view_set_cursor(app, &view, seek_pos(new_pos), true);
    }
-   else
-   {
+   else{
       exec_command(app, write_character);
    }
 }
 
-
-#if 0
-CUSTOM_COMMAND_SIG(write_character)
-CUSTOM_DOC("Inserts whatever character was used to trigger this command.")
-{
-   User_Input in = get_command_input(app);
-   uint8_t character[4];
-   uint32_t length = to_writable_character(in, character);
-   write_character_parameter(app, character, length);
-}
-#endif
-
-static void write_single_character(Application_Links *app, uint8_t to_write)
-{
+static void write_single_character(Application_Links *app, uint8_t to_write){
    write_character_parameter(app, &to_write, 1);
 }
 
@@ -371,29 +375,23 @@ CUSTOM_COMMAND_SIG(write_shift_character)
       return;
    }
    
-   switch(character[0])
-   {
-      case ',':
-      {
+   switch(character[0]){
+      case ',':{
          write_single_character(app, ';');
       }break;
-      case ';':
-      {
+      case ';':{
          write_single_character(app, ',');
       }break;
-      case '<':
-      {
+      case '<':{
          write_single_character(app, '>');
       }break;
-      case '>':
-      {
+      case '>':{
          write_single_character(app, '<');
       }break;
    }
 }
 
-CUSTOM_COMMAND_SIG(pascal_align_first_accurance)
-{
+CUSTOM_COMMAND_SIG(pascal_align_first_accurance){
    Query_Bar align;
    char align_space[1024];
    align.prompt = make_lit_string("Align: ");
@@ -490,109 +488,139 @@ CUSTOM_COMMAND_SIG(pascal_align_first_accurance)
    end_temp_memory(temp);
 }
 
-
-// @cleanup: we should reuse this code to implement a _line_up_strings_in_region_
-CUSTOM_COMMAND_SIG(write_equals_and_line_up_previous)
-{
-   write_single_character(app, '=');
-   View_Summary view = get_active_view(app, AccessOpen);
-   Buffer_Summary buffer = get_buffer(app, view.buffer_id, AccessOpen);
-   
-   int32_t start_line = view.cursor.line;
-   int32_t max_amount_of_chars = 0;
-   
-   int32_t min_line = start_line;
-   const int32_t max_edits = 300;
-   int32_t edit_index = 0;
-   Buffer_Edit edits[max_edits];
-   {
-      int32_t current_line = start_line;
-      
-      Partial_Cursor start = {};
-      Partial_Cursor end = {};
-      while(current_line > 0)
-      {
-         buffer_compute_cursor(app, &buffer, seek_line_char(current_line, 1), &start);
-         buffer_compute_cursor(app, &buffer, seek_line_char(current_line, -1), &end);
-         
-         static const int32_t chunk_size = 1024;
-         char chunk[chunk_size];
-         Stream_Chunk stream = {};
-         
-         int32_t i = start.pos;
-         stream.max_end = end.pos;
-         
-         int32_t found_index                   = -1;
-         int32_t found_white_spaces            = 0;
-         bool found_non_whitespace             = false;
-         int32_t first_non_whitespace_position = 0;
-         
-         if (init_stream_chunk(&stream, app, &buffer, i, chunk, chunk_size))
-         {
-            bool32 still_looping = false;
-            do
-            {
-               for (;i < stream.end; ++i)
-               {
-                  char c = stream.data[i];
-                  if (c == '=')
-                  {
-                     // todo handle other tokens, i.e. just break
-                     found_index = i;
-                     goto double_break;
-                  }
-                  else if(c == ' ')
-                  {
-                     found_white_spaces++;
-                  }
-                  else
-                  {
-                     if(!found_non_whitespace)
-                     {
-                        first_non_whitespace_position = i;
-                        found_non_whitespace = true;
-                     }
-                     found_white_spaces = 0;
-                  }
-               }
-               still_looping = forward_stream_chunk(&stream);
-            }while(still_looping);
-         }
-         double_break:;
-         if(found_index == -1) break;
-         
-         if(found_white_spaces) found_white_spaces--;
-         int32_t size = (found_index - first_non_whitespace_position) - found_white_spaces;
-         if(size > max_amount_of_chars) max_amount_of_chars = size;
-         
-         min_line = current_line;
-         
-         Buffer_Edit *edit = edits + edit_index++;
-         edit->str_start = 0;
-         edit->start = first_non_whitespace_position + size;
-         edit->end   = edit->start + found_white_spaces;
-         edit->len   = -size;
-         
-         current_line--;
-         if(edit_index == max_edits) break;
-      }
-   }
-   
-   int32_t line_count = start_line - min_line;
+static void pascal_translate_binary_to_hex(Application_Links *app, Buffer_Summary *buffer){
+   // 8 for offset in hex ':' space + hex_number for every entry + newline
+   smm size_per_line = 8 + 1 + 3 * 16 + 1 + 17;// must match the below
+   smm amount_of_lines = ((buffer->size + 15) / 16);
+   smm size_required = size_per_line * amount_of_lines + 1;
+   if(size_required > INT_MAX) return;
    
    Partition *part = &global_part;
    Temp_Memory temp = begin_temp_memory(part);
-   char *empty_spaces = push_array(part, char, max_amount_of_chars);
-   memset(empty_spaces, ' ', max_amount_of_chars);
+   char *buffer_space = push_array(part, char, (int)size_required);
+   char *buffer_it = buffer_space;
    
-   for(int32_t line = 0; line <= line_count; line++)
-   {
-      edits[line].len += max_amount_of_chars;
-      buffer_replace_range(app, &buffer, edits[line].start, edits[line].end, empty_spaces, edits[line].len);
+   static const int32_t chunk_size = 16;
+   char chunk[chunk_size];
+   Stream_Chunk stream = {};
+   stream.max_end = buffer->size;
+   int32_t read_pos = 0;
+   if (init_stream_chunk(&stream, app, buffer, read_pos, chunk, chunk_size)){
+      b32 still_looping = false;
+      do{
+         if(stream.end - read_pos < 16){
+            buffer_it += snprintf(buffer_it, size_per_line + 1, "%.8x:", read_pos);
+            for(;read_pos < stream.end; read_pos++){
+               buffer_it += snprintf(buffer_it, 4, " %.2x", stream.data[read_pos]);
+            }
+            break;
+         }else{
+            smm advance = snprintf(buffer_it, size_per_line + 1, "%.8x: %.2x %.2x %.2x %.2x %.2x %.2x %.2x %.2x %.2x %.2x %.2x %.2x %.2x %.2x %.2x %.2x ", read_pos, (u8)chunk[0], (u8)chunk[1], (u8)chunk[2], (u8)chunk[3], (u8)chunk[4], (u8)chunk[5], (u8)chunk[6], (u8)chunk[7], (u8)chunk[8], (u8)chunk[9], (u8)chunk[10], (u8)chunk[11], (u8)chunk[12], (u8)chunk[13], (u8)chunk[14], (u8)chunk[15]);
+            Assert(advance == size_per_line - 17); 
+            buffer_it += size_per_line - 17;
+            for(u32 i = 0; i < 16; i++){
+               *buffer_it++ = (chunk[i] >= 0x21 && chunk[i] < 0x7F) ? chunk[i] : ' ';
+            }
+            *buffer_it++ = '\n';
+            
+            read_pos += 16;
+         }
+         
+         still_looping = forward_stream_chunk(&stream);
+      }while(still_looping);
    }
-   
+   smm needed_size = buffer_it - buffer_space;
+   Assert(needed_size <= size_required);
+   buffer_replace_range(app, buffer, 0, buffer->size, buffer_space, (int32_t)needed_size);
    end_temp_memory(temp);
 }
+
+CUSTOM_COMMAND_SIG(pascal_xxd){
+   View_Summary view = get_active_view(app, AccessAll);
+   Buffer_Summary buffer = get_buffer(app, view.buffer_id, AccessAll);
+   pascal_translate_binary_to_hex(app, &buffer);
+}
+
+static void pascal_translate_hex_to_binary(Application_Links *app, Buffer_Summary *buffer){
+   const int32_t size_per_line = 8 + 1 + 3 * 16 + 1 + 17; // must match the above
+   int32_t amount_of_lines = (buffer->size + size_per_line - 1)/ size_per_line; 
+   Partition *part = &global_part;
+   Temp_Memory temp = begin_temp_memory(part);
+   char *buffer_space = push_array(part, char, buffer->size);
+   char *buffer_it = buffer_space;
+   
+   char line_buffer[size_per_line + 1];
+   line_buffer[size_per_line] = 0; // zero terminate
+   
+   for(int32_t i = 1; i <= amount_of_lines; i++){
+      Partial_Cursor start = {};
+      Partial_Cursor end = {};
+      buffer_compute_cursor(app, buffer, seek_line_char(i, 1), &start);
+      buffer_compute_cursor(app, buffer, seek_line_char(i, -1), &end);
+      
+      int32_t line_size = end.pos - start.pos;
+      Assert(line_size <= size_per_line);
+      buffer_read_range(app, buffer, start.pos, end.pos, line_buffer);
+      
+      if(line_size < size_per_line){
+         memset(line_buffer + line_size, 0, size_per_line - line_size);
+      }
+      
+      u32 ignored;
+      int how_many_filled = sscanf(line_buffer, "%x: %hhx %hhx %hhx %hhx %hhx %hhx %hhx %hhx %hhx %hhx %hhx %hhx %hhx %hhx %hhx %hhx", &ignored,
+                                   &buffer_it[0], &buffer_it[1], &buffer_it[2], &buffer_it[3], &buffer_it[4], &buffer_it[5], &buffer_it[6], &buffer_it[7], &buffer_it[8], &buffer_it[9], &buffer_it[10], &buffer_it[11], &buffer_it[12], &buffer_it[13], &buffer_it[14], &buffer_it[15]);
+      buffer_it += how_many_filled - 1;
+   }
+   
+   smm needed_size = buffer_it - buffer_space;
+   Assert(needed_size <= buffer->size);
+   buffer_replace_range(app, buffer, 0, buffer->size, buffer_space, (int32_t)needed_size);
+   end_temp_memory(temp);
+}
+CUSTOM_COMMAND_SIG(pascal_dexxd){
+   View_Summary view = get_active_view(app, AccessAll);
+   Buffer_Summary buffer = get_buffer(app, view.buffer_id, AccessAll);
+   pascal_translate_hex_to_binary(app, &buffer);
+}
+
+static void pascal_activate_special_command_lister(Application_Links *app, Partition *scratch, Heap *heap, View_Summary *view, struct Lister_State *state, String text_field, void *user_data,bool32 activated_by_mouse){
+   void (*command)(Application_Links *) = (void (*)(Application_Links *))user_data;
+   command(app);
+   lister_default(app, scratch, heap, view, state, ListerActivation_Finished);
+}
+
+#define pascal_special_command(custom_command){make_lit_string(#custom_command), make_lit_string(""), custom_command}
+
+CUSTOM_COMMAND_SIG(pascal_exec_shell)
+CUSTOM_DOC("Queries for an output buffer name and system command, runs the system command as a CLI and prints the output to the specified buffer."){
+   Query_Bar bar_cmd = {};
+   
+   String bar_out = make_fixed_width_string(out_buffer_space);
+   copy(&bar_out, "*execute*");
+   
+   bar_cmd.prompt = make_lit_string("Command: ");
+   bar_cmd.string = make_fixed_width_string(command_space);
+   if (!query_user_string(app, &bar_cmd)) return;
+   
+   directory_get_hot(app, hot_directory_space, sizeof(hot_directory_space));
+   
+   execute_previous_cli(app);
+}
+
+static Lister_Option global_special_command_list[] = {
+   pascal_special_command(pascal_xxd),
+   pascal_special_command(pascal_dexxd),
+   pascal_special_command(pascal_switch_code_map),
+   {make_lit_string("execute shell command"), make_lit_string(""), pascal_exec_shell},
+   {make_lit_string("execute previous shell command"), make_lit_string(""), execute_previous_cli},
+};
+#undef pascal_special_command
+
+CUSTOM_COMMAND_SIG(pascal_special_command_lister){
+   View_Summary view = get_active_view(app, AccessAll);
+   begin_integrated_lister__basic_list(app, "Pascal Special Command:", pascal_activate_special_command_lister, 0, 0, global_special_command_list, ArrayCount(global_special_command_list), 0, &view);
+}
+
 
 OPEN_FILE_HOOK_SIG(pascal_default_file_settings){
    // NOTE(allen|a4.0.8): The get_parameter_buffer was eliminated
@@ -601,7 +629,7 @@ OPEN_FILE_HOOK_SIG(pascal_default_file_settings){
    Buffer_Summary buffer = get_buffer(app, buffer_id, AccessAll);
    Assert(buffer.exists);
    
-   bool32 treat_as_code = false; // just always do.
+   bool32 treat_as_code = false;
    bool32 treat_as_todo = false;
    bool32 lex_without_strings = false;
    
@@ -729,8 +757,6 @@ START_HOOK_SIG(pascal_start){
    if (global_config.automatically_load_project){
       load_project(app);
    }
-   
-   
    Theme_Color colors[ ] = {
       { Stag_Cursor, 0xffff0000 },
       { Stag_At_Cursor, 0xff000000 },
@@ -741,8 +767,6 @@ START_HOOK_SIG(pascal_start){
    // no meaning for return
    return(0);
 }
-
-
 
 static struct{
    int32_t view_id;
@@ -769,7 +793,6 @@ static void pascal_register_view_id_cursor_pair(int32_t view_id, int32_t buffer_
       global_view_id_to_position[at].pos  = pos;
    }
 }
-
 
 struct pascal_get_cursor_return{
    int32_t pos; 
@@ -983,7 +1006,6 @@ extern "C" int32_t get_bindings(void *data, int32_t size)
       {
          bind(context, '\t', MDFR_NONE, switch_edit_mode_to_default);
          
-         
          bind(context, 'n', MDFR_NONE, interactive_new);
          bind(context, 'v', MDFR_NONE, paste_and_indent);
          
@@ -1018,11 +1040,14 @@ extern "C" int32_t get_bindings(void *data, int32_t size)
          bind(context, '1', MDFR_NONE, list_all_locations);
          bind(context, '2', MDFR_NONE, replace_in_range);
          bind(context, '3', MDFR_NONE, pascal_align_first_accurance);
+         bind(context, '5', MDFR_NONE, pascal_special_command_lister);
          
          bind(context, '7', MDFR_NONE, place_in_scope);
          bind(context, '8', MDFR_NONE, if0_off);
          bind(context, '9', MDFR_NONE, pascal_interactive_open_or_new);
          bind(context, '0', MDFR_NONE, pascal_interactive_switch_buffer);
+         
+         bind(context, 'W', MDFR_ALT, pascal_switch_code_map);
          
          bind(context, '\n', MDFR_NONE, newline_or_goto_position_sticky);
          bind(context, '\n', MDFR_SHIFT, newline_or_goto_position_same_panel_sticky);
@@ -1030,7 +1055,6 @@ extern "C" int32_t get_bindings(void *data, int32_t size)
          bind(context, key_end, MDFR_NONE, seek_end_of_line);
          bind(context, key_home, MDFR_NONE, seek_beginning_of_line);
       }
-      
       end_map(context);
       
       begin_map(context, default_code_map);
@@ -1080,8 +1104,49 @@ extern "C" int32_t get_bindings(void *data, int32_t size)
          bind(context, '2', MDFR_ALT, open_matching_file_cpp);
          bind(context, '0', MDFR_CTRL, write_zero_struct);
       }
-      
       end_map(context);
+      
+      begin_map(context, latex_map);
+      {
+         inherit_map(context, mapid_file);
+         
+         bind(context, '(', MDFR_NONE, write_double_round_braces);
+         bind(context, '[', MDFR_NONE, write_double_index_braces);
+         
+         //bind(context, '=', MDFR_NONE, write_equals_and_line_up_previous);
+         bind(context, ')', MDFR_NONE, seek_past_next_round_brace);
+         bind(context, ']', MDFR_NONE, seek_past_next_index_brace);
+         
+         bind(context, ',', MDFR_NONE, write_shift_character);
+         bind(context, '<', MDFR_NONE, write_shift_character);
+         bind(context, '>', MDFR_NONE, write_shift_character);
+         bind(context, ';', MDFR_NONE, write_shift_character);
+         
+         bind(context, '\t', MDFR_NONE, word_complete);
+         bind(context, '\t', MDFR_CTRL, auto_tab_range);
+         bind(context, '\t', MDFR_SHIFT, auto_tab_line_at_cursor);
+         
+         bind(context, 'r', MDFR_ALT, write_block);
+         bind(context, 't', MDFR_ALT, write_todo);
+         bind(context, 'y', MDFR_ALT, write_note);
+         bind(context, 'D', MDFR_ALT, list_all_locations_of_type_definition);
+         bind(context, 'T', MDFR_ALT, list_all_locations_of_type_definition_of_identifier);
+         bind(context, '[', MDFR_CTRL, open_long_braces);
+         bind(context, '{', MDFR_CTRL, open_long_braces_semicolon);
+         bind(context, '}', MDFR_CTRL, open_long_braces_break);
+         bind(context, '[', MDFR_ALT, select_surrounding_scope);
+         bind(context, ']', MDFR_ALT, select_prev_scope_absolute);
+         bind(context, '\'', MDFR_ALT, select_next_scope_absolute);
+         
+         bind(context, '-', MDFR_ALT, delete_current_scope);
+         bind(context, 'j', MDFR_ALT, scope_absorb_down);
+         
+         bind(context, '1', MDFR_ALT, open_file_in_quotes);
+         bind(context, '2', MDFR_ALT, open_matching_file_cpp);
+         bind(context, '0', MDFR_CTRL, write_zero_struct);
+      }
+      end_map(context);
+      
       
       begin_map(context, default_lister_ui_map);
       {
@@ -1109,7 +1174,6 @@ extern "C" int32_t get_bindings(void *data, int32_t size)
       end_map(context);
       
    }
-   
    
    int32_t result = end_bind_helper(context);
    return(result);
